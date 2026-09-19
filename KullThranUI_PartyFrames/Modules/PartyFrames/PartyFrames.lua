@@ -1,4 +1,4 @@
-﻿local _, ns = ...
+local _, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 -- KUI localization helper (resolved at call time; falls back to the raw text)
 local function LText(text)
@@ -264,6 +264,8 @@ ns.PF_RosterUnitEvents = {
     "UNIT_AURA", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_FREQUENT",
     "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_CONNECTION", "UNIT_FLAGS",
     "UNIT_NAME_UPDATE", "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
+    "UNIT_LEVEL",
+    "UNIT_FACTION",
     "UNIT_ABSORB_AMOUNT_CHANGED",
 }
 
@@ -362,6 +364,7 @@ local PF_STATIC = {
 
 local TEXTURE_FILL = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\CustomTextures\\MelliReforged.tga"
 local ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\UnitFramesIcons\\"
+local PVP_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\"
 local ROLE_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Modules\\Tooltip\\Icons\\"
 local DEFAULT_FONT_NAME = KT.DEFAULT_FONT_NAME or "AAA_ITC_Avant_Garde"
 local DEFAULT_FONT_PATH = KT.DEFAULT_FONT_PATH or "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf"
@@ -480,7 +483,63 @@ local BUFF_DISPLAY_FILTERS = {
     "HELPFUL|EXTERNAL_DEFENSIVE",
 }
 
-local MISSING_BUFF_RULES = {
+local function IsForeverClient()
+    local projectID = _G.WOW_PROJECT_ID
+    local betaID = _G.WOW_PROJECT_FOREVER_BETA or _G.WOW_PROJECT_WOW_FOREVER_BETA
+    local foreverID = _G.WOW_PROJECT_FOREVER or _G.WOW_PROJECT_WOW_FOREVER
+    if projectID ~= nil and (projectID == betaID or projectID == foreverID) then return true end
+    local buildInfo = _G.GetBuildInfo
+    if type(buildInfo) == "function" then
+        local _, _, _, version = buildInfo()
+        local numericVersion = tonumber(version)
+        return numericVersion ~= nil and numericVersion >= 16000 and numericVersion < 17000
+    end
+    return false
+end
+
+local IS_FOREVER_CLIENT = IsForeverClient()
+
+-- Retail IDs such as Skyfury/Deep Breath/Blessing of the Bronze do not exist
+-- in Forever. Keep the retail table available for the retail branch, but use
+-- Classic-era ranks and class buffs on Forever.
+local MISSING_BUFF_RULES = IS_FOREVER_CLIENT and {
+    DRUID = {
+        key = "missingBuffCheckMark",
+        name = "Mark of the Wild",
+        icon = 136078,
+        spellIDs = { 1126, 5232, 6756, 5234, 8907, 9884, 9885 },
+    },
+    PRIEST = {
+        key = "missingBuffCheckStamina",
+        name = "Power Word: Fortitude",
+        icon = 135987,
+        spellIDs = { 1243, 1244, 1245, 2791, 10937, 10938 },
+    },
+    MAGE = {
+        key = "missingBuffCheckIntellect",
+        name = "Arcane Intellect",
+        icon = 135932,
+        spellIDs = { 1459, 1460, 1461, 10156, 10157, 23028 },
+    },
+    WARRIOR = {
+        key = "missingBuffCheckAttackPower",
+        name = "Battle Shout",
+        icon = 132333,
+        spellIDs = { 6673, 5242, 6192, 11549, 11550, 11551 },
+    },
+    SHAMAN = {
+        key = "missingBuffCheckWindfury",
+        name = "Windfury Totem",
+        icon = 136114,
+        spellIDs = { 8512, 10613, 10614, 25585 },
+    },
+    PALADIN = {
+        key = "missingBuffCheckKings",
+        name = "Blessing of Kings",
+        icon = 135906,
+        spellIDs = { 20217, 25898 },
+    },
+} or {
     DRUID = {
         key = "missingBuffCheckMark",
         name = "Mark of the Wild",
@@ -849,6 +908,18 @@ local PROFILE_PRESETS = {
 
 local DEFAULTS = {
     enable = true,
+    showCharacterLevel = true,
+    showPvPIcon = true,
+    levelFont = DEFAULT_FONT_NAME,
+    levelFontSize = 11,
+    levelFontOutline = "OUTLINE",
+    levelColor = { r = 1, g = 0.82, b = 0.20, a = 1 },
+    levelX = 3,
+    levelY = 1,
+    levelAnchor = "AUTO",
+    pvpAnchor = "AUTO",
+    pvpX = -2,
+    pvpY = 0,
     party = {
         enabled = true,
         frameWidth = 235,
@@ -1352,6 +1423,31 @@ local function ApplyTextStyle(text, db, sizeKey, fallbackSize, maxSize)
     text:SetTextColor(1, 1, 1, 1)
 end
 
+local function ApplyCharacterLevelTextStyle(text, db)
+    if not (text and text.SetFont) then return end
+    db = db or {}
+    local outline = db.levelFontOutline
+    if outline == "NONE" then outline = "" end
+    if type(outline) ~= "string" then outline = "OUTLINE" end
+    local size = math.max(6, math.min(48, tonumber(db.levelFontSize) or 11))
+    local fontPath = ResolveFontPath(db.levelFont or DEFAULT_FONT_NAME)
+    text:SetFont(fontPath, size, outline)
+    if KT and KT.EnableTextFontFallback then
+        KT:EnableTextFontFallback(text, fontPath)
+    end
+    local color = db.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
+    text:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
+    text:ClearAllPoints()
+    local anchor = db.levelAnchor
+    if anchor and anchor ~= "AUTO" then
+        text:SetPoint(anchor, text:GetParent(), anchor,
+            tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+    else
+        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT",
+            tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+    end
+end
+
 local function FormatHealthValue(value, abbreviate)
     if abbreviate and AbbreviateNumbers then
         return AbbreviateNumbers(value)
@@ -1461,6 +1557,15 @@ local function SafeUnitBoolean(func, unit)
         return nil
     end
     return value and true or false
+end
+
+local function GetPvPFaction(unit)
+    if not unit or type(UnitIsPVP) ~= "function" or type(UnitFactionGroup) ~= "function" then return nil end
+    if SafeUnitBoolean(UnitIsPVP, unit) ~= true then return nil end
+    local ok, faction = pcall(UnitFactionGroup, unit)
+    if not ok or IsSecretValue(faction) then return nil end
+    if faction == "Horde" or faction == "Alliance" then return faction end
+    return nil
 end
 
 local function BuildHealthText(unit, db, hpPercent)
@@ -2100,6 +2205,7 @@ end
 function Mod:OnInitialize()
     InstallExternalPartyFramesAPI()
     self:EnsureDB()
+    self:SetEnabledState(self.db.enable ~= false)
     self.containers = {}
     self.ownGroupContainers = {}
     self.frames = {}
@@ -2154,6 +2260,7 @@ function Mod:OnEnable()
     -- not always fire for, and runs out of combat so leader reads stay untainted.
     self:RegisterModuleEvent("PARTY_LEADER_CHANGED", "OnGroupRosterUpdate")
     self:RegisterModuleEvent("RAID_ROSTER_UPDATE", "OnGroupRosterUpdate")
+    self:RegisterModuleEvent("PLAYER_FLAGS_CHANGED", "OnPlayerFlagsChanged")
     self:RegisterModuleEvent('ARENA_OPPONENT_UPDATE', 'OnArenaRosterUpdate')
     self:RegisterModuleEvent('ARENA_PREP_OPPONENT_SPECIALIZATIONS', 'OnArenaRosterUpdate')
     self:RegisterModuleEvent('ARENA_COOLDOWNS_UPDATE', 'OnArenaCooldownUpdate')
@@ -2199,6 +2306,33 @@ function Mod:OnEnable()
     C_Timer.After(1, function()
         self:EnforceSinglePartyFrameSystem()
     end)
+end
+
+function Mod:OnPlayerFlagsChanged()
+    self:RefreshAllIndicators()
+end
+
+function Mod:OnDisable()
+    if ns.PF_EventFrame then ns.PF_EventFrame:UnregisterAllEvents() end
+    if ns.PF_DurationDriver then ns.PF_DurationDriver:Hide() end
+    if ns.PF_AuraFlushDriver then ns.PF_AuraFlushDriver:Hide() end
+    for _, mode in ipairs(MODE_ORDER) do
+        for _, frame in ipairs((self.frames and self.frames[mode]) or {}) do
+            if frame and frame.Hide then frame:Hide() end
+        end
+        for _, frame in ipairs((self.ownGroupFrames and self.ownGroupFrames[mode]) or {}) do
+            if frame and frame.Hide then frame:Hide() end
+        end
+        local container = self.containers and self.containers[mode]
+        if container and container.Hide then container:Hide() end
+        local ownContainer = self.ownGroupContainers and self.ownGroupContainers[mode]
+        if ownContainer and ownContainer.Hide then ownContainer:Hide() end
+    end
+    for _, frame in pairs(self._rosterFrames or {}) do
+        for _, event in ipairs(ns.PF_RosterUnitEvents or {}) do
+            frame:UnregisterEvent(event)
+        end
+    end
 end
 
 function Mod:GetModeDB(mode)
@@ -2892,6 +3026,16 @@ function Mod:CreateUnitButton(parent, name)
     if button.nameText.SetNonSpaceWrap then button.nameText:SetNonSpaceWrap(false) end
     ApplyTextStyle(button.nameText, DEFAULTS.party, "nameFontSize", 15)
 
+    button.levelText = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    button.levelText:SetJustifyH("LEFT")
+    button.levelText:SetWordWrap(false)
+    if button.levelText.SetNonSpaceWrap then button.levelText:SetNonSpaceWrap(false) end
+    ApplyCharacterLevelTextStyle(button.levelText, DEFAULTS)
+    button.levelText:SetPoint("BOTTOMLEFT", button, "TOPLEFT", 3, 1)
+    button.levelText:SetWidth(32)
+    button.levelText:SetHeight(14)
+    button.levelText:Hide()
+
     button.valueText = button.overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     button.valueText:SetJustifyH("RIGHT")
     button.valueText:SetWordWrap(false)
@@ -2919,6 +3063,7 @@ function Mod:CreateUnitButton(parent, name)
     button.leaderIcon = CreateOverlayIcon(button.overlayFrame, 12)
     button.raidTargetIcon = CreateOverlayIcon(button, 16)
     button.readyCheckIcon = CreateOverlayIcon(button.overlayFrame, 16)
+    button.pvpIcon = CreateOverlayIcon(button, 14)
 
     button.statusText = button.overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     button.statusText:SetJustifyH("CENTER")
@@ -3622,16 +3767,14 @@ end
 
 function Mod:GetDirectMissingBuffDisplay(unit, db)
     local rule = GetPlayerMissingBuffRule(db)
-    if not (unit and rule and GetUnitAuraBySpellID and UnitCanHaveMissingBuffReminder(unit)) then
+    if not (unit and rule and UnitCanHaveMissingBuffReminder(unit)) then
         return nil
     end
 
     -- Long-term class buffs are non-secret spell IDs in 12.1. Query only the
     -- known IDs directly; never fall back to enumerating protected aura lists.
-    for _, spellID in ipairs(rule.spellIDs or {}) do
-        if UnitHasBuffBySpellID(unit, spellID) then
-            return nil
-        end
+    if UnitHasMissingBuffRule(unit, rule) then
+        return nil
     end
 
     local isDead = SafeUnitBoolean(UnitIsDeadOrGhost, unit)
@@ -4846,6 +4989,23 @@ ns.SetLeaderIcon = function(icon, state)
     end
 end
 
+ns.SetPvPIcon = function(icon, faction)
+    if not icon then return end
+    local texture
+    if faction == "Horde" then
+        texture = PVP_ICON_PATH .. "Horde.png"
+    elseif faction == "Alliance" then
+        texture = PVP_ICON_PATH .. "Alliance.png"
+    end
+    if texture then
+        icon.texture:SetTexture(texture)
+        icon.texture:SetTexCoord(0, 1, 0, 1)
+        icon:Show()
+    else
+        icon:Hide()
+    end
+end
+
 ns.SetReadyCheckIcon = function(icon, status)
     if not icon then return end
     local texture
@@ -4883,6 +5043,7 @@ function Mod:UpdateFrameIndicators(frame, data)
         else
             frame.readyCheckIcon:Hide()
         end
+        ns.SetPvPIcon(frame.pvpIcon, nil)
         return
     end
 
@@ -4892,7 +5053,14 @@ function Mod:UpdateFrameIndicators(frame, data)
         ns.SetLeaderIcon(frame.leaderIcon, nil)
         frame.raidTargetIcon:Hide()
         frame.readyCheckIcon:Hide()
+        ns.SetPvPIcon(frame.pvpIcon, nil)
         return
+    end
+
+    if self.db.showPvPIcon ~= false then
+        ns.SetPvPIcon(frame.pvpIcon, GetPvPFaction(unit))
+    else
+        ns.SetPvPIcon(frame.pvpIcon, nil)
     end
 
     local leaderState
@@ -5552,6 +5720,20 @@ function Mod:PositionFrame(frame, parent, index, count, mode, visibleCount, layo
     frame.readyCheckIcon:SetScale(1.6)
     frame.readyCheckIcon:SetPoint("CENTER", frame, "CENTER", 0, 0)
 
+    frame.pvpIcon:ClearAllPoints()
+    frame.pvpIcon:SetSize(14, 14)
+    frame.pvpIcon:SetScale(1)
+    local pvpAnchor = self:GetRootConfigValue("pvpAnchor", "AUTO")
+    if pvpAnchor and pvpAnchor ~= "AUTO" then
+        frame.pvpIcon:SetPoint(pvpAnchor, frame, pvpAnchor,
+            tonumber(self:GetRootConfigValue("pvpX", -2)) or -2,
+            tonumber(self:GetRootConfigValue("pvpY", 0)) or 0)
+    else
+        frame.pvpIcon:SetPoint("RIGHT", frame, "LEFT",
+            tonumber(self:GetRootConfigValue("pvpX", -2)) or -2,
+            tonumber(self:GetRootConfigValue("pvpY", 0)) or 0)
+    end
+
     frame.absorb:ClearAllPoints()
     frame.absorb:SetPoint("TOPRIGHT", frame.health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
     frame.absorb:SetPoint("BOTTOMRIGHT", frame.health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
@@ -5611,6 +5793,31 @@ end
 
 function Mod:UpdateFrameVisual(frame, refreshAuras)
     if not frame then return end
+
+    local showPartyLevel = self:GetRootConfigValue("showCharacterLevel", true) ~= false
+    ApplyCharacterLevelTextStyle(frame.levelText, self.db)
+    local levelText
+    if showPartyLevel and frame.mode == "party" then
+        if frame.fakeUnit then
+            local data = GetTestUnitData(frame.fakeUnit, frame.mode or "party")
+            levelText = tostring(data.level or 80)
+        elseif frame.unit and IsUnitUsable(frame.unit) and UnitLevel then
+            local ok, text = pcall(function()
+                local level = UnitLevel(frame.unit)
+                if type(level) ~= "number" or level <= 0 then return nil end
+                return string.format("%d", level)
+            end)
+            if ok and type(text) == "string" and text ~= "" then
+                levelText = text
+            end
+        end
+    end
+    if levelText then
+        frame.levelText:SetText(levelText)
+        frame.levelText:Show()
+    else
+        frame.levelText:Hide()
+    end
 
     if frame.fakeUnit then
         local db = self:GetModeDB(frame.mode or "party")

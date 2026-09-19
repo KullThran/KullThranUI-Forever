@@ -268,7 +268,7 @@ local DEFAULTS = {
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 120 },
     },
     mplusTracker = {
-        enabled = true,
+        enabled = false,
         insertKeystoneAutomatically = false,
         showMillisecondsWhenDungeonCompleted = false,
         showRemainingTimeOnly = false,
@@ -309,7 +309,7 @@ local DEFAULTS = {
         position = { point = "RIGHT", relativePoint = "RIGHT", x = -16, y = 224 },
     },
     combatTimer = {
-        enabled = true,
+        enabled = false,
         fontSize = 22,
         outline = "OUTLINE",
         color = { r = 1, g = 1, b = 1, a = 1 },
@@ -344,8 +344,8 @@ local DEFAULTS = {
         backgroundColor = { r = 0.012, g = 0.014, b = 0.02, a = 0.94 },
         font = "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf",
         barTexture = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\Melli.tga",
-        layoutVersion = 7,
-        position = { point = "RIGHT", relativePoint = "RIGHT", x = -36, y = 0 },
+        layoutVersion = 8,
+        position = { point = "RIGHT", relativePoint = "RIGHT", x = -80, y = -300 },
         windows = {},
     },
 }
@@ -860,6 +860,15 @@ function Mod:GetDB()
     KT.db.profile.enhancements = KT.db.profile.enhancements or {}
     MergeDefaults(KT.db.profile.enhancements, DEFAULTS)
     local enhancements = KT.db.profile.enhancements
+
+    -- Forever migration: the old default was enabled. Apply the new default
+    -- once to profiles that still carry that old implicit value.
+    if not enhancements._foreverCombatTimerDefault20260919 then
+        if enhancements.combatTimer and enhancements.combatTimer.enabled == true then
+            enhancements.combatTimer.enabled = false
+        end
+        enhancements._foreverCombatTimerDefault20260919 = true
+    end
     local groups = enhancements.groups
     if groups then
         local primaryNote = NormalizePersistentLFGNote(groups.persistentLFGNote)
@@ -1768,10 +1777,13 @@ function Mod:InstallHooks()
 end
 
 function Mod:RefreshSettings()
-    if self.RegisterMythicPlusTrackerMover then
+    local mplusConfig = self:GetDB().mplusTracker or {}
+    if self.RegisterMythicPlusTrackerMover and mplusConfig.enabled == true then
         self:RegisterMythicPlusTrackerMover()
         self:GetMythicPlusTrackerFrame()
         self:RefreshMythicPlusTracker()
+    elseif self.mplusTrackerFrame then
+        self.mplusTrackerFrame:Hide()
     end
     if self.RegisterCombatTimerMover then
         self:RegisterCombatTimerMover()
@@ -1820,15 +1832,27 @@ function Mod:RefreshSettings()
 end
 
 function Mod:OnInitialize()
-    self:GetDB()
+    local db = self:GetDB()
+    -- Mythic+ timer is intentionally unavailable in the Forever build.
+    if db and db.mplusTracker then
+        db.mplusTracker.enabled = false
+    end
 end
 
 function Mod:OnEnable()
     self:RegisterPersistentLFGNoteCommand()
     self:InstallHooks()
     self:RefreshSettings()
-    if self.InitializeMythicPlusTracker then self:InitializeMythicPlusTracker() end
-    if self.InitializeMythicPlusHistory then self:InitializeMythicPlusHistory() end
+    local enhancementsDB = self:GetDB()
+    if self.InitializeMythicPlusTracker and enhancementsDB.mplusTracker
+        and enhancementsDB.mplusTracker.enabled == true then
+        self:InitializeMythicPlusTracker()
+    end
+    if self.InitializeDungeonHistory then
+        self:InitializeDungeonHistory()
+    elseif self.InitializeMythicPlusHistory then
+        self:InitializeMythicPlusHistory()
+    end
     if self._ktCombatTimerInit then self:_ktCombatTimerInit() end
 
     self:RegisterEvent("ADDON_LOADED")

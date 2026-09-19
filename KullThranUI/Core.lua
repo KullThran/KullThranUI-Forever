@@ -21,6 +21,111 @@ local strfind = _G.strfind
 local strtrim = _G.strtrim
 local strupper = _G.strupper
 
+-- == Compatibilidad WoW Forever (Camelot / Classic+) =========================
+-- Forever omite algunas APIs globales que retail (12.x) mantiene. Estos shims
+-- se instalan solo si el global falta; en retail/Midnight no tocan nada.
+-- GetItemInfo: Forever solo expone C_Item.GetItemInfo (mismo orden de retorno:
+-- itemName, itemLink, quality, itemLevel, ...). Restauramos el global para los
+-- módulos/addons externos que lo invocan directo (p.ej. Bags.lua).
+if not _G.GetItemInfo and _G.C_Item and _G.C_Item.GetItemInfo then
+    _G.GetItemInfo = function(...)
+        return _G.C_Item.GetItemInfo(...)
+    end
+end
+
+if not _G.GetItemInfoInstant then
+    if _G.C_Item and _G.C_Item.GetItemInfoInstant then
+        _G.GetItemInfoInstant = function(item)
+            return _G.C_Item.GetItemInfoInstant(item)
+        end
+    elseif _G.C_Item and _G.C_Item.GetItemInfo then
+        -- C_Item.GetItemInfo devuelve 18 valores (itemName primero); re-mapeamos al layout
+        -- de GetItemInfoInstant: (itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subClassID).
+        _G.GetItemInfoInstant = function(item)
+            local _, _, _, _, _, itemType, itemSubType, _, itemEquipLoc, icon, _, classID, subClassID = _G.C_Item.GetItemInfo(item)
+            return nil, itemType, itemSubType, itemEquipLoc, icon, classID, subClassID
+        end
+    elseif _G.GetItemInfo then
+        _G.GetItemInfoInstant = function(item)
+            local _, _, _, _, _, itemType, itemSubType, _, itemEquipLoc, icon, _, classID, subClassID = _G.GetItemInfo(item)
+            return nil, itemType, itemSubType, itemEquipLoc, icon, classID, subClassID
+        end
+    else
+        _G.GetItemInfoInstant = function() end
+    end
+end
+
+if not _G.GetSpecialization then
+    if _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetSpecialization then
+        _G.GetSpecialization = function(...)
+            return _G.C_SpecializationInfo.GetSpecialization(...)
+        end
+    elseif _G.GetPrimaryTalentTree then
+        -- Classic+: los árboles de talentos hacen de "spec" (0 = ninguno).
+        _G.GetSpecialization = function()
+            local tree = _G.GetPrimaryTalentTree()
+            if tree and tree > 0 then return tree end
+        end
+    else
+        _G.GetSpecialization = function() end
+    end
+end
+
+if not _G.GetSpecializationInfo then
+    -- Forever/Camelot no expone el global GetSpecializationInfo (solo C_SpecializationInfo.*);
+    -- el fallback de Blizzard no aplica porque carga solo en game types classic/standard.
+    if _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetSpecializationInfo then
+        _G.GetSpecializationInfo = function(...)
+            return _G.C_SpecializationInfo.GetSpecializationInfo(...)
+        end
+    elseif _G.GetTalentTabInfo then
+        -- Classic+: mapeo aproximado de árbol de talentos -> specID/nombre/icono.
+        _G.GetSpecializationInfo = function(specIndex)
+            local name, _, _, _, pointsSpent, icon = _G.GetTalentTabInfo(specIndex)
+            if not name then return end
+            return specIndex, name, nil, icon, nil, nil, pointsSpent
+        end
+    else
+        _G.GetSpecializationInfo = function() end
+    end
+end
+
+-- El resto de la capa deprecada de Blizzard (Blizzard_DeprecatedSpecialization) no carga
+-- en Camelot/Forever; replicamos aquí sus aliases por seguridad.
+if not _G.GetNumSpecializationsForClassID and _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetNumSpecializationsForClassID then
+    _G.GetNumSpecializationsForClassID = function(classID)
+        return _G.C_SpecializationInfo.GetNumSpecializationsForClassID(classID)
+    end
+end
+
+if not _G.GetActiveSpecGroup and _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetActiveSpecGroup then
+    _G.GetActiveSpecGroup = function(...)
+        return _G.C_SpecializationInfo.GetActiveSpecGroup(...)
+    end
+end
+
+if not _G.GetSpecializationMasterySpells and _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetSpecializationMasterySpells then
+    _G.GetSpecializationMasterySpells = function(specIndex, isInspect, isPet)
+        local masterySpells = _G.C_SpecializationInfo.GetSpecializationMasterySpells(specIndex, isInspect, isPet)
+        local masterySpell1, masterySpell2
+        if masterySpells then
+            masterySpell1 = masterySpells[1]
+            masterySpell2 = masterySpells[2]
+        end
+        return masterySpell1, masterySpell2
+    end
+end
+
+if not _G.GetTalentInfo and _G.C_SpecializationInfo and _G.C_SpecializationInfo.GetTalentInfo then
+    _G.GetTalentInfo = function(talentTier, talentColumn, specGroupIndex, isInspect, target)
+        local query = { tier = talentTier, column = talentColumn, groupIndex = specGroupIndex, isInspect = isInspect, target = target }
+        local info = _G.C_SpecializationInfo.GetTalentInfo(query)
+        if not info then return end
+        return info.talentID, info.name, info.icon, info.selected, info.available, info.spellID, info.isPVPTalentUnlocked, info.tier, info.column, info.known, info.isGrantedByAura
+    end
+end
+-- ===========================================================================
+
 function KT.IsSecret(val)
     if C_UI and C_UI.IsSecret then return C_UI.IsSecret(val) end
     return issecretvalue and issecretvalue(val)
@@ -870,11 +975,13 @@ local function KT_TryLoadStartupAddon(addonName)
         return false, "INVALID"
     end
 
-    if not (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.LoadAddOn) then
+    local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    local loadAddon = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    if type(isLoaded) ~= "function" or type(loadAddon) ~= "function" then
         return false, "API"
     end
 
-    if C_AddOns.IsAddOnLoaded(addonName) then
+    if isLoaded(addonName) then
         return true, "ALREADY"
     end
 
@@ -886,7 +993,7 @@ local function KT_TryLoadStartupAddon(addonName)
         end
     end
 
-    local ok, loaded, reason = pcall(C_AddOns.LoadAddOn, addonName)
+    local ok, loaded, reason = pcall(loadAddon, addonName)
     if not ok then
         return false, "ERROR"
     end
@@ -1244,6 +1351,360 @@ function KT:SanitizeEditModeFramesDB(framesDB)
     return framesDB
 end
 
+-- [Forever debug] capture log shared with KT_UnlockMode (/ktuwatchlog)
+KT.ktWatchLog = {}
+local function KT_PersistCount(value)
+    if type(value) ~= "table" then return 0 end
+    local n = 0
+    for _ in pairs(value) do n = n + 1 end
+    return n
+end
+
+KT.PersistCount = KT_PersistCount
+
+KT.persistenceDebugEnabled = false
+KT.persistenceDebugLog = KT.persistenceDebugLog or {}
+
+function KT:PersistDebug(fmt, ...)
+    local ok, message = pcall(string.format, fmt, ...)
+    if not ok then message = tostring(fmt) end
+    local stamp = type(date) == "function" and date("%H:%M:%S") or tostring(GetTime and GetTime() or "?")
+    local entry = ("%s %s"):format(stamp, message)
+    self.persistenceDebugLog = self.persistenceDebugLog or {}
+    self.persistenceDebugLog[#self.persistenceDebugLog + 1] = entry
+    while #self.persistenceDebugLog > 200 do
+        table.remove(self.persistenceDebugLog, 1)
+    end
+    if self.persistenceDebugEnabled and self.Print then
+        self:Print("|cff66ccff[PERSIST]|r " .. message)
+    end
+end
+
+function KT:DumpPersistenceDebug()
+    local db = self.db
+    local sv = db and rawget(db, "sv")
+    local raw = _G.KullThranDB
+    local profileName = db and db.GetCurrentProfile and db:GetCurrentProfile() or "?"
+    local profile = db and db.profile
+    local svProfile = sv and sv.profiles and sv.profiles[db.keys and db.keys.profile]
+    local rawProfile = raw and raw.profiles and raw.profiles[raw.profileKeys and raw.profileKeys[db.keys and db.keys.char] or ""]
+    local profileFrames = profile and profile.editMode and profile.editMode.frames
+    local svFrames = svProfile and svProfile.editMode and svProfile.editMode.frames
+    local rawFrames = rawProfile and rawProfile.editMode and rawProfile.editMode.frames
+    local profileInstaller = profile and profile.installer
+    local svInstaller = svProfile and svProfile.installer
+    local rawGlobal = raw and raw.global
+    local svGlobal = sv and sv.global
+    local rawShadow = rawGlobal and rawGlobal.kuiInstallerSuppressed
+    local svShadow = svGlobal and svGlobal.kuiInstallerSuppressed
+    local unlock = self.GetModule and self:GetModule("UnlockMode", true)
+    local function printPersistFrames(label, frames)
+        if type(frames) ~= "table" then
+            self:Print(label .. "=<nil>")
+            return
+        end
+        for key, data in pairs(frames) do
+            if type(data) == "table" then
+                self:Print(("%s[%s] point=%s rel=%s x=%s y=%s scale=%s"):format(
+                    label, tostring(key), tostring(data.point), tostring(data.relativePoint),
+                    tostring(data.x), tostring(data.y), tostring(data.scale)))
+            end
+        end
+    end
+
+    self:Print("|cff00ff88===== KTPERSIST DEBUG =====|r")
+    self:Print(("raw=%s sv=%s raw==sv=%s start=%s ready=%s"):format(
+        tostring(raw), tostring(sv), tostring(raw == sv), tostring(self._persistRawAtStart), tostring(self._ktPersistenceReady)))
+    self:Print(("profile current=%s db.keys.profile=%s db.keys.char=%s"):format(
+        tostring(profileName), tostring(db and db.keys and db.keys.profile), tostring(db and db.keys and db.keys.char)))
+    self:Print(("frames profile=%d svProfile=%d rawProfile=%d"):format(
+        KT_PersistCount(profileFrames), KT_PersistCount(svFrames), KT_PersistCount(rawFrames)))
+    printPersistFrames("live", profileFrames)
+    printPersistFrames("sv", svFrames)
+    printPersistFrames("raw", rawFrames)
+    self:Print(("installer profile dsa=%s show=%s auto=%s reopen=%s force=%s"):format(
+        tostring(profileInstaller and profileInstaller.dontShowAgain),
+        tostring(profileInstaller and profileInstaller.showOnLogin),
+        tostring(profileInstaller and profileInstaller.autoOpenRequested),
+        tostring(profileInstaller and profileInstaller.reopenOnReload),
+        tostring(profileInstaller and profileInstaller.forceOpenForCharacter)))
+    self:Print(("installer sv dsa=%s raw dsa=%s shadow sv=%s raw=%s"):format(
+        tostring(svInstaller and svInstaller.dontShowAgain),
+        tostring(rawProfile and rawProfile.installer and rawProfile.installer.dontShowAgain),
+        tostring(svShadow and svShadow[profileName]),
+        tostring(rawShadow and rawShadow[profileName])))
+    self:Print(("unlock shadow frames sv=%d raw=%d"):format(
+        KT_PersistCount(svGlobal and svGlobal.kuiUnlockPositions and svGlobal.kuiUnlockPositions[profileName]),
+        KT_PersistCount(rawGlobal and rawGlobal.kuiUnlockPositions and rawGlobal.kuiUnlockPositions[profileName])))
+    self:Print(("unlock module=%s open=%s changes=%s pending=%d lastCommit=%s"):format(
+        tostring(unlock), tostring(unlock and unlock.isOpen), tostring(unlock and unlock.hasChanges),
+        KT_PersistCount(unlock and unlock.pendingPositions), tostring(unlock and unlock.lastCommitAt)))
+    self:Print(("boot snapshot=%s"):format(tostring(_G.KUI_BOOT_SNAPSHOT)))
+    self:Print("|cffaaaaaa-- persistence event log --|r")
+    local log = self.persistenceDebugLog or {}
+    local first = math.max(1, #log - 79)
+    for i = first, #log do
+        self:Print(log[i])
+    end
+    self:Print("|cff00ff88===== END KTPERSIST DEBUG =====|r")
+end
+
+SLASH_KTPERSISTDEBUG1 = "/ktpersistdebug"
+SlashCmdList["KTPERSISTDEBUG"] = function(msg)
+    msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if msg == "on" then
+        KT.persistenceDebugEnabled = true
+        KT:PersistDebug("debug output enabled")
+    elseif msg == "off" then
+        KT.persistenceDebugEnabled = false
+    elseif msg == "clear" then
+        KT.persistenceDebugLog = {}
+    end
+    KT:DumpPersistenceDebug()
+end
+
+local function SafeTraceback(depth)
+    if type(debug) == "table" and type(debug.traceback) == "function" then
+        return (debug.traceback("", depth or 2):gsub("\n", " | "))
+    end
+    return "(debug unavailable)"
+end
+
+function KT:CapturePersistedUnlockFrames()
+    if self.PersistDebug then self:PersistDebug("SV CAPTURE begin db=%s sv=%s profile=%s", tostring(self.db), tostring(self.db and rawget(self.db, "sv")), tostring(self.db and self.db.keys and self.db.keys.profile)) end
+    self.svPersistedUnlockFrames = nil
+    if not (self.db and self.db.sv and self.db.sv.profiles and self.db.keys) then return end
+    local profile = self.db.sv.profiles[self.db.keys.profile]
+    if type(profile) ~= "table" or type(profile.editMode) ~= "table" or type(profile.editMode.frames) ~= "table" then
+        return
+    end
+    local stash = {}
+    local count = 0
+    for key, data in pairs(profile.editMode.frames) do
+        if type(data) == "table" then
+            local copy = {}
+            for k, v in pairs(data) do copy[k] = v end
+            stash[key] = copy
+            count = count + 1
+        end
+    end
+    self.svPersistedUnlockFrames = stash
+    if self.PersistDebug then self:PersistDebug("SV CAPTURE frames=%d changelog=%s", count, tostring(self.svPersistedChangelog)) end
+    -- [Forever] also rescue the changelog suppression state, which can vanish
+    -- from memory at load in the same way editMode.frames does.
+    self.svPersistedChangelog = nil
+    if type(self.db.sv.global) == "table" and type(self.db.sv.global.changelog) == "table" then
+        local changelogCopy = {}
+        for k, v in pairs(self.db.sv.global.changelog) do
+            if type(v) == "table" then
+                local t = {}
+                for kk, vv in pairs(v) do t[kk] = vv end
+                changelogCopy[k] = t
+            else
+                changelogCopy[k] = v
+            end
+        end
+        self.svPersistedChangelog = changelogCopy
+    end
+    if self.persistenceDebugEnabled and self.Print then
+        self:Print(("|cff33ff99[KTUM]|r capture: persistedFrames=%d"):format(count))
+    end
+end
+
+function KT:RestorePersistedUnlockFrames()
+    if self.PersistDebug then self:PersistDebug("SV RESTORE begin stash=%s profile=%s", tostring(self.svPersistedUnlockFrames), tostring(self.db and self.db.keys and self.db.keys.profile)) end
+    local stash = self.svPersistedUnlockFrames
+    if type(stash) ~= "table" or next(stash) == nil then stash = nil end
+    if not (self.db and self.db.profile) then return false end
+    self.db.profile.editMode = self.db.profile.editMode or {}
+    self.db.profile.editMode.frames = self.db.profile.editMode.frames or {}
+    local frames = self.db.profile.editMode.frames
+    local changed = false
+    local function merge(src, overwrite)
+        for key, data in pairs(src) do
+            if type(data) == "table" and (overwrite or not frames[key]) then
+                local copy = {}
+                for k, v in pairs(data) do copy[k] = v end
+                frames[key] = copy
+                changed = true
+            end
+        end
+    end
+    -- The stash was captured from the real SavedVariables table, so it must
+    -- win over AceDB's freshly-created default frame positions.
+    if stash then merge(stash, true) end
+    -- Fallback: global shadow written at Save time; survives even if the active
+    -- profile's frames table gets pruned/replaced during a reload.
+    local gl = self.db.global
+    local profileName = self.db.GetCurrentProfile and self.db:GetCurrentProfile() or nil
+    if type(gl) == "table" and profileName then
+        local backed = gl.kuiUnlockPositions and gl.kuiUnlockPositions[profileName]
+        if type(backed) == "table" then merge(backed, true) end
+    end
+    if changed then
+        if self.PersistDebug then self:PersistDebug("SV RESTORE changed=%s frames=%d shadow=%s", tostring(changed), KT_PersistCount(self.db.profile.editMode.frames), tostring(self.db.global and self.db.global.kuiUnlockPositions)) end
+        self.svPersistedUnlockFrames = nil
+    end
+    return changed
+end
+
+function KT:RestorePersistedChangelog()
+    local saved = self.svPersistedChangelog
+    if type(saved) ~= "table" or next(saved) == nil then return false end
+    if not self.db then return false end
+    self.db.global = self.db.global or {}
+    self.db.global.changelog = self.db.global.changelog or {}
+    local cl = self.db.global.changelog
+    for k, v in pairs(saved) do
+        if type(v) == "table" then
+            if type(cl[k]) ~= "table" then cl[k] = {} end
+            for kk, vv in pairs(v) do
+                if cl[k][kk] == nil then cl[k][kk] = vv end
+            end
+        elseif cl[k] == nil then
+            cl[k] = v
+        end
+    end
+    self.svPersistedChangelog = nil
+    return true
+end
+
+local function kuiBootCopy(v, seen)
+    if type(v) ~= "table" then return v end
+    seen = seen or setmetatable({}, { __mode = "k" })
+    if seen[v] then return seen[v] end
+    local t = {}
+    seen[v] = t
+    for k, val in pairs(v) do
+        t[kuiBootCopy(k, seen)] = kuiBootCopy(val, seen)
+    end
+    return t
+end
+
+function KT:CaptureBootSnapshot()
+    -- Snapshot the raw SavedVariables BEFORE our own load loop can touch them.
+    -- Runs at the very top of InitializeCore: the client has already executed
+    -- the varfile by then, but nothing of ours has written to the DB yet.
+    local raw = _G.KullThranDB
+    if type(raw) ~= "table" then
+        _G.KUI_BOOT_SNAPSHOT = nil
+        if self.persistenceDebugEnabled and self.Print then
+            self:Print("|cff33ff99[KTUM]|r snapshot: N/A (KullThranDB no es tabla en arranque)")
+        end
+        return false
+    end
+    local snap = {
+        global = type(raw.global) == "table" and kuiBootCopy(raw.global) or nil,
+        profileKeys = type(raw.profileKeys) == "table" and kuiBootCopy(raw.profileKeys) or nil,
+    }
+    local profiles = {}
+    if type(raw.profiles) == "table" then
+        for name, p in pairs(raw.profiles) do
+            if type(p) == "table" then
+                local pCopy = {}
+                if type(p.editMode) == "table" then pCopy.editMode = kuiBootCopy(p.editMode) end
+                if type(p.installer) == "table" then pCopy.installer = kuiBootCopy(p.installer) end
+                profiles[name] = pCopy
+            end
+        end
+    end
+    snap.profiles = profiles
+    _G.KUI_BOOT_SNAPSHOT = snap
+    return true
+end
+
+function KT:RestoreFromBootSnapshot(verbose)
+    if self.PersistDebug then self:PersistDebug("BOOT RESTORE begin snapshot=%s profile=%s", tostring(_G.KUI_BOOT_SNAPSHOT), tostring(self.db and self.db.keys and self.db.keys.profile)) end
+    local snap = _G.KUI_BOOT_SNAPSHOT
+    if type(snap) ~= "table" then
+        if verbose and self.persistenceDebugEnabled and self.Print then
+            self:Print("|cff33ff99[KTUM]|r snapshot: N/A (el cliente no entrego datos)")
+        end
+        return false
+    end
+    local profileName = self.db and self.db.keys and self.db.keys.profile
+    local restored = false
+
+    -- What did the boot-time snapshot actually contain? (diagnose the client)
+    local snapEm = snap.profiles and profileName and snap.profiles[profileName]
+    local snapFrames = snapEm and snapEm.editMode and snapEm.editMode.frames
+    local snapChLast = snap.global and snap.global.changelog and snap.global.changelog.lastAutoShownVersion
+    local snapInst = snapEm and snapEm.installer
+    if verbose and self.persistenceDebugEnabled and self.Print then
+        local frameCount = 0
+        if type(snapFrames) == "table" then
+            for _ in pairs(snapFrames) do frameCount = frameCount + 1 end
+        end
+        self:Print(("|cff33ff99[KTUM]|r snapshot: frames=%d changelog.lastAuto=%s installer=%s"):format(
+            frameCount,
+            tostring(snapChLast),
+            (type(snapInst) == "table" and tostring(snapInst.dontShowAgain == true)) or "nil"))
+    end
+
+    -- global.changelog
+    local snapCh = snap.global and snap.global.changelog
+    if type(snapCh) == "table" then
+        self.db.global = self.db.global or {}
+        self.db.global.changelog = self.db.global.changelog or {}
+        local cur = self.db.global.changelog
+        if next(cur) == nil or type(cur.dismissedVersions) ~= "table" then
+            for k, v in pairs(snapCh) do
+                if type(v) == "table" then
+                    if type(cur[k]) ~= "table" then cur[k] = {} end
+                    for kk, vv in pairs(v) do
+                        if cur[k][kk] == nil then cur[k][kk] = vv end
+                    end
+                elseif cur[k] == nil then
+                    cur[k] = v
+                end
+            end
+            restored = true
+        end
+    end
+
+    -- global.kuiUnlockPositions (the write-side backup)
+    local snapGl = snap.global and snap.global.kuiUnlockPositions
+    if type(snapGl) == "table" and profileName then
+        local byProf = snapGl[profileName]
+        if type(byProf) == "table" then
+            self.db.global = self.db.global or {}
+            self.db.global.kuiUnlockPositions = self.db.global.kuiUnlockPositions or {}
+            local curBy = self.db.global.kuiUnlockPositions[profileName] or {}
+            for frameName, pos in pairs(byProf) do
+                    curBy[frameName] = type(pos) == "table" and kuiBootCopy(pos) or pos
+                    restored = true
+            end
+            self.db.global.kuiUnlockPositions[profileName] = curBy
+        end
+    end
+
+    -- profile.editMode (frames / snapTargets) + profile.installer flags
+    if type(snapEm) == "table" and self.db.profile then
+        if type(snapEm.editMode) == "table" then
+            local em = self.db.profile.editMode or {}
+            for k, v in pairs(snapEm.editMode) do
+                em[k] = type(v) == "table" and kuiBootCopy(v) or v
+                restored = true
+            end
+            self.db.profile.editMode = em
+        end
+        if type(snapEm.installer) == "table" then
+            local inst = self.db.profile.installer or {}
+            for k, v in pairs(snapEm.installer) do
+                inst[k] = type(v) == "table" and kuiBootCopy(v) or v
+                restored = true
+            end
+            self.db.profile.installer = inst
+        end
+    end
+
+    if verbose and self.persistenceDebugEnabled and self.Print then
+        self:Print(("|cff33ff99[KTUM]|r snapshot: %s"):format(
+            restored and "restaurados datos faltantes" or "memoria intacta, sin cambios"))
+    end
+    return restored
+end
+
 function KT:IsManagedMinimapKey(key)
     return key == "minimap"
         or key == "Minimap"
@@ -1265,10 +1726,8 @@ local function ClearSensitiveBlizzardKeys(container)
     if type(container) ~= "table" then
         return false
     end
-
     local changed = false
-    for i = 1, #SENSITIVE_BLIZZARD_PROFILE_KEYS do
-        local key = SENSITIVE_BLIZZARD_PROFILE_KEYS[i]
+    for _, key in ipairs(SENSITIVE_BLIZZARD_PROFILE_KEYS) do
         if container[key] ~= nil then
             container[key] = nil
             changed = true
@@ -1281,9 +1740,7 @@ function KT:SanitizeLegacyMinimapData(profileDB)
     if type(profileDB) ~= "table" then
         return false
     end
-
     local changed = false
-
     if type(profileDB.editMode) == "table" then
         local framesDB = profileDB.editMode.frames
         if type(framesDB) == "table" then
@@ -1305,7 +1762,6 @@ function KT:SanitizeLegacyMinimapData(profileDB)
                     changed = true
                 end
             end
-
             for key in pairs(framesDB) do
                 if type(key) == "number" then
                     framesDB[key] = nil
@@ -1314,7 +1770,6 @@ function KT:SanitizeLegacyMinimapData(profileDB)
             end
         end
     end
-
     local movers = profileDB.movers
     if type(movers) == "table" then
         for _, key in ipairs({
@@ -1730,7 +2185,7 @@ end
 -- 1. ON INITIALIZE
 -- ============================================================================
 function KT:PrintStartupMessages()
-    local version = KT.VERSION or "5.0.7"
+    local version = KT.VERSION or "0.0.2"
     local updateAvailable = false
     local latestVersion = KT.GetLatestArchivedChangelogVersion and KT:GetLatestArchivedChangelogVersion()
     if latestVersion and KT.CompareVersions then
@@ -1779,6 +2234,339 @@ classCacheWatcher:SetScript("OnEvent", function(_, event, unit)
     end
 end)
 
+-- [Forever] Este cliente NO re-ejecuta los SavedVariables al arrancar (por
+-- eso toda sesion empezo vacia aunque el archivo tuviera datos y aunque el
+-- logout los vuelque correctamente). Para recuperar lo persistido leemos el
+-- archivo directamente con io, siempre que el cliente lo permita; si no hay
+-- io, la fuente es solo la eventual carga del cliente via _G (merge+poll).
+local ktRawReadCache
+local ktRawReadPath
+local ktRawReadLogged = false
+local ktRawReadUnavailableLogged = false
+_G.KT_RAW_READ_FUNC = function()
+    if ktRawReadCache ~= nil then return ktRawReadCache end
+    ktRawReadCache = nil
+
+    if not ktRawReadLogged then
+        ktRawReadLogged = true
+        if KT.PersistDebug then
+            KT:PersistDebug("RAWREAD begin io=%s open=%s popen=%s loadstring=%s load=%s",
+                type(io), type(io) == "table" and type(io.open) or "nil",
+                type(io) == "table" and type(io.popen) or "nil",
+                type(loadstring), type(load))
+        end
+    end
+
+    if type(io) ~= "table" or type(io.open) ~= "function" then
+        if not ktRawReadUnavailableLogged and KT.PersistDebug then
+            ktRawReadUnavailableLogged = true
+            KT:PersistDebug("RAWREAD unavailable: io.open no existe")
+        end
+        return nil
+    end
+
+    local loadChunk = loadstring or load
+    if type(loadChunk) ~= "function" then
+        if KT.PersistDebug then KT:PersistDebug("RAWREAD unavailable: loadstring/load no existe") end
+        return nil
+    end
+
+    local function tryPath(p)
+        local ok, f = pcall(io.open, p, "r")
+        if not ok or not f then return nil end
+        local content = f:read("*a")
+        f:close()
+        if KT.PersistDebug then
+            KT:PersistDebug("RAWREAD opened path=%s bytes=%s", tostring(p), tostring(content and #content or 0))
+        end
+        if not content or not content:find("KullThranDB", 1, true) then
+            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=no-KullThranDB", tostring(p)) end
+            return nil
+        end
+        local chunk, compileError = loadChunk(content .. "\nreturn KullThranDB")
+        if not chunk then
+            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=compile error=%s", tostring(p), tostring(compileError)) end
+            return nil
+        end
+        local ok2, t = pcall(chunk)
+        if not (ok2 and type(t) == "table") then
+            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=execution ok=%s type=%s", tostring(p), tostring(ok2), type(t)) end
+            return nil
+        end
+        ktRawReadCache = t
+        ktRawReadPath = p
+        _G.KT_RAW_READ_PATH = p
+        if KT.PersistDebug then
+            KT:PersistDebug("RAWREAD SUCCESS path=%s table=%s", tostring(p), tostring(t))
+        end
+        return t
+    end
+
+    local roots = {
+        "WTF\\Account",
+        "..\\WTF\\Account",
+        "..\\..\\WTF\\Account",
+        "Data\\WTF\\Account",
+        "..\\Data\\WTF\\Account",
+        "C:\\Program Files (x86)\\World of Warcraft\\_classic_beta_\\WTF\\Account",
+        "C:\\Program Files (x86)\\World of Warcraft\\_retail_\\WTF\\Account",
+    }
+
+    for _, root in ipairs(roots) do
+        local dirs = { root }
+        if type(io.popen) == "function" then
+            local ok, p = pcall(io.popen, 'cmd /c dir /b /ad "' .. root .. '" 2>nul')
+            if ok and p then
+                local raw = p:read("*a")
+                p:close()
+                if raw then
+                    for line in raw:gmatch("[^\r\n]+") do
+                        table.insert(dirs, root .. "\\" .. line)
+                    end
+                end
+            end
+        end
+
+        for _, d in ipairs(dirs) do
+            local t = tryPath(d .. "\\SavedVariables\\KullThranUI.lua")
+            if t then return t end
+        end
+
+        if type(io.popen) == "function" then
+            local ok, p = pcall(io.popen, 'cmd /c dir /s /b "' .. root .. '\\KullThranUI.lua" 2>nul')
+            if ok and p then
+                local raw = p:read("*a")
+                p:close()
+                if raw then
+                    for line in raw:gmatch("[^\r\n]+") do
+                        local t = tryPath(line)
+                        if t then return t end
+                    end
+                end
+            end
+        end
+    end
+
+    if KT.PersistDebug then
+        KT:PersistDebug("RAWREAD failed: no se encontro SavedVariables en roots=%d", #roots)
+    end
+    return nil
+end
+
+function KT:RestoreInstallerSuppressionShadow()
+    if self.PersistDebug then self:PersistDebug("INSTALLER SHADOW begin global=%s profile=%s", tostring(self.db and self.db.global and self.db.global.kuiInstallerSuppressed), tostring(self.db and self.db.GetCurrentProfile and self.db:GetCurrentProfile() or "Default")) end
+    if not (self.db and self.db.profile and self.db.global) then return false end
+    local profileName = self.db.GetCurrentProfile and self.db:GetCurrentProfile() or "Default"
+    local characterKey = self.GetInstallerCharacterKey and self:GetInstallerCharacterKey() or nil
+    local shadow = self.db.global.kuiInstallerSuppressed
+    local value = type(shadow) == "table" and shadow[profileName]
+    local shadowKey = profileName
+    if value == nil and characterKey and type(shadow) == "table" then
+        value = shadow[characterKey]
+        shadowKey = characterKey
+    end
+    if self.PersistDebug then self:PersistDebug("INSTALLER SHADOW value=%s key=%s profile=%s char=%s inst=%s", tostring(value), tostring(shadowKey), tostring(profileName), tostring(characterKey), tostring(self.db.profile.installer)) end
+    if value == nil then return false end
+    local inst = self.db.profile.installer or {}
+    inst.dontShowAgain = value == true and true or nil
+    if value == true then
+        inst.showOnLogin = false
+        inst.reopenOnReload = nil
+        inst.reopenStep = nil
+        inst.resumeStep = nil
+        inst.forceOpenForCharacter = nil
+        inst.autoOpenRequested = nil
+        inst.isOpen = false
+    end
+    self.db.profile.installer = inst
+    return true
+end
+
+-- A single source of truth for every automatic Installer path. Forever can
+-- expose the real SavedVariables after addon initialization, so also consult
+-- the global shadow written by the checkbox and repair the live profile.
+function KT:RestoreLanguageShadow()
+    if not (self.db and self.db.profile and self.db.global) then return false end
+
+    local profileName = self.db.GetCurrentProfile and self.db:GetCurrentProfile() or "Default"
+    local characterKey = self.GetInstallerCharacterKey and self:GetInstallerCharacterKey() or nil
+    local global = self.db.global
+    local byProfile = global.kuiLanguageByProfile
+    local byCharacter = global.kuiLanguageByCharacter
+    local value = type(byProfile) == "table" and byProfile[profileName]
+    local source = "profile"
+
+    if value == nil and characterKey and type(byCharacter) == "table" then
+        value = byCharacter[characterKey]
+        source = "character"
+    end
+
+    if type(value) ~= "string" or value == "" then
+        return false
+    end
+
+    self.db.profile.language = value
+    if self.PersistDebug then
+        self:PersistDebug("LANGUAGE RESTORE value=%s source=%s profile=%s character=%s",
+            tostring(value), source, tostring(profileName), tostring(characterKey))
+    end
+    return true
+end
+
+function KT:IsInstallerAutoOpenSuppressed()
+    local db = self.db and self.db.profile and self.db.profile.installer
+    local global = self.db and self.db.global
+    local profileName = self.db and self.db.GetCurrentProfile
+        and self.db:GetCurrentProfile() or "Default"
+    local characterKey = self.GetInstallerCharacterKey and self:GetInstallerCharacterKey() or nil
+    local shadow = global and global.kuiInstallerSuppressed
+    local shadowSuppressed = type(shadow) == "table"
+        and (shadow[profileName] == true or (characterKey and shadow[characterKey] == true))
+
+    if shadowSuppressed and self.RestoreInstallerSuppressionShadow then
+        pcall(self.RestoreInstallerSuppressionShadow, self)
+        db = self.db and self.db.profile and self.db.profile.installer
+    end
+
+    local persistenceUnavailable = self._ktPersistenceUnavailable == true
+    local suppressed = persistenceUnavailable or shadowSuppressed or (db and db.dontShowAgain == true)
+    if suppressed and db then
+        db.showOnLogin = false
+        db.reopenOnReload = nil
+        db.reopenStep = nil
+        db.resumeStep = nil
+        db.forceOpenForCharacter = nil
+        db.autoOpenRequested = nil
+        db.isOpen = false
+    end
+
+    if self.PersistDebug then
+        self:PersistDebug("INSTALLER AUTO SUPPRESS=%s unavailable=%s dsa=%s shadow=%s profile=%s",
+            tostring(suppressed), tostring(persistenceUnavailable),
+            tostring(db and db.dontShowAgain == true),
+            tostring(shadowSuppressed), tostring(profileName .. "/" .. tostring(characterKey)))
+    end
+    return suppressed
+end
+
+function KT:FlushPersistence()
+    local sv = self.db and rawget(self.db, "sv")
+    if type(sv) ~= "table" then
+        self:PersistDebug("FLUSH skipped sv=%s", tostring(sv))
+        return false
+    end
+    _G.KullThranDB = sv
+    local profile = self.db.profile
+    self:PersistDebug("FLUSH raw=%s sv=%s profile=%s frames=%d dsa=%s shadow=%s", tostring(_G.KullThranDB), tostring(sv), tostring(self.db.keys and self.db.keys.profile), KT_PersistCount(profile and profile.editMode and profile.editMode.frames), tostring(profile and profile.installer and profile.installer.dontShowAgain), tostring(self.db.global and self.db.global.kuiInstallerSuppressed and self.db.global.kuiInstallerSuppressed[self.db.GetCurrentProfile and self.db:GetCurrentProfile() or "Default"]))
+    return true
+end
+function KT:RecordDebugError(source, message)
+    local log = self._compatErrors or {}
+    self._compatErrors = log
+    log[#log + 1] = { time = (GetTime and GetTime()) or 0, source = tostring(source or "unknown"), message = tostring(message or "") }
+    while #log > 80 do table.remove(log, 1) end
+end
+
+local function InstallKTErrorCapture()
+    if KT._compatErrorHooked or type(_G.seterrorhandler) ~= "function" then return end
+    local previous = type(_G.geterrorhandler) == "function" and _G.geterrorhandler() or nil
+    KT._compatErrorHooked = true
+    _G.seterrorhandler(function(message)
+        pcall(KT.RecordDebugError, KT, "Lua", message)
+        if previous then pcall(previous, message) end
+    end)
+end
+function KT:RunCompatibilityDebug()
+    local report = {}
+    self._compatDebugReport = report
+    local function line(text)
+        text = tostring(text)
+        report[#report + 1] = text
+        if self.Print then self:Print(text) end
+    end
+    line("|cff66ccff[ktdebug]|r === KullThranUI Forever compatibility scan ===")
+    line("DB=" .. tostring(self.db ~= nil) .. " profile=" .. tostring(self.db and self.db.GetCurrentProfile and self.db:GetCurrentProfile() or "n/a"))
+
+    local modules = {}
+    local seenAce = {}
+    local function addAce(name, addon)
+        if addon and not seenAce[addon] and (name == "KullThranUI" or tostring(name):match("^KullThranUI_")) then
+            seenAce[addon] = true
+            modules[#modules + 1] = addon
+        end
+    end
+    addAce(self.name or "KullThranUI", self)
+    if self.IterateModules then
+        for name, module in self:IterateModules() do addAce(name, module) end
+    end
+    local AceAddon = LibStub("AceAddon-3.0", true)
+    if AceAddon and AceAddon.IterateAddons then
+        for name, addon in AceAddon:IterateAddons() do addAce(name, addon) end
+    end
+    table.sort(modules, function(a, b)
+        local an = (a and (a.GetName and a:GetName() or a.name)) or "?"
+        local bn = (b and (b.GetName and b:GetName() or b.name)) or "?"
+        return tostring(an) < tostring(bn)
+    end)
+    line("-- módulos/addons Ace KullThranUI --")
+    for i = 1, #modules do
+        local module = modules[i]
+        local name = (module.GetName and module:GetName()) or module.name or "?"
+        local enabled = module.IsEnabled and module:IsEnabled()
+        local dbEnable = module.db and module.db.enable
+        local mismatch = (type(dbEnable) == "boolean" and dbEnable ~= enabled) and " MISMATCH(db.enable/state)" or ""
+        line(string.format("%s enabled=%s db.enable=%s%s", tostring(name), tostring(enabled), tostring(dbEnable), mismatch))
+        if type(module.KUIDebugCheck) == "function" then
+            local ok, details = pcall(module.KUIDebugCheck, module)
+            if ok and type(details) == "table" then
+                local keys = {}
+                for key in pairs(details) do keys[#keys + 1] = key end
+                table.sort(keys)
+                for k = 1, #keys do line("  " .. tostring(keys[k]) .. "=" .. tostring(details[keys[k]])) end
+            elseif not ok then
+                line("  checker ERROR: " .. tostring(details))
+                self:RecordDebugError(tostring(name) .. ".KUIDebugCheck", details)
+            end
+        end
+    end
+    line("-- addons KullThranUI --")
+    local addonCount = (C_AddOns and C_AddOns.GetNumAddOns and C_AddOns.GetNumAddOns()) or (GetNumAddOns and GetNumAddOns()) or 0
+    for index = 1, addonCount do
+        local name, title, notes, loadable, reason
+        if C_AddOns and C_AddOns.GetAddOnInfo then
+            name, title, notes, loadable, reason = C_AddOns.GetAddOnInfo(index)
+        elseif GetAddOnInfo then
+            name, title, notes, loadable, reason = GetAddOnInfo(index)
+        end
+        if type(name) == "string" and (name == "KullThranUI" or name:match("^KullThranUI_")) then
+            local loaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(name)) or (IsAddOnLoaded and IsAddOnLoaded(name))
+            local state
+            if C_AddOns and C_AddOns.GetAddOnEnableState then state = C_AddOns.GetAddOnEnableState(index, UnitName("player")) elseif GetAddOnEnableState then state = GetAddOnEnableState(index, UnitName("player")) end
+            line(string.format("%s loaded=%s enabledState=%s loadable=%s reason=%s", name, tostring(loaded), tostring(state), tostring(loadable), tostring(reason)))
+        end
+    end
+
+    line("-- APIs/frames sensibles --")
+    local requiredAPIs = { "GetSpecialization", "GetSpecializationInfo", "UnitStat", "UnitArmor", "GetAverageItemLevel", "UnitIsPVP", "UnitFactionGroup" }
+    for i = 1, #requiredAPIs do
+        local api = requiredAPIs[i]
+        line("API " .. api .. "=" .. type(_G[api]))
+    end
+    line("Frame ObjectiveTrackerFrame=" .. tostring(_G.ObjectiveTrackerFrame ~= nil) .. " ScrollBox=" .. tostring(_G.ObjectiveTrackerFrame and _G.ObjectiveTrackerFrame.ScrollBox ~= nil))
+    line("Frame CharacterFrame=" .. tostring(_G.CharacterFrame ~= nil) .. " PaperDollFrame=" .. tostring(_G.PaperDollFrame ~= nil) .. " CharacterStatsPane=" .. tostring(_G.CharacterStatsPane ~= nil))
+
+    line("-- errores capturados desde el login --")
+    local errors = self._compatErrors or {}
+    if #errors == 0 then
+        line("(ninguno)")
+    else
+        for i = math.max(1, #errors - 19), #errors do
+            local item = errors[i]
+            line(string.format("%s [%s] %s", tostring(item.time), tostring(item.source), tostring(item.message)))
+        end
+    end
+    line("|cff66ccff[ktdebug]|r === fin del escaneo; usa /ktdebug full y copia este bloque ===|r")
+end
 function KT:InitializeCore()
     local L = self:GetLocale() or {}
     local function LText(text)
@@ -1790,10 +2578,206 @@ function KT:InitializeCore()
                      or { profile = {} }
 
     -- 2. Crear base de datos
-    -- Existing characters keep the profile recorded in profileKeys. New
-    -- characters must start on their own profile so first-run defaults (most
-    -- importantly installer.showOnLogin) are not inherited from "Default".
-    self.db = LibStub("AceDB-3.0"):New("KullThranDB", defaults)
+    -- [Forever] Este cliente puebla los SavedVariables DESPUES de ejecutar el
+    -- Lua del addon, asi que AceDB:New puede construirse sobre un sv VACIO
+    -- (AceDB:New crea {} y lo escribe en _G cuando el varname es nil). El
+    -- logout del cliente vuelca _G, por lo que nuestras escrituras en db.sv
+    -- no llegarian al disco (archivo "bien" en disco, lecturas en 0, saves
+    -- perdidos). Cuando _G.KullThranDB aparezca (ADDON_LOADED / reintentos),
+    -- lo FUSIONAMOS en db.sv y PINEAMOS _G = db.sv para que el logout del
+    -- cliente vuelque NUESTRA tabla canonica (con los cambios de la sesion).
+    local savedVariablesAtStart = _G.KullThranDB
+    self._persistRawAtStart = tostring(savedVariablesAtStart)
+    self:PersistDebug("INIT begin rawStart=%s type=%s", tostring(savedVariablesAtStart), type(savedVariablesAtStart))
+    pcall(self.CaptureBootSnapshot, self)
+
+    -- Forever puede ejecutar el addon antes de inyectar los SavedVariables.
+    -- Nunca creemos _G.KullThranDB en ese caso: hacerlo convierte la tabla
+    -- vacia de AceDB en la fuente que el cliente ve al cargar el varfile.
+    -- AceDB acepta una tabla directamente; usamos un contenedor privado hasta
+    -- que aparezca la tabla real y mergeAndPin() la conecte.
+    local dbSource = type(savedVariablesAtStart) == "table" and savedVariablesAtStart or {}
+    self._persistUsingPlaceholder = savedVariablesAtStart ~= dbSource
+    self.db = LibStub("AceDB-3.0"):New(dbSource, defaults)
+    InstallKTErrorCapture()
+    self:PersistDebug("INIT AceDB db=%s sv=%s profile=%s char=%s placeholder=%s", tostring(self.db), tostring(rawget(self.db, "sv")), tostring(self.db.keys and self.db.keys.profile), tostring(self.db.keys and self.db.keys.char), tostring(self._persistUsingPlaceholder))
+
+    local function pinProfileKeys()
+        self:PersistDebug("PROFILE pin enter sv=%s keys=%s", tostring(rawget(self.db, "sv")), tostring(self.db and self.db.keys))
+        local sv = rawget(self.db, "sv")
+        if not (sv and sv.profileKeys and sv.profiles and self.db.keys) then return end
+        local charKey = self.db.keys.char
+        if charKey and type(sv.profileKeys[charKey]) == "string" and sv.profiles[sv.profileKeys[charKey]] then
+            self.db.keys.profile = sv.profileKeys[charKey]
+        else
+            local onlyName
+            for name in pairs(sv.profiles) do
+                if onlyName then return end
+                onlyName = name
+            end
+            if onlyName then self.db.keys.profile = onlyName end
+        end
+    end
+
+    local function mergeAndPin(raw)
+        self:PersistDebug("MERGE enter raw=%s sv=%s", tostring(raw), tostring(rawget(self.db, "sv")))
+        if type(raw) ~= "table" then return false end
+        local sv = rawget(self.db, "sv")
+        if type(sv) ~= "table" then return false end
+        if sv == raw then
+            pinProfileKeys()
+            rawset(self.db, "profile", nil)
+            rawset(self.db, "global", nil)
+            return true
+        end
+        local touched
+        local function mergeInto(dst, src)
+            for k, v in pairs(src) do
+                if type(v) == "table" then
+                    if type(dst[k]) ~= "table" then
+                        dst[k] = {}
+                        touched = true
+                    end
+                    mergeInto(dst[k], v)
+                elseif dst[k] ~= v then
+                    dst[k] = v
+                    touched = true
+                end
+            end
+        end
+        mergeInto(sv, raw)
+        pinProfileKeys()
+        -- AceDB caches profile/global accessors. Invalidate both after merging
+        -- the authoritative SavedVariables table, even if the profile key did
+        -- not change (leaf values such as dontShowAgain may have changed).
+        rawset(self.db, "profile", nil)
+        rawset(self.db, "global", nil)
+        _G.KullThranDB = sv
+        self:PersistDebug("MERGE complete profile=%s frames=%d rawNow=%s", tostring(self.db.keys and self.db.keys.profile), KT_PersistCount(self.db.keys and sv.profiles and sv.profiles[self.db.keys.profile] and sv.profiles[self.db.keys.profile].editMode and sv.profiles[self.db.keys.profile].editMode.frames), tostring(_G.KullThranDB))
+        if self.persistenceDebugEnabled and self.Print then
+            local n = 0
+            local kp = self.db.keys and self.db.keys.profile
+            local em = kp and sv.profiles and sv.profiles[kp] and sv.profiles[kp].editMode
+            if em and em.frames then
+                for _ in pairs(em.frames) do n = n + 1 end
+            end
+            self:Print(("|cff33ff99[KTUM]|r merge: varfile conectado (frames=%d, %s)"):format(
+                n, touched and "datos fusionados" or "datos ya presentes"))
+        end
+        return true
+    end
+
+    -- [Forever] fuente de datos: primero el varfile que cargue el cliente en
+    -- _G (clients normales); si nunca llega, leer el archivo directamente
+    -- con io (los clients privados suelen dejar io abierto).
+    local function tryLoadVarfile(allowInPlace)
+        local g = _G.KullThranDB
+        local own = rawget(self.db, "sv")
+        local source = type(g) == "table" and (g == own and "ace-own" or "global") or "none"
+        if source ~= self._persistLastSource then
+            self._persistLastSource = source
+            self:PersistDebug("TRY source=%s raw=%s own=%s same=%s", source, tostring(g), tostring(own), tostring(g == own))
+        end
+        if type(g) == "table" then
+            -- If the client populated no SavedVariables before AceDB:New,
+            -- this is AceDB's own empty table, not the disk data. Keep polling
+            -- until Forever replaces it (or the direct reader finds the file).
+            if savedVariablesAtStart ~= nil or g ~= own then
+                return g
+            end
+
+            -- Algunos clientes rellenan la tabla existente en lugar de
+            -- reemplazar la referencia global. El placeholder de AceDB solo
+            -- contiene profileKeys; profiles/global indican que ya llego el
+            -- SavedVariables real.
+            if allowInPlace and self._persistUsingPlaceholder and
+                (type(g.profiles) == "table" or type(g.global) == "table") then
+                self:PersistDebug("TRY placeholder populated in-place profiles=%s global=%s", tostring(type(g.profiles)), tostring(type(g.global)))
+                return g
+            end
+        end
+        if KT_RAW_READ_FUNC then
+            local ok, t = pcall(KT_RAW_READ_FUNC)
+            if ok and type(t) == "table" then return t end
+        end
+        return nil
+    end
+
+    local function afterMerge()
+        self:PersistDebug("READY afterMerge raw=%s sv=%s profile=%s", tostring(_G.KullThranDB), tostring(rawget(self.db, "sv")), tostring(self.db.keys and self.db.keys.profile))
+        self._ktPersistenceReady = true
+        pcall(self.RestoreFromBootSnapshot, self, true)
+        pcall(self.RestoreInstallerSuppressionShadow, self)
+        pcall(self.RestoreLanguageShadow, self)
+        if self.NormalizeProfileFontsForLocale then
+            pcall(self.NormalizeProfileFontsForLocale, self)
+        end
+        if self.RefreshFontPath then
+            pcall(self.RefreshFontPath, self)
+        end
+        pcall(self.CapturePersistedUnlockFrames, self)
+        pcall(self.ArmUnlockFramesTraps, self)
+        if not self._ktMaybeAutoOpenScheduled then
+            self._ktMaybeAutoOpenScheduled = true
+            C_Timer.After(0, function()
+                if not self._ktMaybeAutoOpenCalled and self.MaybeAutoOpenInstaller then
+                    self._ktMaybeAutoOpenCalled = true
+                    self:MaybeAutoOpenInstaller()
+                end
+            end)
+        end
+    end
+    if mergeAndPin(tryLoadVarfile()) then
+        afterMerge()
+    else
+        local watcher = CreateFrame("Frame")
+        local done = false
+        local ticker
+        local function finish()
+            if done then return end
+            done = true
+            if watcher.UnregisterAllEvents then watcher:UnregisterAllEvents() end
+            if ticker and ticker.Cancel then ticker:Cancel() end
+            afterMerge()
+        end
+        watcher:RegisterEvent("ADDON_LOADED")
+        watcher:RegisterEvent("PLAYER_LOGIN")
+        watcher:RegisterEvent("VARIABLES_LOADED")
+        watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+        watcher:SetScript("OnEvent", function(_, event, arg1)
+            self:PersistDebug("EVENT %s arg1=%s raw=%s own=%s same=%s", tostring(event), tostring(arg1), tostring(_G.KullThranDB), tostring(rawget(self.db, "sv")), tostring(_G.KullThranDB == rawget(self.db, "sv")))
+            if mergeAndPin(tryLoadVarfile(true)) then finish() end
+        end)
+        ticker = C_Timer.NewTicker(0.5, function()
+            if not done and mergeAndPin(tryLoadVarfile()) then finish() end
+        end)
+        -- A brand-new profile may legitimately have no varfile yet. Do not
+        -- leave the popup pipeline blocked forever in that case, but only
+        -- fall back while the client still points _G at AceDB's own table.
+        C_Timer.After(15, function()
+            -- En una instalacion nueva no existe ningun varfile y Forever deja
+            -- _G.KullThranDB en nil. Liberamos el arranque en ese caso; si
+            -- aparece una tabla real antes, el ticker/evento ya la habra unido.
+            if not done and (_G.KullThranDB == rawget(self.db, "sv") or _G.KullThranDB == nil) then
+                self._ktPersistenceUnavailable = true
+                self:PersistDebug("READY fallback: no SavedVariables event/table after 15s raw=%s; automatic Installer disabled", tostring(_G.KullThranDB))
+                finish()
+            end
+        end)
+    end
+    local rescueFrame = CreateFrame("Frame")
+    rescueFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    rescueFrame:SetScript("OnEvent", function(f)
+        f:UnregisterAllEvents()
+        C_Timer.After(0.5, function()
+            if KT and KT.RestorePersistedChangelog then
+                local ok = KT:RestorePersistedChangelog()
+                if ok and KT.Print then
+                    KT:Print("|cff33ff99[POPUPS?]|r changelog: rescatado (world 0.5s)")
+                end
+            end
+        end)
+    end)
     if self.db and self.db.profile then
         self.db.profile.editMode = self.db.profile.editMode or {}
         self.db.profile.editMode.frames = self:SanitizeEditModeFramesDB(self.db.profile.editMode.frames or {})
@@ -1811,6 +2795,12 @@ function KT:InitializeCore()
 
     C_Timer.After(0, function()
         KT_TryLoadStartupAddon("KullThranUI_Chat")
+        local expLoaded, expReason = KT_TryLoadStartupAddon("KullThranUI_ExperienceBar")
+        if self.PersistDebug then
+            self:PersistDebug("MODULE LOAD ExperienceBar loaded=%s reason=%s registered=%s",
+                tostring(expLoaded), tostring(expReason),
+                tostring(self:GetModule("ExperienceBar", true) ~= nil))
+        end
         KT_InstallWhisperTargetGuard()
     end)
 
@@ -1855,6 +2845,23 @@ function KT:InitializeCore()
     self:RegisterChatCommand("kt",        "ToggleConfig")
     self:RegisterChatCommand("kui",       "ToggleConfig")
     self:RegisterChatCommand("installer", "OpenInstaller")
+    self:RegisterChatCommand("ktpersistdebug", function(args)
+        args = (args or ""):lower()
+        if args == "on" then self.persistenceDebugEnabled = true end
+        if args == "off" then self.persistenceDebugEnabled = false end
+        if args == "clear" then self.persistenceDebugLog = {} end
+        self:DumpPersistenceDebug()
+    end)
+    if self.RegisterEvent then
+        self:RegisterEvent("PLAYER_LOGOUT", function()
+            self:PersistDebug("LOGOUT event")
+            local unlock = self:GetModule("UnlockMode", true)
+            if unlock and unlock.isOpen and unlock.hasChanges and unlock.CommitPositions then
+                unlock:CommitPositions()
+            end
+            if self.FlushPersistence then self:FlushPersistence() end
+        end)
+    end
     self:RegisterChatCommand("ins", "OpenInstaller")
     self:RegisterChatCommand("installers", "OpenInstaller")
 
@@ -1870,11 +2877,19 @@ function KT:InitializeCore()
         KT:_HandleCPUCommand(args)
     end)
 
-    -- 6. Comandos estándar de debug
-    self:RegisterChatCommand("ktdebug", function()
-        self:Print("DB: " .. (self.db and "|cff00FF00OK|r" or "|cffFF0000FAIL|r") ..
-                   "  Profile: " .. (self.db and self.db:GetCurrentProfile() or "n/a"))
+    -- /ktdebug full: estado de módulos, addons, APIs y errores recientes.
+    self:RegisterChatCommand("ktdebug", function(args)
+        args = (args or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if args ~= "full" and args ~= "scan" then
+            self:Print("DB: " .. (self.db and "|cff00FF00OK|r" or "|cffFF0000FAIL|r") .. "  Profile: " .. (self.db and self.db:GetCurrentProfile() or "n/a"))
+            self:Print("Usa /ktdebug full para escanear addons, módulos, APIs y errores recientes.")
+            return
+        end
+        self:RunCompatibilityDebug()
     end)
+    SLASH_KTDEBUG1 = "/ktdebug"
+    SlashCmdList["KTDEBUG"] = function() self:RunCompatibilityDebug() end
+    -- 6. Comandos estándar de debug
 
     self:RegisterChatCommand("ktdmdebug", function()
         local damageMeter = KT:GetModule("Enhancements", true)
@@ -1949,7 +2964,7 @@ function KT:InitializeCore()
     self:RegisterChatCommand("ktperf", function(args)
         local perf = ns._perf
         if not perf then
-            KT_PerfPrint("|cffFF4444[ktperf]|r ns._perf no encontrado — ¿cargó KUICooldownManager?")
+            KT_PerfPrint("|cffFF4444[ktperf]|r ns._perf no encontrado - ¿cargó KUICooldownManager?")
             return
         end
         if perf.capturing then
@@ -1975,7 +2990,7 @@ function KT:InitializeCore()
     end)
 
     -- -----------------------------------------------------------------------
-    -- /ktcdmstats — Estado de cada barra CDM
+    -- /ktcdmstats - Estado de cada barra CDM
     -- -----------------------------------------------------------------------
     self:RegisterChatCommand("ktcdmstats", function()
         KT:_PrintCDMStats()
@@ -2001,7 +3016,10 @@ function KT:InitializeCore()
     end)
 
     -- 7. Mostrar instalador (primer login / update)
-    self:MaybeAutoOpenInstaller()
+    if self._ktPersistenceReady then
+        self._ktMaybeAutoOpenCalled = true
+        self:MaybeAutoOpenInstaller()
+    end
 
     if not self._installerReopenWatcher then
         local watcher = CreateFrame('Frame')
@@ -2011,17 +3029,18 @@ function KT:InitializeCore()
             C_Timer.After(1, function()
                 local pendingInstaller = self.db and self.db.profile and self.db.profile.installer
                 local shouldAutoOpen = pendingInstaller and pendingInstaller.dontShowAgain ~= true
-                    and (pendingInstaller.forceOpenForCharacter or pendingInstaller.showOnLogin ~= false)
-                if pendingInstaller and (pendingInstaller.reopenOnReload or pendingInstaller.reopenStep
+                    and (pendingInstaller.forceOpenForCharacter or pendingInstaller.autoOpenRequested)
+                if pendingInstaller and not self:IsInstallerAutoOpenSuppressed()
+                    and (pendingInstaller.reopenOnReload or pendingInstaller.reopenStep
                     or pendingInstaller.resumeStep or shouldAutoOpen) then
-                    self:OpenInstaller()
+                    self:OpenInstaller(true)
                 end
             end)
         end)
         self._installerReopenWatcher = watcher
     end
 
-    local version = KT.VERSION or "5.0.7"
+    local version = KT.VERSION or "0.0.2"
     local accentR, accentG, accentB = self:GetStyleAccentRGB()
     self:Print("Welcome to |cff" .. string.format("%02x%02x%02x", accentR * 255, accentG * 255, accentB * 255) .. "KullThranUI|r " .. version)
 end
@@ -2078,6 +3097,11 @@ function KT:GetInstallerCharacterKey()
 end
 function KT:MaybeAutoOpenInstaller()
     if self._installerProfileChoiceInProgress then return end
+    if self._ktPersistenceUnavailable then
+        if self.PersistDebug then self:PersistDebug("INSTALLER AUTO skipped: persistence unavailable") end
+        return
+    end
+    if self:IsInstallerAutoOpenSuppressed() then return end
     if not (self.db and self.db.profile) then return end
 
     local installerDb = self.db.profile.installer
@@ -2095,12 +3119,13 @@ function KT:MaybeAutoOpenInstaller()
         installerDb.reopenStep = nil
         installerDb.resumeStep = nil
         installerDb.forceOpenForCharacter = nil
+        installerDb.autoOpenRequested = nil
         installerDb.isOpen = false
     elseif not (installerDb.reopenOnReload or installerDb.reopenStep or installerDb.resumeStep) then
         installerDb.isOpen = false
     end
 
-    local currentVersion = KT.VERSION or "5.0.7"
+    local currentVersion = KT.VERSION or "0.0.2"
     local characterKey = self:GetInstallerCharacterKey()
     local legacyCharacterGUID = UnitGUID and UnitGUID("player")
 
@@ -2118,6 +3143,7 @@ function KT:MaybeAutoOpenInstaller()
         installerDb.showOnLogin = true
         installerDb.step = 1
         installerDb.forceOpenForCharacter = true
+        installerDb.autoOpenRequested = true
         self.db.global.installerProfileChoicePendingByCharacter[characterKey] = true
     end
 
@@ -2149,12 +3175,22 @@ function KT:MaybeAutoOpenInstaller()
     if installerDb.lastVersion ~= currentVersion then
         if installerDb.dontShowAgain ~= true then
             installerDb.showOnLogin = true
+            installerDb.autoOpenRequested = true
         end
         if not installerDb.reopenOnReload and not installerDb.reopenStep and not installerDb.resumeStep then
             installerDb.step = 1
         end
         installerDb.lastVersion = currentVersion
         self._loginPopupStep = 1
+    end
+
+    if self.Print then
+        self:Print(("|cff33ff99[POPUPS?]|r autoopen: vcur=%s vlast=%s dsa=%s step=%s showOnLogin=%s")
+            :format(tostring(currentVersion),
+                    tostring(installerDb.lastVersion),
+                    tostring(installerDb.dontShowAgain == true),
+                    tostring(self._loginPopupStep),
+                    tostring(installerDb.showOnLogin)))
     end
 
     if installerDb.reopenOnReload or installerDb.reopenStep or installerDb.resumeStep then
@@ -2167,11 +3203,12 @@ function KT:MaybeAutoOpenInstaller()
         function self:ProcessLoginPopups(step)
             self._loginPopupStep = step or self._loginPopupStep or 1
             local instDb = self.db and self.db.profile and self.db.profile.installer
-            if instDb and instDb.dontShowAgain ~= true
-                and (instDb.reopenOnReload or instDb.reopenStep or instDb.resumeStep or instDb.forceOpenForCharacter) then
+            if instDb and not self:IsInstallerAutoOpenSuppressed() and instDb.dontShowAgain ~= true
+                and (instDb.reopenOnReload or instDb.reopenStep or instDb.resumeStep
+                    or instDb.forceOpenForCharacter or instDb.autoOpenRequested) then
                 self._loginPopupStep = 4
                 if self.OpenInstaller then
-                    self:OpenInstaller()
+                    self:OpenInstaller(true)
                 end
                 return
             end
@@ -2183,12 +3220,11 @@ function KT:MaybeAutoOpenInstaller()
                 if installer and installer.CheckConflicts then
                     local conflicts = installer:CheckConflicts()
                     local cdb = self.db.profile.conflictDetector
-                    local installerSuppressed = self.db.profile.installer
-                        and self.db.profile.installer.dontShowAgain == true
+                    local installerSuppressed = self:IsInstallerAutoOpenSuppressed()
                     if not installerSuppressed and conflicts and not (cdb and cdb.dontShowAgain) then
                         -- Show Conflict UI and wait
                         if installer.CreateInstallerWindow then
-                            installer:CreateInstallerWindow(true)
+                            installer:CreateInstallerWindow(true, true)
                         end
                         return
                     end
@@ -2202,6 +3238,24 @@ function KT:MaybeAutoOpenInstaller()
                 self.db.global.changelog = self.db.global.changelog or {}
                 local changelogDb = self.db.global.changelog
                 local currentVer = KT.VERSION or "0"
+
+                -- Forever is versioned independently from the retail package.
+                -- A profile that already acknowledged retail 5.0.7 must not
+                -- see the same changelog again merely because the package key
+                -- changed to 0.0.2.
+                if currentVer == "0.0.2"
+                    and self.IsChangelogPatchSuppressed
+                    and self:IsChangelogPatchSuppressed("5.0.7")
+                    and not self:IsChangelogPatchSuppressed(currentVer) then
+                    if self.SetChangelogPatchSuppressed then
+                        self:SetChangelogPatchSuppressed(currentVer, true)
+                    else
+                        changelogDb.lastAutoShownVersion = currentVer
+                        changelogDb.lastDismissedVersion = currentVer
+                        changelogDb.dismissedVersions = changelogDb.dismissedVersions or {}
+                        changelogDb.dismissedVersions[currentVer] = true
+                    end
+                end
                 local suppressed = self.IsChangelogPatchSuppressed
                     and self:IsChangelogPatchSuppressed(currentVer)
                 if not suppressed then
@@ -2216,9 +3270,15 @@ function KT:MaybeAutoOpenInstaller()
                     if self.ShowChangelogPopup then
                         local ok = pcall(self.ShowChangelogPopup, self, currentVer)
                         if ok then
+                            if self.Print then
+                                self:Print("|cff33ff99[POPUPS?]|r changelog: SHOW (no suprimido)")
+                            end
                             return
                         end
                     end
+                elseif self.Print then
+                    self:Print(("|cff33ff99[POPUPS?]|r changelog: SKIP (suppressed=1, lastAuto=%s)"):format(
+                        tostring(changelogDb.lastAutoShownVersion)))
                 end
             end
 
@@ -2226,11 +3286,16 @@ function KT:MaybeAutoOpenInstaller()
                 -- Step 3: Installer
                 self._loginPopupStep = 4
                 local instDb = self.db and self.db.profile and self.db.profile.installer
-                if instDb and instDb.dontShowAgain ~= true
-                    and (instDb.showOnLogin or instDb.reopenOnReload or instDb.reopenStep or instDb.resumeStep or instDb.forceOpenForCharacter) then
+                if instDb and not self:IsInstallerAutoOpenSuppressed() and instDb.dontShowAgain ~= true
+                    and (instDb.reopenOnReload or instDb.reopenStep or instDb.resumeStep
+                        or instDb.forceOpenForCharacter or instDb.autoOpenRequested) then
                     if self.OpenInstaller then
-                        self:OpenInstaller()
+                        if self.Print then self:Print("|cff33ff99[POPUPS?]|r installer: SHOW") end
+                        self:OpenInstaller(true)
                     end
+                elseif self.Print then
+                    self:Print(("|cff33ff99[POPUPS?]|r installer: SKIP (load flags) dsa=%s"):format(
+                        tostring(instDb and instDb.dontShowAgain == true)))
                 end
             end
         end
@@ -2241,9 +3306,10 @@ function KT:MaybeAutoOpenInstaller()
 
     C_Timer.After(2, function()
         local pendingInstaller = self.db and self.db.profile and self.db.profile.installer
-        if pendingInstaller and pendingInstaller.dontShowAgain ~= true
+        if pendingInstaller and not self:IsInstallerAutoOpenSuppressed()
+            and pendingInstaller.dontShowAgain ~= true
             and (pendingInstaller.reopenOnReload or pendingInstaller.reopenStep or pendingInstaller.resumeStep) then
-            self:OpenInstaller()
+            self:OpenInstaller(true)
             return
         end
         if KT and KT.ProcessLoginPopups then
@@ -2259,11 +3325,12 @@ function KT:MaybeAutoOpenInstaller()
             return
         end
         local shouldAutoOpen = pendingInstaller.dontShowAgain ~= true
-            and (pendingInstaller.forceOpenForCharacter or pendingInstaller.showOnLogin ~= false)
+            and (pendingInstaller.forceOpenForCharacter or pendingInstaller.autoOpenRequested)
+        if self:IsInstallerAutoOpenSuppressed() then return end
         if not (pendingInstaller.reopenOnReload or pendingInstaller.reopenStep or pendingInstaller.resumeStep or shouldAutoOpen) then return end
         local installer = self:GetModule('Installer', true)
         if not installer or not installer.frame or not installer.frame.IsShown or not installer.frame:IsShown() then
-            self:OpenInstaller()
+            self:OpenInstaller(true)
         end
     end)
 end
@@ -2272,14 +3339,25 @@ function KT:_KT_OnInstallerRegenEnabled()
     self._ktInstallerRegenHooked = nil
 
     if self._ktPendingInstallerOpen then
+        local isAutomatic = self._ktPendingInstallerAuto == true
         self._ktPendingInstallerOpen = nil
-        self:OpenInstaller()
+        self._ktPendingInstallerAuto = nil
+        self:OpenInstaller(isAutomatic)
     end
 end
 
-function KT:OpenInstaller()
+function KT:OpenInstaller(isAutomatic)
+    if isAutomatic and not self._ktPersistenceReady then
+        if self.PersistDebug then self:PersistDebug("INSTALLER OPEN blocked automatic: persistence not ready") end
+        return
+    end
+    if isAutomatic and self:IsInstallerAutoOpenSuppressed() then
+        if self.PersistDebug then self:PersistDebug("INSTALLER OPEN blocked automatic dsa=1") end
+        return
+    end
     if InCombatLockdown and InCombatLockdown() then
         self._ktPendingInstallerOpen = true
+        self._ktPendingInstallerAuto = isAutomatic == true
         if not self._ktInstallerRegenHooked then
             self._ktInstallerRegenHooked = true
             self:RegisterEvent("PLAYER_REGEN_ENABLED", "_KT_OnInstallerRegenEnabled")
@@ -2342,6 +3420,7 @@ function KT:OpenInstaller()
             self.db.global.installerSeenByCharacter[legacyCharacterGUID] = true
         end
         if self.db.profile and self.db.profile.installer then
+            self.db.profile.installer.autoOpenRequested = nil
             self.db.profile.installer.forceOpenForCharacter = nil
         end
         return
@@ -2481,7 +3560,7 @@ function KT:_PrintPerfReport(perf, duration)
         c(cpuCol, string.format("%.3f%%", cpuPct))))
     if perf.lastTick and next(perf.lastTick) then
         self:Print(string.format("  %s barras=%d  iconos=%d/%d  mouse-track=%d  skipped=%s",
-            c("888888", "último tick:"),
+            c("888888", "Último tick:"),
             tonumber(perf.lastTick.enabledBars) or 0,
             tonumber(perf.lastTick.visibleIcons) or 0,
             tonumber(perf.lastTick.totalIcons) or 0,
@@ -2568,7 +3647,7 @@ function KT:_PrintPerfReport(perf, duration)
         self:Print(sep)
         self:Print(c("FF4444", "ALERTA: barras con mouse-tracking (OnUpdate CADA FRAME):"))
         for _, k in ipairs(mouseTrack) do
-            self:Print("  " .. c("FF8800", k) .. " — corre ~60 veces/s, no 10 veces/s")
+            self:Print("  " .. c("FF8800", k) .. " - corre ~60 veces/s, no 10 veces/s")
         end
     end
 
@@ -2851,7 +3930,7 @@ function KT:_PrintCDMStats()
 
     local perf = cdmNs and cdmNs._perf
     if perf and perf.lastTick and next(perf.lastTick) then
-        self:Print(string.format("último tick: barras=%d  iconos=%d/%d  mouse-track=%d  skipped=%s",
+        self:Print(string.format("Último tick: barras=%d  iconos=%d/%d  mouse-track=%d  skipped=%s",
             tonumber(perf.lastTick.enabledBars) or 0,
             tonumber(perf.lastTick.visibleIcons) or 0,
             tonumber(perf.lastTick.totalIcons) or 0,
@@ -2882,10 +3961,10 @@ function KT:_PrintCDMStats()
                 fx = math.floor((ox or 0) + 0.5)
                 fy = math.floor((oy or 0) + 0.5)
                 local relName = relFrame and (relFrame.GetName and relFrame:GetName() or tostring(relFrame)) or "UIParent"
-                fInfo = string.format("%dx%d  α=%.2f  %s→%s(%d,%d)",
+                fInfo = string.format("%dx%d  ??=%.2f  %s???%s(%d,%d)",
                     fw, fh, fa, pt, relName, fx, fy)
             else
-                fInfo = string.format("%dx%d  α=%.2f  sin anchor", fw, fh, fa)
+                fInfo = string.format("%dx%d  ??=%.2f  sin anchor", fw, fh, fa)
             end
         end
 

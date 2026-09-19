@@ -28,16 +28,30 @@ local C_Item           = C_Item
 local C_Spell          = C_Spell
 local C_ToyBox         = C_ToyBox
 local C_Timer          = C_Timer
-local C_Housing        = C_Housing
 local PlayerHasToy     = PlayerHasToy
 local IsPlayerSpell    = IsPlayerSpell
-local GetInventoryItemID   = GetInventoryItemID
-local GetInventoryItemLink = GetInventoryItemLink
-local EquipItemByName      = EquipItemByName
 local UnitClass = UnitClass
 local UnitRace  = UnitRace
 local GameTooltip = GameTooltip
 local UIParent    = UIParent
+
+local function IsSecretValue(value)
+    if KT and type(KT.IsSecret) == "function" then
+        local ok, result = pcall(KT.IsSecret, value)
+        return ok and result == true
+    end
+    if type(_G.issecretvalue) == "function" then
+        local ok, result = pcall(_G.issecretvalue, value)
+        return ok and result == true
+    end
+    return false
+end
+
+-- This module is a read-only showcase on WoW Forever / Camelot: it only lists
+-- the teleports that exist and never casts, uses, equips or queries housing.
+-- Every action that sends a request the server does not support has been
+-- removed on purpose, because those requests disconnect the player.
+
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local DEFAULT_SIZE    = 36
@@ -190,51 +204,6 @@ local function SetOuterBorderColor(frame, r, g, b, a)
     border.right:SetColorTexture(r, g, b, a or 1)
 end
 
-local HOUSE_ICON_TEXTURES = {
-    "Interface\\Icons\\Achievement_Garrison_Architect",
-    "Interface\\Icons\\Achievement_Garrison_Tier_01",
-    "Interface\\Icons\\Achievement_Garrison_Tier01_Alliance",
-    "Interface\\Icons\\Achievement_Garrison_Tier01_Horde",
-    "Interface\\Icons\\INV_Misc_Map_01",
-    ICON_PATH .. "TeleportMenu.png",
-}
-
-local function CollectHouseIconCandidates(houseInfo)
-    local candidates = {}
-    if type(houseInfo) == "table" then
-        for _, key in ipairs({
-            "icon", "iconID", "iconFileID", "texture", "textureID",
-            "previewIcon", "previewIconID", "previewIconFileID",
-        }) do
-            local value = houseInfo[key]
-            if type(value) == "string" or type(value) == "number" then
-                tinsert(candidates, value)
-            end
-        end
-    end
-
-    for _, texture in ipairs(HOUSE_ICON_TEXTURES) do
-        tinsert(candidates, texture)
-    end
-
-    return candidates
-end
-
-local function SetTextureWithFallback(textureObject, candidates)
-    if not textureObject then return nil end
-
-    for _, candidate in ipairs(candidates or {}) do
-        textureObject:SetTexture(nil)
-        textureObject:SetTexture(candidate)
-        if textureObject:GetTexture() then
-            return candidate
-        end
-    end
-
-    textureObject:SetTexture(134400)
-    return 134400
-end
-
 local CATEGORY_ICONS = {
     ["Hearthstones"]   = "Interface\\Icons\\INV_Misc_Rune_09",
     ["Class & Racial"] = "Interface\\Icons\\Spell_Arcane_TeleportOrgrimmar",
@@ -243,7 +212,6 @@ local CATEGORY_ICONS = {
     ["Dungeons"]       = "Interface\\Icons\\INV_Misc_Map_01",
     ["Raids"]          = "Interface\\Icons\\INV_Misc_Head_Dragon_Bronze",
     ["Delves"]         = "Interface\\Icons\\Inv_misc_map05",
-    ["House"]          = HOUSE_ICON_TEXTURES[1],
 }
 
 local function ApplySidebarTabState(tab, state)
@@ -286,7 +254,6 @@ Mod.Categories = {
     "Dungeons",
     "Raids",
     "Delves",
-    "House",          -- â† Vivienda (C_Housing)
 }
 
 Mod.DungeonCurrentSeason = {
@@ -588,9 +555,6 @@ Mod.TeleportData = {
     ["Delves"] = {
         { type = "toy", id = 230850, name = "Delve-O-Bot 7001" },
     },
-
-    -- ── House — populated dynamically via C_Housing ───────────────────────────
-    ["House"] = {},
 }
 
 -- ============================================================================
@@ -636,7 +600,6 @@ function Mod:OnInitialize()
     end
     self.activeCategory = "Hearthstones"
     self.buttons        = {}
-    self.secureButtons  = {}
     self.plainButtons   = {}
     self.pendingCategory = nil
 end
@@ -656,19 +619,10 @@ function Mod:OnEnable()
     self:RegisterEvent("BAG_UPDATE_COOLDOWN",       "UpdateAllCooldowns")
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA",     "OnZoneChanged")
     self:RegisterEvent("PLAYER_ENTERING_WORLD",     "OnEnteringWorld")
-    self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED",  "OnEquipmentChanged")
-    self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED",  "OnSpellSucceeded")
-    self:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED","OnSpellInterrupted")
-    self:RegisterEvent("PLAYER_HOUSE_LIST_UPDATED", "OnHouseListUpdated")
     self:RegisterEvent("PLAYER_REGEN_ENABLED",      "OnRegenEnabled")
 
     self:RegisterChatCommand("ktteleport", "Toggle")
     self:RegisterChatCommand("porter",     "Toggle")
-
-    -- Request housing data from the server
-    if C_Housing and C_Housing.GetPlayerOwnedHouses then
-        C_Housing.GetPlayerOwnedHouses()
-    end
 end
 
 function Mod:OnRegenEnabled()
@@ -680,26 +634,9 @@ function Mod:OnRegenEnabled()
 end
 
 -- ============================================================================
--- EQUIP-SLOT MAP  (for equippable porter items)
--- ============================================================================
-
-local EQUIP_SLOT_MAP = {
-    INVTYPE_CLOAK  = { 15 },
-    INVTYPE_TABARD = { 19 },
-    INVTYPE_FINGER = { 11, 12 },
-    INVTYPE_FEET   = { 8 },
-    INVTYPE_HEAD   = { 1 },
-    INVTYPE_NECK   = { 2 },
-}
-
-function Mod:GetEquipSlots(itemID)
-    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemID)
-    return equipLoc and EQUIP_SLOT_MAP[equipLoc] or nil
-end
-
--- ============================================================================
 -- FRAME CONSTRUCTION
 -- ============================================================================
+
 
 function Mod:CreateMenuFrame()
     if self.menuFrame then return self.menuFrame end
@@ -739,7 +676,7 @@ function Mod:CreateMenuFrame()
     title:SetFont(KT_FONT, 14, "OUTLINE")
     title:SetPoint("LEFT", 12, 0)
     title:SetPoint("TOP",  f, "TOP", 0, -9)
-    title:SetText(LText("Portal & Teleport"))
+    title:SetText(LText("Portal & Teleport") .. "  |cff808080· escaparate|r")
 
     -- ── Separator under header ────────────────────────────────────────────────
     local sep = f:CreateTexture(nil, "BACKGROUND")
@@ -819,11 +756,7 @@ function Mod:CreateMenuFrame()
         local ico = tab:CreateTexture(nil, "ARTWORK")
         ico:SetSize(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE)
         ico:SetPoint("LEFT", 13, 0)
-        if cat == "House" then
-            SetTextureWithFallback(ico, CollectHouseIconCandidates())
-        else
-            ico:SetTexture(CATEGORY_ICONS[cat] or "Interface\\Icons\\Inv_misc_note_01")
-        end
+        ico:SetTexture(CATEGORY_ICONS[cat] or "Interface\\Icons\\Inv_misc_note_01")
         ico:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         tab.icon = ico
 
@@ -1128,9 +1061,7 @@ function Mod:ShowCategory(category)
     frame.countLabel:Show()
 
     self.buttons = {}
-    self.secureButtons = self.secureButtons or {}
     self.plainButtons = self.plainButtons or {}
-    for _, btn in ipairs(self.secureButtons) do btn:Hide() end
     for _, btn in ipairs(self.plainButtons) do btn:Hide() end
     self.groupHeaders = self.groupHeaders or {}
     for _, header in ipairs(self.groupHeaders) do header:Hide() end
@@ -1155,16 +1086,9 @@ function Mod:ShowCategory(category)
         if item.classReq and item.classReq ~= playerClass then show = false end
         if item.raceReq and item.raceReq ~= playerRace then show = false end
         if item.cosmetic and not Mod.db.showCosmetic then show = false end
-        -- Right-click hiding has been disabled to prevent accidental loss of entries.
-        -- Legacy hiddenItems are ignored so previously hidden entries become visible again.
-
+        -- Showcase: every possible teleport is listed, even if not unlocked yet.
         if show then
-            if item.type == "spell" and not IsPlayerSpell(item.id) then show = false end
-            if item.type == "toy" and not PlayerHasToy(item.id) then show = false end
-            if item.type == "housing" then show = true end
-            if show then
-                tinsert(validItems, item)
-            end
+            tinsert(validItems, item)
         end
     end
 
@@ -1186,6 +1110,18 @@ function Mod:ShowCategory(category)
     local maxCols = math.max(1, math.floor((availableW + bSpace) / (cellW + bSpace)))
     bCols = math.min(bCols, maxCols)
     local totalWidth = bCols * (cellW + bSpace) - bSpace
+    local availableCount = 0
+
+    local function IsTeleportAvailable(item)
+        if item.type == "spell" then
+            local ok, known = pcall(IsPlayerSpell, item.id)
+            return ok and known == true
+        elseif item.type == "toy" then
+            local ok, known = pcall(PlayerHasToy, item.id)
+            return ok and known == true
+        end
+        return true
+    end
 
     local function AcquireGroupHeader(index)
         local header = self.groupHeaders[index]
@@ -1205,13 +1141,9 @@ function Mod:ShowCategory(category)
     end
 
     local function ApplyButtonItem(index, item, x, y)
-        local isSecureButton = item.type ~= "housing"
-        local pool = isSecureButton and self.secureButtons or self.plainButtons
-        local btn = pool[index]
+        local btn = self.plainButtons[index]
         if not btn then
-            local buttonName = isSecureButton and ("KT_TeleportSecureBtn" .. index) or ("KT_TeleportHousingBtn" .. index)
-            local template = isSecureButton and "SecureActionButtonTemplate,BackdropTemplate" or "BackdropTemplate"
-            btn = CreateFrame("Button", buttonName, content, template)
+            btn = CreateFrame("Button", "KT_TeleportShowcaseBtn" .. index, content, "BackdropTemplate")
             btn:SetBackdrop({
                 bgFile   = "Interface\\Buttons\\WHITE8x8",
                 edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -1242,19 +1174,21 @@ function Mod:ShowCategory(category)
             btn.badge = btn:CreateTexture(nil, "OVERLAY")
             btn.badge:SetSize(10, 10)
             btn.badge:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-            btn.badge:SetColorTexture(GOLD_R, GOLD_G, GOLD_B, 0.85)
             btn.badge:Hide()
 
+            -- Read-only tooltip: the showcase never casts, uses or queries items.
             btn:SetScript("OnEnter", function(s)
-                if Mod.db.showTooltip ~= false then
+                local data = s.data
+                if Mod.db.showTooltip ~= false and data then
                     GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-                    if s.itemID then GameTooltip:SetItemByID(s.itemID)
-                    elseif s.spellID then GameTooltip:SetSpellByID(s.spellID)
-                    elseif s.toyID then GameTooltip:SetToyByItemID(s.toyID)
-                    elseif s.housingData then
-                        GameTooltip:AddLine(s.housingData.name, 1, 1, 1)
-                        GameTooltip:AddLine(LText("Click to teleport to your house."), 0.7, 0.7, 0.7)
+                    GameTooltip:AddLine(data.name or "", 1, 1, 1)
+                    if data.classReq then
+                        GameTooltip:AddLine("Clase: " .. data.classReq, 0.7, 0.7, 0.7)
                     end
+                    if data.raceReq then
+                        GameTooltip:AddLine("Raza: " .. data.raceReq, 0.7, 0.7, 0.7)
+                    end
+                    GameTooltip:AddLine(LText("Solo escaparate: no ejecuta el teleport."), 0.6, 0.6, 0.6)
                     GameTooltip:Show()
                 end
                 local hoverR, hoverG, hoverB = GetThemeAccentColor()
@@ -1265,14 +1199,8 @@ function Mod:ShowCategory(category)
                 s:SetBackdropBorderColor(0.15, 0.15, 0.15, 1)
             end)
 
-            if isSecureButton then
-                -- Register both up and down to respect ActionButtonUseKeyDown settings.
-                btn:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
-            else
-                btn:RegisterForClicks("LeftButtonUp")
-            end
-
-            pool[index] = btn
+            btn:RegisterForClicks("LeftButtonUp")
+            self.plainButtons[index] = btn
         end
 
         btn:SetSize(cellW, cellH)
@@ -1289,19 +1217,11 @@ function Mod:ShowCategory(category)
         btn.cooldown:ClearAllPoints()
         btn.cooldown:SetPoint("TOP", btn, "TOP", 0, 0)
         btn.cooldown:SetSize(bSize, bSize)
+        btn.cooldown:Clear()
 
-        btn.spellID, btn.itemID, btn.toyID, btn.housingData = nil, nil, nil, nil
-        if not isSecureButton then
-            btn:SetScript("OnClick", nil)
-        end
-        btn:SetScript("PreClick", nil)
-        btn:SetScript("PostClick", nil)
-        if isSecureButton then
-            btn:SetAttribute("type", nil)
-            btn:SetAttribute("spell", nil)
-            btn:SetAttribute("item", nil)
-            btn:SetAttribute("macrotext", nil)
-        end
+        btn.spellID, btn.itemID, btn.toyID = nil, nil, nil
+        btn.data = item
+        btn:SetScript("OnClick", nil)
         btn.badge:Hide()
 
         local font = (self.db.font and LSM and LSM:Fetch("font", self.db.font)) or KT_FONT
@@ -1316,55 +1236,38 @@ function Mod:ShowCategory(category)
         if showLabels then btn.nameLabel:Show() else btn.nameLabel:Hide() end
 
         if item.type == "spell" then
-            local info = C_Spell.GetSpellInfo(item.id)
+            local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(item.id)
             btn.icon:SetTexture(info and info.iconID or 134400)
             btn.spellID = item.id
-            btn:SetAttribute("type", "macro")
-            btn:SetAttribute("macrotext", "/cast " .. (info and info.name or ""))
-        elseif item.type == "item" then
-            local _, _, _, _, _, _, _, _, _, itemIcon = C_Item.GetItemInfo(item.id)
-            local _, _, _, _, iconID = GetItemInfoInstant(item.id)
-            btn.icon:SetTexture(itemIcon or iconID or 134400)
+        else
+            local icon
+            if item.type == "toy" and C_ToyBox and C_ToyBox.GetToyInfo then
+                local ok, _, _, toyIcon = pcall(C_ToyBox.GetToyInfo, item.id)
+                if ok then icon = toyIcon end
+            end
+            if not icon then
+                local ok, _, _, _, _, instantIcon = pcall(GetItemInfoInstant, item.id)
+                if ok then icon = instantIcon end
+            end
+            btn.icon:SetTexture(icon or 134400)
             btn.itemID = item.id
-            if item.equippable then
-                btn.badge:Show()
-                btn:SetAttribute("type", "macro")
-                btn:SetAttribute("macrotext", "/equip item:" .. item.id .. "\n/use item:" .. item.id)
-                btn:SetScript("PreClick", function()
-                    local slots = Mod:GetEquipSlots(item.id)
-                    if not slots then return end
-                    local snapshot = {}
-                    for _, slot in ipairs(slots) do
-                        snapshot[slot] = {
-                            id   = GetInventoryItemID("player", slot),
-                            link = GetInventoryItemLink("player", slot),
-                        }
-                    end
-                    Mod.pendingReequip = { slots = snapshot, porterItemID = item.id }
-                end)
-            else
-                btn:SetAttribute("type", "macro")
-                btn:SetAttribute("macrotext", "/use item:" .. item.id)
+            if item.type == "toy" then
+                btn.toyID = item.id
+                btn.itemID = nil
             end
-        elseif item.type == "toy" then
-            local _, _, toyIcon = C_ToyBox.GetToyInfo(item.id)
-            local _, _, _, _, iconID = GetItemInfoInstant(item.id)
-            btn.icon:SetTexture(toyIcon or iconID or 134400)
-            btn.toyID = item.id
-            btn:SetAttribute("type", "macro")
-            btn:SetAttribute("macrotext", "/use item:" .. item.id)
-        elseif item.type == "housing" then
-            if item.iconAtlas and btn.icon.SetAtlas then
-                btn.icon:SetAtlas(item.iconAtlas, true)
-            else
-                SetTextureWithFallback(btn.icon, CollectHouseIconCandidates(item))
-            end
-            btn.housingData = item
-            btn:SetScript("OnClick", function()
-                if not InCombatLockdown() and C_Housing and C_Housing.TeleportToHouse then
-                    C_Housing.TeleportToHouse(item.houseGUID)
-                end
-            end)
+        end
+
+        local available = IsTeleportAvailable(item)
+        if available then
+            availableCount = availableCount + 1
+            btn.icon:SetVertexColor(1, 1, 1, 1)
+            btn.nameLabel:SetTextColor(0.85, 0.85, 0.85, 1)
+            btn.badge:Hide()
+        else
+            btn.icon:SetVertexColor(0.40, 0.40, 0.40, 1)
+            btn.nameLabel:SetTextColor(0.55, 0.55, 0.55, 1)
+            btn.badge:SetColorTexture(0.45, 0.45, 0.45, 0.85)
+            btn.badge:Show()
         end
 
         self.buttons[index] = btn
@@ -1454,7 +1357,7 @@ function Mod:ShowCategory(category)
         content:SetSize(totalWidth, math.max(1, totalRows * (cellH + bSpace) + bSpace))
     end
 
-    frame.countLabel:SetText(#validItems .. " available")
+    frame.countLabel:SetText(#validItems .. " teleports  ·  " .. availableCount .. " disponibles")
     self:UpdateAllCooldowns()
 end
 
@@ -1475,9 +1378,36 @@ function Mod:UpdateAllCooldowns()
                 start, duration = C_Item.GetItemCooldown(btn.toyID)
             end
 
-            if start and duration and duration > 0 then
-                btn.cooldown:SetCooldown(start, duration)
-                btn.dimmer:Show()
+            local durationIsSecret = IsSecretValue(duration)
+            local cooldownActive = false
+            if start and duration then
+                if durationIsSecret then
+                    -- Forever may return a secret duration. It is valid to pass
+                    -- it to the Cooldown widget, but not to compare it here.
+                    cooldownActive = true
+                else
+                    local ok, positive = pcall(function()
+                        return duration > 0
+                    end)
+                    cooldownActive = ok and positive == true
+                end
+            end
+
+            if cooldownActive then
+                local ok = pcall(btn.cooldown.SetCooldown, btn.cooldown, start, duration)
+                if ok then
+                    -- With a secret duration we cannot safely infer whether
+                    -- the cooldown is active, so let the Cooldown widget draw
+                    -- it and avoid a permanently stuck custom dimmer.
+                    if durationIsSecret then
+                        btn.dimmer:Hide()
+                    else
+                        btn.dimmer:Show()
+                    end
+                else
+                    btn.cooldown:Clear()
+                    btn.dimmer:Hide()
+                end
             else
                 btn.cooldown:Clear()
                 btn.dimmer:Hide()
@@ -1492,7 +1422,6 @@ end
 
 function Mod:OnZoneChanged()
     self:UpdateAllCooldowns()
-    if self.reequipData then self:DoReequip() end
 end
 
 function Mod:OnEnteringWorld()
@@ -1503,85 +1432,12 @@ function Mod:OnEnteringWorld()
         end
     end)
     self:UpdateAllCooldowns()
-    if self.reequipData then self:DoReequip() end
-    if C_Housing and C_Housing.GetPlayerOwnedHouses then
-        C_Housing.GetPlayerOwnedHouses()
-    end
-end
-
-function Mod:OnEquipmentChanged()
-    -- Porter pattern: save displaced item for later re-equip
-    if self.pendingReequip and not self.reequipData then
-        local pending = self.pendingReequip
-        for slotID, oldData in pairs(pending.slots) do
-            local equippedNow = GetInventoryItemID("player", slotID)
-            if equippedNow
-               and equippedNow == pending.porterItemID
-               and equippedNow ~= oldData.id then
-                self.pendingReequip = nil
-                self.reequipData    = { link = oldData.link, itemID = oldData.id }
-                break
-            end
-        end
-    end
-end
-
-function Mod:OnSpellSucceeded(_, unit)
-    if unit == "player" and self.reequipData then
-        self:DoReequip()
-    end
-end
-
-function Mod:OnSpellInterrupted(_, unit)
-    if unit == "player" and self.reequipData and not self.reequipTimer then
-        local name = C_Item.GetItemInfo(self.reequipData.itemID)
-        print("|cff00FFFF[KT Teleport]|r Cast interrupted — re-equipping "
-              .. (name or "previous item") .. " in 12 s.")
-        local data = self.reequipData
-        self.reequipTimer = C_Timer.NewTimer(12, function() self:DoReequip() end)
-    end
-end
-
--- ── Porter re-equip pattern ───────────────────────────────────────────────────
-function Mod:DoReequip()
-    local reequip = self.reequipData
-    if not reequip then return end
-    self.reequipData = nil
-    if self.reequipTimer then
-        self.reequipTimer:Cancel()
-        self.reequipTimer = nil
-    end
-    C_Timer.After(1, function()
-        if not InCombatLockdown() then
-            EquipItemByName(reequip.link or reequip.itemID)
-            local name = C_Item.GetItemInfo(reequip.itemID)
-            print("|cff00FFFF[KT Teleport]|r Re-equipped " .. (name or "previous item") .. ".")
-        end
-    end)
-end
-
--- ── Housing ───────────────────────────────────────────────────────────────────
-function Mod:OnHouseListUpdated(_, houseInfos)
-    if not houseInfos then return end
-    local houseData = {}
-    for _, house in ipairs(houseInfos) do
-        tinsert(houseData, {
-            type              = "housing",
-            name              = house.neighborhoodName or house.houseName or "My House",
-            neighborhoodGUID  = house.neighborhoodGUID,
-            houseGUID         = house.houseGUID,
-            plotID            = house.plotID,
-            icon              = house.icon or house.iconID or house.iconFileID or house.previewIcon or house.previewIconID or house.previewIconFileID,
-            iconAtlas         = house.iconAtlas or house.atlas,
-        })
-    end
-    Mod.TeleportData["House"] = houseData
-    self:Refresh()
 end
 
 -- ============================================================================
 -- TOGGLE / REFRESH
 -- ============================================================================
+
 
 function Mod:Toggle()
     local f = self:CreateMenuFrame()

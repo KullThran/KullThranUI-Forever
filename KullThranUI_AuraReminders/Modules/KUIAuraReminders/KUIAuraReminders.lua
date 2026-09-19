@@ -14,7 +14,65 @@ end
 local AceDB = LibStub("AceDB-3.0", true)
 if not KT then return end
 
-local Known = function(id) return id and (IsPlayerSpell(id) or IsSpellKnown(id)) end
+local function SafeSpellInfo(spellID)
+    if type(spellID) ~= "number" or spellID <= 0 then return nil end
+
+    if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellID)
+        if ok and info then
+            if type(info) == "table" then return info end
+            return {name = info}
+        end
+    end
+
+    if type(GetSpellInfo) == "function" then
+        local ok, name, rank, icon = pcall(GetSpellInfo, spellID)
+        if ok and name then
+            return {name = name, iconID = icon, icon = icon}
+        end
+    end
+
+    return nil
+end
+
+local function SpellExists(spellID)
+    -- If Forever exposes neither spell lookup API, preserve the data and let
+    -- the runtime Known() check decide. This avoids deleting valid Classic+
+    -- spells solely because the client is using an older API surface.
+    if type(GetSpellInfo) ~= "function"
+        and not (C_Spell and type(C_Spell.GetSpellInfo) == "function") then
+        return true
+    end
+    return SafeSpellInfo(spellID) ~= nil
+end
+
+local function Known(spellID)
+    if not spellID then return false end
+
+    local hasKnownAPI = false
+
+    if type(IsPlayerSpell) == "function" then
+        hasKnownAPI = true
+        local ok, known = pcall(IsPlayerSpell, spellID)
+        if ok and known == true then return true end
+    end
+
+    if type(IsSpellKnown) == "function" then
+        hasKnownAPI = true
+        local ok, known = pcall(IsSpellKnown, spellID)
+        if ok and known == true then return true end
+    end
+
+    if C_SpellBook and type(C_SpellBook.IsSpellKnown) == "function" then
+        hasKnownAPI = true
+        local ok, known = pcall(C_SpellBook.IsSpellKnown, spellID)
+        if ok and known == true then return true end
+    end
+
+    -- A missing lookup API should not make every Forever reminder disappear.
+    -- When a known-spell API exists, false is meaningful and is preserved.
+    return not hasKnownAPI and SpellExists(spellID)
+end
 local InCombat = function() return InCombatLockdown and InCombatLockdown() end
 local AR = {}
 local floor, max, min, abs = math.floor, math.max, math.min, math.abs
@@ -138,16 +196,31 @@ end
 local _cachedIType, _cachedDiffID
 
 function AR.CacheInstanceInfo()
-    local _, iType, diffID = GetInstanceInfo()
+    _cachedIType = nil
+    _cachedDiffID = 0
+    if type(GetInstanceInfo) ~= "function" then return end
+
+    local ok, _, iType, diffID = pcall(GetInstanceInfo)
+    if not ok then return end
+
     _cachedIType = iType
-    _cachedDiffID = tonumber(diffID) or 0
+    local numberOK, numericDiffID = pcall(tonumber, diffID)
+    if numberOK and type(numericDiffID) == "number" then
+        _cachedDiffID = numericDiffID
+    end
 end
 
 function AR.InRealInstancedContent()
-    if _cachedDiffID == 0 then return false end
-    if C_Garrison and C_Garrison.IsOnGarrisonMap and C_Garrison.IsOnGarrisonMap() then return false end
-    if _cachedIType == "party" or _cachedIType == "raid" or _cachedIType == "scenario" then return true end
-    return false
+    -- Forever can report a valid party/raid type before it exposes a Retail
+    -- difficulty ID. The instance type is the reliable signal for reminder
+    -- activation; difficulty remains optional for rune/mythic filters.
+    if _cachedIType ~= "party" and _cachedIType ~= "raid" and _cachedIType ~= "scenario" then
+        return false
+    end
+    if C_Garrison and C_Garrison.IsOnGarrisonMap and C_Garrison.IsOnGarrisonMap() then
+        return false
+    end
+    return true
 end
 
 local PARTY_MYTHIC_DIFFICULTIES = {
@@ -179,13 +252,28 @@ end
 -- Retail 12.1 moved temporary weapon enchant data to C_PaperDollInfo. Preserve
 -- the legacy tuple shape for callers and retain compatibility with older clients.
 function AR.GetTemporaryWeaponEnchants()
-    if C_PaperDollInfo and C_PaperDollInfo.GetTemporaryEnchantmentInfo then
-        local mh = C_PaperDollInfo.GetTemporaryEnchantmentInfo(INVSLOT_MAINHAND)
-        local oh = C_PaperDollInfo.GetTemporaryEnchantmentInfo(INVSLOT_OFFHAND)
-        return mh ~= nil, mh and mh.remainingTimeMs, mh and mh.chargesRemaining, mh and mh.enchantID,
-               oh ~= nil, oh and oh.remainingTimeMs, oh and oh.chargesRemaining, oh and oh.enchantID
+    if C_PaperDollInfo and type(C_PaperDollInfo.GetTemporaryEnchantmentInfo) == "function" then
+        local ok, mh, oh = pcall(function()
+            return C_PaperDollInfo.GetTemporaryEnchantmentInfo(INVSLOT_MAINHAND),
+                   C_PaperDollInfo.GetTemporaryEnchantmentInfo(INVSLOT_OFFHAND)
+        end)
+        if ok then
+            return mh ~= nil, mh and mh.remainingTimeMs, mh and mh.chargesRemaining, mh and mh.enchantID,
+                   oh ~= nil, oh and oh.remainingTimeMs, oh and oh.chargesRemaining, oh and oh.enchantID
+        end
     end
-    return GetWeaponEnchantInfo()
+
+    if type(GetWeaponEnchantInfo) == "function" then
+        local ok, mhHas, mhTime, mhCharges, mhEnchant, ohHas, ohTime, ohCharges, ohEnchant =
+            pcall(GetWeaponEnchantInfo)
+        if ok then
+            return mhHas, mhTime, mhCharges, mhEnchant, ohHas, ohTime, ohCharges, ohEnchant
+        end
+    end
+
+    -- Forever may expose neither Retail enchantment API. Treat both slots as
+    -- unenchanted and let the item scan decide whether a reminder is useful.
+    return false, nil, nil, nil, false, nil, nil, nil
 end
 
 function AR.IsMythicZeroOrMythicRaid()
@@ -232,8 +320,15 @@ end
 --  Talent query helpers
 -------------------------------------------------------------------------------
 function AR.GetCurrentInstanceName()
-    local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
-    return name, tonumber(instanceID)
+    if type(GetInstanceInfo) ~= "function" then return nil, nil end
+    local ok, name, _, _, _, _, _, _, instanceID = pcall(GetInstanceInfo)
+    if not ok then return nil, nil end
+
+    local numberOK, numericInstanceID = pcall(tonumber, instanceID)
+    if numberOK and type(numericInstanceID) == "number" then
+        return name, numericInstanceID
+    end
+    return name, nil
 end
 
 -------------------------------------------------------------------------------
@@ -336,7 +431,8 @@ local _lookupScratch    = {}
 -- aura collection is secret, including some nominally out-of-combat states.
 -- Direct spell lookup is the supported readable path.
 local function GetHelpfulAuraBySpellID(unit, spellID)
-    if not (unit and spellID and C_UnitAuras) then return nil, false end
+    if not (unit and spellID) then return nil, false end
+    if not C_UnitAuras and not AuraUtil and type(UnitAura) ~= "function" then return nil, false end
     local fn
     if unit == "player" then
         fn = C_UnitAuras.GetPlayerAuraBySpellID
@@ -347,14 +443,36 @@ local function GetHelpfulAuraBySpellID(unit, spellID)
         local ok, aura
         if unit == "player" then ok, aura = pcall(fn, spellID)
         else ok, aura = pcall(fn, unit, spellID) end
-        if ok then return aura, true end
+        if ok and aura ~= nil then return aura, true end
     end
+
+    -- Forever can keep the direct lookup callable while returning nil for a
+    -- protected collection during combat. Try the legacy/utility lookup
+    -- before falling back to the pre-combat snapshot; otherwise a reminder
+    -- can remain visible after the player applies the aura in combat.
+    if AuraUtil and type(AuraUtil.FindAuraBySpellID) == "function" then
+        local ok, aura = pcall(AuraUtil.FindAuraBySpellID, spellID, unit, "HELPFUL")
+        if ok and aura ~= nil then return aura, true end
+        if not InCombat() then return nil, true end
+    elseif type(UnitAura) == "function" then
+        for index = 1, 40 do
+            local ok, name, _, _, _, _, _, _, _, auraSpellID = pcall(UnitAura, unit, index, "HELPFUL")
+            if not ok or name == nil then break end
+            if not (issecretvalue and issecretvalue(auraSpellID)) and auraSpellID == spellID then
+                return true, true
+            end
+        end
+        return nil, true
+    end
+
     local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
     if not issecretvalue(name) and name and C_UnitAuras.GetAuraDataBySpellName then
         local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, name, "HELPFUL")
-        if ok then return aura, true end
+        if ok and aura ~= nil then return aura, true end
     end
-    return nil, false
+    -- A nil direct result in combat is not proof that the aura is absent.
+    -- Keep the snapshot fallback only when no readable fallback exists.
+    return nil, not InCombat()
 end
 
 local function GetHelpfulAuraByName(unit, auraName)
@@ -371,7 +489,7 @@ local function PlayerHasAuraByID(spellIDs)
         local id = spellIDs[j]
         local aura, readable = GetHelpfulAuraBySpellID("player", id)
         if readable and aura ~= nil then return true end
-        if (not readable or inCombat) and _preCombatAuraCache[id] then return true end
+        if not readable and _preCombatAuraCache[id] then return true end
     end
     return false
 end
@@ -384,7 +502,7 @@ local function _unitHasBuff(u, spellIDs)
         local id = spellIDs[j]
         local aura, readable = GetHelpfulAuraBySpellID(u, id)
         if readable and aura ~= nil then return true end
-        if u == "player" and (not readable or inCombat) and _preCombatAuraCache[id] then return true end
+        if u == "player" and not readable and _preCombatAuraCache[id] then return true end
     end
     return false
 end
@@ -561,10 +679,17 @@ for _, id in ipairs({W.Bow, W.Gun, W.Crossbow, W.Wand}) do WEAPON_CATEGORY_MAP[i
 local OFFHAND_EQUIPLOCS = { INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true }
 
 function AR.GetWeaponCategory(slotID)
-    local itemID = GetInventoryItemID("player", slotID)
-    if not itemID then return nil end
-    local infoFn = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
-    local _, _, _, equipLoc, _, classID, subClassID = infoFn(itemID)
+    if type(GetInventoryItemID) ~= "function" then return nil end
+
+    local itemOK, itemID = pcall(GetInventoryItemID, "player", slotID)
+    if not itemOK or not itemID then return nil end
+
+    local infoFn = C_Item and C_Item.GetItemInfoInstant
+    if type(infoFn) ~= "function" then infoFn = GetItemInfoInstant end
+    if type(infoFn) ~= "function" then return nil end
+
+    local infoOK, _, _, _, equipLoc, _, classID, subClassID = pcall(infoFn, itemID)
+    if not infoOK then return nil end
     if classID ~= WEAPON_CLASS_ID then return nil end
     if OFFHAND_EQUIPLOCS[equipLoc] then return nil end
     return WEAPON_CATEGORY_MAP[subClassID] or "NEUTRAL"
@@ -726,7 +851,7 @@ local FLASK_NAME_SET = {}
 for _, f in ipairs(FLASK_ITEMS) do
     FLASK_BUFF_IDS[#FLASK_BUFF_IDS+1] = f.buffID
     FLASK_BUFF_ID_SET[f.buffID] = true
-    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(f.buffID)
+    local spellInfo = SafeSpellInfo(f.buffID)
     if spellInfo and spellInfo.name then FLASK_NAME_SET[spellInfo.name] = true end
     FLASK_NAME_SET[f.name] = true
 end
@@ -836,6 +961,104 @@ local INKY_BLACK_BUFF = {124640}  -- The buff from Inky Black Potion
 -------------------------------------------------------------------------------
 --  Helpers: Well Fed / Flask buff detection (by name, not spell ID secret)
 -------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--  Forever content filter
+--
+--  The addon data is shared with Retail, but Forever does not expose the same
+--  spell catalog. Filter data entries by spell existence before exporting them
+--  to the options module. Runtime Known() checks still apply per character.
+--------------------------------------------------------------------------------
+local FILTER_STATS = {}
+
+local function FilterSpellIDs(ids, fallbackSpellID)
+    if not ids then return nil end
+
+    local filtered = {}
+    for _, spellID in ipairs(ids) do
+        if SpellExists(spellID) then
+            filtered[#filtered + 1] = spellID
+        end
+    end
+
+    if #filtered == 0 and fallbackSpellID and SpellExists(fallbackSpellID) then
+        filtered[1] = fallbackSpellID
+    end
+
+    return filtered
+end
+
+local function FilterSpellEntries(entries, label)
+    local filtered = {}
+    local removed = 0
+
+    for _, entry in ipairs(entries or {}) do
+        if SpellExists(entry.castSpell) then
+            if entry.buffIDs then
+                entry.buffIDs = FilterSpellIDs(entry.buffIDs, entry.castSpell)
+            end
+            filtered[#filtered + 1] = entry
+        else
+            removed = removed + 1
+        end
+    end
+
+    FILTER_STATS[label] = {
+        before = #(entries or {}),
+        after = #filtered,
+        removed = removed,
+    }
+    return filtered
+end
+
+local function FilterSpellIDList(ids, label)
+    local filtered = FilterSpellIDs(ids)
+    FILTER_STATS[label] = {
+        before = #(ids or {}),
+        after = #filtered,
+        removed = #(ids or {}) - #filtered,
+    }
+    return filtered
+end
+
+RAID_BUFFS = FilterSpellEntries(RAID_BUFFS, "raidBuffs")
+AURAS = FilterSpellEntries(AURAS, "auras")
+ROGUE_POISONS = FilterSpellEntries(ROGUE_POISONS, "roguePoisons")
+PALADIN_RITES = FilterSpellEntries(PALADIN_RITES, "paladinRites")
+SHAMAN_IMBUES = FilterSpellEntries(SHAMAN_IMBUES, "shamanImbues")
+SHAMAN_SHIELDS = FilterSpellEntries(SHAMAN_SHIELDS, "shamanShields")
+RUNE_BUFF_IDS = FilterSpellIDList(RUNE_BUFF_IDS, "runeBuffs")
+INKY_BLACK_BUFF = FilterSpellIDList(INKY_BLACK_BUFF, "inkyBlack")
+
+-- Flask buffs use the same spell catalog. The item list itself remains intact
+-- because item information can be asynchronous in Forever.
+local filteredFlaskItems = {}
+for _, flask in ipairs(FLASK_ITEMS) do
+    if SpellExists(flask.buffID) then
+        filteredFlaskItems[#filteredFlaskItems + 1] = flask
+    end
+end
+FILTER_STATS.flasks = {
+    before = #FLASK_ITEMS,
+    after = #filteredFlaskItems,
+    removed = #FLASK_ITEMS - #filteredFlaskItems,
+}
+FLASK_ITEMS = filteredFlaskItems
+FLASK_BUFF_IDS = FilterSpellIDList(FLASK_BUFF_IDS, "flaskBuffs")
+FLASK_BUFF_ID_SET = {}
+FLASK_NAME_SET = {}
+for _, flask in ipairs(FLASK_ITEMS) do
+    FLASK_BUFF_ID_SET[flask.buffID] = true
+    local spellInfo = SafeSpellInfo(flask.buffID)
+    if spellInfo and spellInfo.name then FLASK_NAME_SET[spellInfo.name] = true end
+    FLASK_NAME_SET[flask.name] = true
+end
+for _, spellID in ipairs(FLASK_BUFF_IDS) do
+    FLASK_BUFF_ID_SET[spellID] = true
+end
+
+--------------------------------------------------------------------------------
+--  Helpers: Well Fed / Flask buff detection (by name, not spell ID secret)
+--------------------------------------------------------------------------------
 function AR.PlayerHasActiveStanceSpell(spellID)
     local count = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
     for index = 1, count do
@@ -903,9 +1126,73 @@ end
 -------------------------------------------------------------------------------
 --  Helpers: Find best item in bags for a preferred choice
 -------------------------------------------------------------------------------
+-- Forever does not guarantee the Retail global item APIs. Keep all inventory
+-- checks behind a protected compatibility layer so an unavailable API means
+-- "item not readable", never an addon error.
+local function HasItemInBags(itemID)
+    local container = C_Container
+    local slotsFn = container and container.GetContainerNumSlots
+    local infoFn = container and container.GetContainerItemInfo
+    if type(slotsFn) ~= "function" or type(infoFn) ~= "function" then
+        return false
+    end
+
+    -- Keep every field read and comparison inside pcall: Forever can expose
+    -- incomplete/secret container data while bags are updating.
+    local ok, found = pcall(function()
+        for bag = 0, 4 do
+            local slots = slotsFn(bag)
+            if type(slots) == "number" then
+                for slot = 1, slots do
+                    local info = infoFn(bag, slot)
+                    if info and info.itemID == itemID then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end)
+    return ok and found == true
+end
+
+local function GetSafeItemCount(itemID)
+    if not itemID then return 0 end
+
+    local countFn = C_Item and C_Item.GetItemCount
+    if type(countFn) ~= "function" then countFn = _G and _G.GetItemCount end
+    if type(countFn) == "function" then
+        local ok, count = pcall(countFn, itemID, false)
+        if ok and type(count) == "number" then
+            local compareOK, hasItems = pcall(function()
+                return count > 0
+            end)
+            -- Return a fresh ordinary number. Callers compare this result
+            -- outside the protected call, so never leak a secret number.
+            if compareOK then return hasItems and 1 or 0 end
+        end
+    end
+
+    -- Forever may not expose GetItemCount. Scan the player bags as a
+    -- compatibility fallback so valid item reminders still work.
+    return HasItemInBags(itemID) and 1 or 0
+end
+
+local function GetSafeItemIcon(itemID, fallback)
+    if not itemID then return fallback end
+
+    local iconFn = C_Item and C_Item.GetItemIconByID
+    if type(iconFn) ~= "function" then iconFn = _G and _G.GetItemIcon end
+    if type(iconFn) ~= "function" then return fallback end
+
+    local ok, icon = pcall(iconFn, itemID)
+    if ok and icon then return icon end
+    return fallback
+end
+
 function AR.FindFlaskItem(preferredKey, lastUsedItemID)
     if preferredKey == "last_used" then
-        if lastUsedItemID and (GetItemCount(lastUsedItemID, false) or 0) > 0 then
+        if lastUsedItemID and (GetSafeItemCount(lastUsedItemID, false) or 0) > 0 then
             return lastUsedItemID
         end
     end
@@ -914,7 +1201,7 @@ function AR.FindFlaskItem(preferredKey, lastUsedItemID)
         local shouldScanGroup = preferredKey == "last_used" or flaskGroup.key == preferredKey
         if shouldScanGroup then
             for _, itemID in ipairs(flaskGroup.items) do
-                if (GetItemCount(itemID, false) or 0) > 0 then
+                if (GetSafeItemCount(itemID, false) or 0) > 0 then
                     return itemID
                 end
             end
@@ -926,14 +1213,14 @@ end
 
 function AR.FindFoodItem(preferredKey, lastUsedItemID)
     if preferredKey == "last_used" then
-        if lastUsedItemID and (GetItemCount(lastUsedItemID, false) or 0) > 0 then
+        if lastUsedItemID and (GetSafeItemCount(lastUsedItemID, false) or 0) > 0 then
             return lastUsedItemID
         end
     end
 
     for _, food in ipairs(FOOD_ITEMS) do
         local matchesChoice = preferredKey == "last_used" or food.key == preferredKey
-        if matchesChoice and (GetItemCount(food.itemID, false) or 0) > 0 then
+        if matchesChoice and (GetSafeItemCount(food.itemID, false) or 0) > 0 then
             return food.itemID
         end
     end
@@ -943,7 +1230,7 @@ end
 
 function AR.FindWeaponEnchantItem(preferredKey, lastUsedItemID, targetCat)
     if preferredKey == "last_used" then
-        if lastUsedItemID and (GetItemCount(lastUsedItemID, false) or 0) > 0 then
+        if lastUsedItemID and (GetSafeItemCount(lastUsedItemID, false) or 0) > 0 then
             return lastUsedItemID
         end
     end
@@ -954,7 +1241,7 @@ function AR.FindWeaponEnchantItem(preferredKey, lastUsedItemID, targetCat)
 
     if preferredKey == "last_used" then
         for _, enchant in ipairs(WEAPON_ENCHANT_ITEMS) do
-            if MatchesWeaponCategory(enchant) and (GetItemCount(enchant.itemID, false) or 0) > 0 then
+            if MatchesWeaponCategory(enchant) and (GetSafeItemCount(enchant.itemID, false) or 0) > 0 then
                 return enchant.itemID
             end
         end
@@ -964,7 +1251,7 @@ function AR.FindWeaponEnchantItem(preferredKey, lastUsedItemID, targetCat)
     for _, choice in ipairs(WEAPON_ENCHANT_CHOICES) do
         if choice.key == preferredKey then
             for _, enchant in ipairs(WEAPON_ENCHANT_ITEMS) do
-                local hasItem = (GetItemCount(enchant.itemID, false) or 0) > 0
+                local hasItem = (GetSafeItemCount(enchant.itemID, false) or 0) > 0
                 if hasItem and enchant.name == choice.name and MatchesWeaponCategory(enchant) then
                     return enchant.itemID
                 end
@@ -1463,7 +1750,7 @@ end
 
 local function SetIconItem(btn, itemID, texture, label)
     if not InCombat() then ICON_ACTION_ATTRS.item(btn, itemID) end
-    btn._icon:SetTexture(texture or GetItemIcon(itemID) or 134400)
+    btn._icon:SetTexture(texture or GetSafeItemIcon(itemID) or 134400)
     btn._tooltipSpell = nil
     btn._tooltipItem = itemID
     btn._petMenuClass = nil
@@ -2023,8 +2310,8 @@ if not inKeystone then
             if showRune then
                 local hasRuneBuff = PlayerHasAuraByID(RUNE_BUFF_IDS)
                 if not hasRuneBuff then
-                    local voidCount = GetItemCount(AUGMENT_RUNE_VOID, false) or 0
-                    local etherCount = GetItemCount(AUGMENT_RUNE_ETHER, false) or 0
+                    local voidCount = GetSafeItemCount(AUGMENT_RUNE_VOID, false) or 0
+                    local etherCount = GetSafeItemCount(AUGMENT_RUNE_ETHER, false) or 0
                     local runeItem = nil
                     if voidCount > 0 then runeItem = AUGMENT_RUNE_VOID
                     elseif etherCount > 0 then runeItem = AUGMENT_RUNE_ETHER end
@@ -2032,7 +2319,7 @@ if not inKeystone then
                         missing[#missing+1] = {
                             cat = "consumable", dismissKey = "consumable:rune", scale = co.scale or 1.0,
                             setup = function(btn)
-                                SetIconItem(btn, runeItem, GetItemIcon(runeItem), "Augment Rune")
+                                SetIconItem(btn, runeItem, GetSafeItemIcon(runeItem), "Augment Rune")
                                 btn._text:SetText(AR.GetReminderShortLabel("Augment Rune"))
                             end,
                         }
@@ -2065,14 +2352,14 @@ if not inKeystone then
                     -- Fallback: any matching weapon enchant in bags
                     for _, we in ipairs(WEAPON_ENCHANT_ITEMS) do
                         local wt = we.weaponType
-                        if ((wt == "NEUTRAL") or (wt == targetCat)) and (GetItemCount(we.itemID, false) or 0) > 0 then
+                        if ((wt == "NEUTRAL") or (wt == targetCat)) and (GetSafeItemCount(we.itemID, false) or 0) > 0 then
                             bestItemID = we.itemID; break
                         end
                     end
                 end
                 if bestItemID then
                     local slot = targetSlot
-                    local bestIcon = GetItemIcon(bestItemID) or 134400
+                    local bestIcon = GetSafeItemIcon(bestItemID) or 134400
                     missing[#missing+1] = {
                         cat = "consumable", dismissKey = "consumable:weapon_enchant", scale = co.scale or 1.0,
                         setup = function(btn)
@@ -2093,7 +2380,7 @@ if not inKeystone then
                 local lastUsedID = db.char and db.char.lastUsedFlask or nil
                 local flaskItemID = AR.FindFlaskItem(preferredKey, lastUsedID)
                 if flaskItemID then
-                    local flaskIcon = GetItemIcon(flaskItemID) or 134830
+                    local flaskIcon = GetSafeItemIcon(flaskItemID) or 134830
                     missing[#missing+1] = {
                         cat = "consumable", dismissKey = "consumable:flask", scale = co.scale or 1.0,
                         setup = function(btn)
@@ -2112,7 +2399,7 @@ if not inKeystone then
                 local lastUsedID = db.char and db.char.lastUsedFood or nil
                 local foodItemID = AR.FindFoodItem(preferredKey, lastUsedID)
                 if foodItemID then
-                    local foodIcon = GetItemIcon(foodItemID) or 136000 -- spell_misc_food (Well Fed)
+                    local foodIcon = GetSafeItemIcon(foodItemID) or 136000 -- spell_misc_food (Well Fed)
                     missing[#missing+1] = {
                         cat = "consumable", dismissKey = "consumable:food", scale = co.scale or 1.0,
                         setup = function(btn)
@@ -2137,13 +2424,13 @@ if not inKeystone then
                 end
                 local currentZone = tostring(C_Map.GetBestMapForUnit("player") or 0)
                 if co._inkyZoneSet[currentZone] then
-                    local hasPotion = (GetItemCount(INKY_BLACK_ITEM, false) or 0) > 0
+                    local hasPotion = (GetSafeItemCount(INKY_BLACK_ITEM, false) or 0) > 0
                     local hasBuff = AR.PlayerHasBuffByName("Inky Black Potion")
                     if not hasBuff and hasPotion then
                         missing[#missing+1] = {
                             cat = "consumable", dismissKey = "consumable:inky_black", scale = co.scale or 1.0,
                             setup = function(btn)
-                                SetIconItem(btn, INKY_BLACK_ITEM, GetItemIcon(INKY_BLACK_ITEM), "Inky Black Potion")
+                                SetIconItem(btn, INKY_BLACK_ITEM, GetSafeItemIcon(INKY_BLACK_ITEM), "Inky Black Potion")
                                 btn._text:SetText(AR.GetReminderShortLabel("Inky Black Potion"))
                             end,
                         }
@@ -2272,9 +2559,10 @@ if not inKeystone and not inCombat and inInstance then
                     zoneMatch = reminder._nameSet[currentInstance] or false
                 end
 
-                local hasTalent = IsPlayerSpell(reminder.spellID) or IsSpellKnown(reminder.spellID)
+                local spellAvailable = SpellExists(reminder.spellID)
+                local hasTalent = spellAvailable and Known(reminder.spellID)
 
-                if zoneMatch and not hasTalent then
+                if zoneMatch and spellAvailable and not hasTalent then
                     local rSpellID = reminder.spellID
                     local rSpellName = reminder.spellName or "Unknown"
                     local rIcon = AR.GetSpellTextureCached(rSpellID) or 134400
@@ -2940,6 +3228,7 @@ mainFrame:SetScript("OnEvent", function(_, e, arg1, arg2)
         _G._KUIAR_FLASK_ITEMS = FLASK_ITEMS
         _G._KUIAR_FOOD_ITEMS = FOOD_ITEMS
         _G._KUIAR_WEAPON_ENCHANT_CHOICES = WEAPON_ENCHANT_CHOICES
+        _G._KUIAR_FILTER_STATS = FILTER_STATS
         _G._KUIAR_TALENT_REMINDER_ZONES = TALENT_REMINDER_ZONES
 
         local STRATA_VALUES = {
@@ -3166,6 +3455,11 @@ SlashCmdList["KUIARDEBUG"] = function()
     p("Active icons:", #activeIcons)
     p("Combat icons:", #combatActiveIcons)
 
+    p("--- Forever spell filter ---")
+    for label, stats in pairs(FILTER_STATS) do
+        p("  " .. tostring(label) .. ": " .. tostring(stats.before) .. " -> " .. tostring(stats.after)
+          .. " (removed " .. tostring(stats.removed) .. ")")
+    end
     -- Raid Buffs
     local rb = db.profile.raidBuffs
     p("--- Raid Buffs ---")

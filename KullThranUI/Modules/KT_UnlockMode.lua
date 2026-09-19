@@ -895,10 +895,12 @@ function UM:EnsureDB()
     if KT.db.profile.editMode.unlockDarkOverlays == nil then KT.db.profile.editMode.unlockDarkOverlays = true end
     if KT.db.profile.editMode.unlockCoords == nil then KT.db.profile.editMode.unlockCoords = false end
     self.db = KT.db.profile.editMode
+    self:ArmFrameWipeTraps()
 end
 
 function UM:OnInitialize()
     self:EnsureDB()
+    self:ArmFrameWipeTraps()
 
     self.registry = KT.UnlockElements
     self.registryOrder = {}
@@ -941,13 +943,57 @@ function UM:OnEnable()
     self:EnsureDB()
     self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatStart")
     self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatEnd")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
 
     KT:RegisterChatCommand("ktunlock", function()
         self:ToggleUnlockMode()
     end)
 
+    KT:RegisterChatCommand("ktumdiag", function()
+        self:PrintDiagnostics()
+    end)
+
+    KT:RegisterChatCommand("ktuwatch", function()
+        self:ArmFrameWipeTraps()
+        KT:Print("|cff33ff99[KTUWATCH]|r trampas armadas. Siguiente /reload cazará el wipe. Luego /ktuwatchlog.")
+    end)
+
+    KT:RegisterChatCommand("ktuwatchlog", function()
+        self:PrintWipeLog()
+    end)
+
     ns.IsUnlocked = function() return self.isOpen end
     ns.ToggleUnlockMode = function() self:ToggleUnlockMode() end
+end
+
+function UM:OnEnteringWorld()
+    if KT.PersistDebug then KT:PersistDebug("UM WORLD start open=%s hasChanges=%s pending=%d db=%s frames=%s", tostring(self.isOpen), tostring(self.hasChanges), KT.PersistCount and KT.PersistCount(self.pendingPositions) or -1, tostring(self.db), tostring(self.db and self.db.frames)) end
+    -- Re-apply persisted positions once the world is ready. Runs after module
+    -- OnEnable so it survives /reload even if a module skipped its own restore.
+    C_Timer.After(2, function()
+        if self.isOpen then return end
+        if KT and KT.RestorePersistedUnlockFrames then
+            local restored = KT:RestorePersistedUnlockFrames()
+            if restored and KT.persistenceDebugEnabled and KT.Print then
+                KT:Print("|cff33ff99[KTUM]|r rescatadas posiciones previas del SV.")
+            end
+        end
+        self:ApplyAllStoredPositions()
+        C_Timer.After(1, function()
+            local em = KT.db and KT.db.profile and KT.db.profile.editMode
+            local live = em and rawget(em, "frames")
+            local rawFrames = self:GetRawStoredFrames()
+            self:ArmFrameWipeTraps()
+            local stashCount = 0
+            if KT and type(KT.svPersistedUnlockFrames) == "table" then
+                for _ in pairs(KT.svPersistedUnlockFrames) do stashCount = stashCount + 1 end
+            end
+            if KT.persistenceDebugEnabled and KT.Print then
+                KT:Print(("|cff33ff99[KTUM]|r load check: live.frames=%d rawSV.frames=%d same=%s traps=%s stash=%d"):format(
+                    self:Count(live), self:Count(rawFrames), tostring(live == rawFrames), tostring(self._armored == true), stashCount))
+            end
+    end)
+    end)
 end
 
 function UM:UpdateRegistry()
@@ -984,6 +1030,7 @@ function UM:GetStoredDBPosition(key)
 end
 
 function UM:SaveStoredDBPosition(key, point, relativePoint, x, y, scale)
+    if KT.PersistDebug then KT:PersistDebug("UM WRITE key=%s point=%s rel=%s x=%s y=%s scale=%s db=%s frames=%s", tostring(key), tostring(point), tostring(relativePoint), tostring(x), tostring(y), tostring(scale), tostring(self.db), tostring(self.db and self.db.frames)) end
     self:EnsureDB()
     self.db.frames[key] = self.db.frames[key] or {}
     local data = self.db.frames[key]
@@ -1178,12 +1225,193 @@ function UM:ApplyStoredPositionToElement(key, pos)
 end
 
 function UM:SaveElementPosition(key, pos)
+    if KT.PersistDebug then KT:PersistDebug("UM SAVE_ELEMENT key=%s pos=%s x=%s y=%s pending=%s", tostring(key), tostring(pos), tostring(pos and pos.x), tostring(pos and pos.y), tostring(self.pendingPositions and self.pendingPositions[key])) end
+    if not (key and type(pos) == "table") then return end
+    -- Canonical store: always write to the live editMode.frames table first so a
+    -- position survives even if a module cached a stale frames reference (AceDB
+    -- can drop/recreate empty default tables, orphaning captured locals).
+    self:SaveStoredDBPosition(key, pos.point, pos.relativePoint, pos.x, pos.y, pos.scale)
     local def = self:GetElementDef(key)
     if def and type(def.savePosition) == "function" then
         SafeCall(def.savePosition, key, pos.point, pos.relativePoint, pos.x, pos.y, pos.scale)
-    else
-        self:SaveStoredDBPosition(key, pos.point, pos.relativePoint, pos.x, pos.y, pos.scale)
     end
+    self:BackupPersistedPositionsToGlobal()
+    if KT.FlushPersistence then KT:FlushPersistence() end
+end
+
+function UM:BackupPersistedPositionsToGlobal()
+    if not (KT.db and KT.db.profile) then return end
+    local gl = KT.db.global
+    if type(gl) ~= "table" then return end
+    local profileName = KT.db.GetCurrentProfile and KT.db:GetCurrentProfile() or "?"
+    gl.kuiUnlockPositions = gl.kuiUnlockPositions or {}
+    local copy = {}
+    for key, data in pairs(self.db.frames or {}) do
+        if type(data) == "table" then
+            copy[key] = {
+                point = data.point,
+                relativePoint = data.relativePoint,
+                x = data.x,
+                y = data.y,
+                scale = data.scale,
+            }
+        end
+    end
+    gl.kuiUnlockPositions[profileName] = copy
+end
+
+function UM:ApplyAllStoredPositions()
+    if KT.PersistDebug then KT:PersistDebug("UM APPLY_ALL start open=%s db=%s frames=%s registry=%d", tostring(self.isOpen), tostring(self.db), tostring(self.db and self.db.frames), #(self.registryOrder or {})) end
+    if InCombatLockdown() then return end
+    if KT.IsBlizzardEditModeTransitionActive and KT:IsBlizzardEditModeTransitionActive() then return end
+    self:EnsureDB()
+    self:UpdateRegistry()
+    for _, key in ipairs(self.registryOrder or {}) do
+        local pos = self:GetStoredDBPosition(key)
+        if pos and pos.point then
+            local def = self:GetElementDef(key)
+            if def and type(def.savePosition) == "function" then
+                SafeCall(def.savePosition, key, pos.point, pos.relativePoint, pos.x, pos.y, pos.scale)
+            end
+            if def and type(def.applyPosition) == "function" then
+                SafeCall(def.applyPosition, key)
+            else
+                self:ApplyStoredPositionToElement(key, pos)
+            end
+        end
+    end
+end
+
+function UM:Count(tbl)
+    local n = 0
+    if type(tbl) == "table" then for _ in pairs(tbl) do n = n + 1 end end
+    return n
+end
+
+function UM:GetRawStoredFrames()
+    if not (KT.db and KT.db.sv and KT.db.sv.profiles and KT.db.keys) then return nil end
+    local profile = KT.db.sv.profiles[KT.db.keys.profile]
+    if type(profile) ~= "table" then return nil end
+    local em = profile.editMode
+    if type(em) ~= "table" then return nil end
+    return em.frames
+end
+
+local _ktWatchLog = KT and KT.ktWatchLog or {}
+KT.ktWatchLog = _ktWatchLog
+
+local function SafeTraceback(depth)
+    if type(debug) == "table" and type(debug.traceback) == "function" then
+        return (debug.traceback("", depth or 2):gsub("\n", " | "))
+    end
+    return "(debug unavailable)"
+end
+
+function UM:ArmFrameWipeTraps()
+    local function armFrames(t)
+        if type(t) ~= "table" or getmetatable(t) then return t end
+        setmetatable(t, {
+            __newindex = function(t2, k, v)
+                if v == nil then
+                    _ktWatchLog[#_ktWatchLog + 1] = ("frames[%s] = nil @ %s"):format(
+                        tostring(k), SafeTraceback(2))
+                end
+                rawset(t2, k, v)
+            end,
+        })
+        return t
+    end
+
+    local em = KT.db and KT.db.profile and KT.db.profile.editMode
+    if type(em) ~= "table" then return end
+    if getmetatable(em) == nil then
+        setmetatable(em, {
+            __newindex = function(t, k, v)
+                if k == "frames" and v ~= rawget(t, "frames") then
+                    _ktWatchLog[#_ktWatchLog + 1] = ("editMode.frames REPLACED (%s) @ %s"):format(
+                        tostring(v), SafeTraceback(2))
+                    armFrames(v)
+                end
+                rawset(t, k, v)
+            end,
+        })
+    end
+    armFrames(em.frames)
+    self._armored = true
+end
+
+function UM:PrintWipeLog()
+    if #_ktWatchLog == 0 then
+        KT:Print("|cff33ff99[KTUWATCH]|r sin capturas de wipe.")
+    end
+    for i = 1, #_ktWatchLog do
+        KT:Print("|cff33ff99[KTUWATCH]|r " .. _ktWatchLog[i])
+    end
+    wipe(_ktWatchLog)
+end
+
+function UM:PrintDiagnostics()
+    local count = function(tbl) return self:Count(tbl) end
+
+    local lines = {}
+    local function add(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
+
+    local profileName = (KT.db and KT.db.GetCurrentProfile) and KT.db:GetCurrentProfile() or "?"
+    add("profile = %s", tostring(profileName))
+
+    local em = KT.db and KT.db.profile and KT.db.profile.editMode
+    add("editMode type = %s", type(em))
+    if type(em) == "table" then
+        local frames = rawget(em, "frames")
+        local rawFrames = self:GetRawStoredFrames()
+        add("frames type = %s, keys = %d", type(frames), count(frames))
+        if type(frames) == "table" then
+            for k in pairs(frames) do add("  frames[%s]", tostring(k)) end
+        end
+        add("raw sv frames keys = %d, same as live = %s", count(rawFrames), tostring(rawFrames == frames))
+        if type(rawFrames) == "table" then
+            for k in pairs(rawFrames) do add("  raw[%s]", tostring(k)) end
+        end
+        add("snapTargets keys = %d", count(em.snapTargets))
+    end
+    add("UM.db == profile.editMode : %s", tostring(self.db == em))
+    add("registry = %d, movers = %d", count(self.registry), count(self.movers))
+    add("pending = %d, lastCommit = %s, hasChanges = %s, isOpen = %s",
+        count(self.pendingPositions), tostring(self._lastCommitCount), tostring(self.hasChanges), tostring(self.isOpen))
+    add("wipeTraps = %s, captures = %d", tostring(self._armored == true), #_ktWatchLog)
+
+    local snap = _G.KUI_BOOT_SNAPSHOT
+    if type(snap) == "table" then
+        local prof = KT.db and KT.db.keys and KT.db.keys.profile
+        local pSnap = snap.profiles and snap.profiles[prof]
+        local snapFrames = pSnap and pSnap.editMode and pSnap.editMode.frames
+        local snapCh = snap.global and snap.global.changelog
+        local snapPos = snap.global and snap.global.kuiUnlockPositions and snap.global.kuiUnlockPositions[prof]
+        local snapInst = pSnap and pSnap.installer
+        add("snapshot: frames=%d changelog.lastAuto=%s actv5.0.7=%s backupPos=%d installer.dsa=%s",
+            count(snapFrames),
+            tostring(snapCh and snapCh.lastAutoShownVersion),
+            tostring(snapCh and snapCh.dismissedVersions and snapCh.dismissedVersions["5.0.7"] == true),
+            count(snapPos),
+            tostring(snapInst and snapInst.dontShowAgain == true))
+        local chDb = KT.db and KT.db.global and KT.db.global.changelog
+        local posDb = KT.db and KT.db.global and KT.db.global.kuiUnlockPositions
+        add("memoria: changelog.lastAuto=%s backupPos=%d",
+            tostring(chDb and chDb.lastAutoShownVersion),
+            count(posDb and posDb[prof]))
+    else
+        add("snapshot: N/A")
+    end
+
+    local gdb = _G.KullThranDB
+    local dbObj = KT.db and rawget(KT.db, "sv")
+    local ioKind = (type(io) == "table" and (type(io.popen) == "function" and "OK-popen" or (type(io.open) == "function" and "OK" or "parcial")) or "nil")
+    add("io = %s, file = %s, pinned(sv==_G) = %s", ioKind,
+        tostring(_G.KT_RAW_READ_PATH or "no"),
+        tostring(gdb ~= nil and dbObj ~= nil and gdb == dbObj))
+    add("_G.KullThranDB type = %s", type(gdb))
+
+    KT:Print("|cff33ff99[UM diag]|r " .. table.concat(lines, "\n|cff33ff99[UM diag]|r "))
 end
 
 function UM:GetSnapTarget(key)
@@ -1353,15 +1581,20 @@ function UM:SetEditableElementSize(key, width, height)
 end
 
 function UM:CommitPositions()
+    if KT.PersistDebug then KT:PersistDebug("UM COMMIT start pending=%d hasChanges=%s db=%s frames=%s", KT.PersistCount and KT.PersistCount(self.pendingPositions) or -1, tostring(self.hasChanges), tostring(self.db), tostring(self.db and self.db.frames)) end
+    local count = 0
     for key, pos in pairs(self.pendingPositions) do
         self:SaveElementPosition(key, pos)
+        count = count + 1
         local def = self:GetElementDef(key)
         if def and type(def.applyPosition) == "function" then
             SafeCall(def.applyPosition, key)
         end
     end
+    self._lastCommitCount = count
     wipe(self.pendingPositions)
     self.hasChanges = false
+    if KT.PersistDebug then KT:PersistDebug("UM COMMIT done count=%s pending=%d hasChanges=%s db=%s frames=%s", tostring(self._lastCommitCount), KT.PersistCount and KT.PersistCount(self.pendingPositions) or -1, tostring(self.hasChanges), tostring(self.db), tostring(self.db and self.db.frames)) end
 end
 
 function UM:RevertPositions()
@@ -3355,6 +3588,7 @@ function UM:SetUnlockKeyboardCapture(enabled)
 end
 
 function UM:CloseUnlockMode(saveChanges, force)
+    if KT.PersistDebug then KT:PersistDebug("UM CLOSE save=%s force=%s open=%s changes=%s pending=%d", tostring(saveChanges), tostring(force), tostring(self.isOpen), tostring(self.hasChanges), KT.PersistCount and KT.PersistCount(self.pendingPositions) or -1) end
     if not self.isOpen then return end
 
     if saveChanges then

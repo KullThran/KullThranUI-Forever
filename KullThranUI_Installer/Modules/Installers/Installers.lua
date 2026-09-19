@@ -21,7 +21,7 @@ local StaticPopupDialogs = StaticPopupDialogs
 -- Constants
 local ICON_PATH = "Interface\\AddOns\\KullThranUI\\Modules\\Installers\\Icons\\"
 local DISCORD_INVITE_URL = "https://discord.gg/cqAVWpeVvd"
-local TOTAL_INSTALLER_STEPS = 20
+local TOTAL_INSTALLER_STEPS = 19
 local KUI_TEXTURE_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\"
 local KUI_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\"
 local EFL_FRIEND_ICON = KUI_ICON_PATH .. "chaticons\\FriendList.png"
@@ -199,17 +199,33 @@ local function CreateSkipCheckbox(parent, anchor)
         local checked = checkbox:GetChecked() and true or false
         checkbox.Checked:SetAlpha(checked and 1 or 0)
         installerDb.dontShowAgain = checked or nil
+        if KT.PersistDebug then KT:PersistDebug("INSTALLER CHECK click checked=%s profile=%s dsa=%s show=%s raw=%s sv=%s", tostring(checked), tostring(KT.db.GetCurrentProfile and KT.db:GetCurrentProfile() or "Default"), tostring(installerDb.dontShowAgain), tostring(installerDb.showOnLogin), tostring(_G.KullThranDB), tostring(KT.db and rawget(KT.db, "sv"))) end
+        local global = KT.db and KT.db.global
+        if type(global) == "table" then
+            global.kuiInstallerSuppressed = global.kuiInstallerSuppressed or {}
+            local profileName = KT.db.GetCurrentProfile and KT.db:GetCurrentProfile() or "Default"
+            local characterKey = KT.GetInstallerCharacterKey and KT:GetInstallerCharacterKey() or nil
+            global.kuiInstallerSuppressed[profileName] = checked
+            if characterKey then
+                global.kuiInstallerSuppressed[characterKey] = checked
+            end
+        end
         installerDb.showOnLogin = not checked
         if checked then
             installerDb.reopenStep = nil
             installerDb.resumeStep = nil
             installerDb.reopenOnReload = nil
             installerDb.forceOpenForCharacter = nil
+            installerDb.autoOpenRequested = nil
             installerDb.isOpen = false
+        end
+        if KT.FlushPersistence then
+            KT:FlushPersistence()
         end
     end
 
     checkbox:SetChecked(installerDb.dontShowAgain == true)
+    if KT.PersistDebug then KT:PersistDebug("INSTALLER CHECK create checked=%s profile=%s dsa=%s raw=%s sv=%s", tostring(installerDb.dontShowAgain == true), tostring(KT.db.GetCurrentProfile and KT.db:GetCurrentProfile() or "Default"), tostring(installerDb.dontShowAgain), tostring(_G.KullThranDB), tostring(KT.db and rawget(KT.db, "sv"))) end
     checkbox.Checked:SetAlpha(checkbox:GetChecked() and 1 or 0)
     checkbox:SetScript("OnClick", RefreshCheckedState)
 
@@ -2046,112 +2062,6 @@ local function GetInstallerPlayerPowerPreview(specID, classToken)
     return label, 64, color
 end
 
-local function CreateMythicPlusTimerInstallerLivePreview(parent)
-    local textR, textG, textB = GetInstallerPreviewTextRGB()
-    local mutedR, mutedG, mutedB = GetInstallerPreviewMutedRGB()
-    local root = CreateFrame("Frame", nil, parent)
-    root:SetSize(271, 180)
-    root:SetPoint("CENTER", parent, "CENTER", 0, 0)
-
-    local pad = 8
-    local width = root:GetWidth()
-    local contentWidth = width - (pad * 2)
-    local barTexture = INSTALLER_MELLI_TEXTURE
-    local readyTexture = "Interface\\RaidFrame\\ReadyCheck-Ready"
-
-    local deaths = InstallerCreatePreviewLabel(root, 13, 1, 0, 0.412, "OUTLINE")
-    deaths:SetPoint("TOPRIGHT", root, "TOPRIGHT", -pad, 0)
-    deaths:SetJustifyH("RIGHT")
-    deaths:SetText("2 Deaths (-00:10)")
-
-    local timer = InstallerCreatePreviewLabel(root, 26, 1, 0.808, 0.714, "OUTLINE")
-    timer:SetPoint("TOPRIGHT", root, "TOPRIGHT", -pad, -17)
-    timer:SetJustifyH("RIGHT")
-    timer:SetText("20:00 / 30:00")
-
-    local keyRow = CreateFrame("Frame", nil, root)
-    keyRow:SetSize(215, 17)
-    keyRow:SetPoint("TOP", root, "TOP", 0, -49)
-
-    local keyDetails = InstallerCreatePreviewLabel(keyRow, 13, 1, 0.804, 0.569, "OUTLINE")
-    keyDetails:SetPoint("RIGHT", keyRow, "CENTER", -3, 0)
-    keyDetails:SetJustifyH("RIGHT")
-    keyDetails:SetText("Tyrannical - Fortified")
-
-    local key = InstallerCreatePreviewLabel(keyRow, 16, 0.761, 0, 1, "OUTLINE")
-    key:SetPoint("LEFT", keyRow, "CENTER", 3, 0)
-    key:SetJustifyH("LEFT")
-    key:SetText("[10]")
-
-    local segmentColors = {
-        { 0, 1, 0.478 },
-        { 0, 0.749, 1 },
-        { 0.796, 0, 1 },
-    }
-    local segmentLabels = { "4:00", "8:00", "12:00" }
-    local gap = 2
-    local availableWidth = contentWidth - (pad * 2)
-    local firstWidth = math.floor((availableWidth - (gap * 2)) * 0.6)
-    local secondWidth = math.floor((availableWidth - (gap * 2)) * 0.2)
-    local thirdWidth = availableWidth - (gap * 2) - firstWidth - secondWidth
-    local segmentWidths = { firstWidth, secondWidth, thirdWidth }
-    local x = pad
-
-    for index = 1, 3 do
-        local bar = CreateFrame("StatusBar", nil, root)
-        bar:SetSize(segmentWidths[index], 10)
-        bar:SetPoint("TOPLEFT", root, "TOPLEFT", x, -74)
-        bar:SetStatusBarTexture(barTexture)
-        bar:SetStatusBarColor(segmentColors[index][1], segmentColors[index][2], segmentColors[index][3], 1)
-        bar:SetMinMaxValues(0, 1)
-        bar:SetValue(0.42)
-
-        local value = InstallerCreatePreviewLabel(bar, 10, 1, 0.808, 0.714, "OUTLINE")
-        value:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -2, 1)
-        value:SetJustifyH("RIGHT")
-        value:SetText(segmentLabels[index])
-        x = x + segmentWidths[index] + gap
-    end
-
-    local forces = CreateFrame("StatusBar", nil, root)
-    forces:SetSize(availableWidth, 10)
-    forces:SetPoint("TOPLEFT", root, "TOPLEFT", pad, -101)
-    forces:SetStatusBarTexture(barTexture)
-    forces:SetStatusBarColor(0.733, 0.62, 0.133, 1)
-    forces:SetMinMaxValues(0, 1)
-    forces:SetValue(0.8233)
-
-    local forcesText = InstallerCreatePreviewLabel(root, 11, textR, textG, textB, "OUTLINE")
-    forcesText:SetPoint("BOTTOMRIGHT", forces, "TOPRIGHT", -3, 2)
-    forcesText:SetJustifyH("RIGHT")
-    forcesText:SetText("Forces: 82.33%")
-
-    local function CreateObjective(y, completed, label)
-        local row = CreateFrame("Frame", nil, root)
-        row:SetSize(220, 16)
-        row:SetPoint("TOPRIGHT", root, "TOPRIGHT", -pad, y)
-
-        local objective = InstallerCreatePreviewLabel(row, 11, completed and 0 or textR, completed and 1 or textG, completed and 0.14 or textB, "OUTLINE")
-        objective:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-        objective:SetWidth(190)
-        objective:SetJustifyH("RIGHT")
-        objective:SetWordWrap(false)
-        objective:SetText(label)
-
-        if completed then
-            local tick = row:CreateTexture(nil, "OVERLAY")
-            tick:SetSize(12, 12)
-            tick:SetPoint("RIGHT", objective, "LEFT", -3, 0)
-            tick:SetTexture(readyTexture)
-        end
-    end
-
-    CreateObjective(-123, true, "First Boss (03:20)")
-    CreateObjective(-141, true, "Second Boss (06:40)")
-    CreateObjective(-159, false, "( ) Third Boss")
-
-    return root
-end
 local function CreateCooldownManagerInstallerLivePreview(parent)
     local textR, textG, textB = GetInstallerPreviewTextRGB()
     local classSpells, localizedClass, specName, specIcon, classColor, specID, classToken =
@@ -2689,14 +2599,34 @@ end
 -------------------------------------------------------------------------
 
 function Mod:OnInitialize()
+    if KT.PersistDebug then KT:PersistDebug("INSTALLER INIT enter db=%s raw=%s sv=%s", tostring(KT.db and KT.db.profile and KT.db.profile.installer), tostring(_G.KullThranDB), tostring(KT.db and rawget(KT.db, "sv"))) end
     if not KT.db.profile.installer then
         KT.db.profile.installer = { showOnLogin = true, step = 1 }
     end
     if not KT.db.profile.installer.step then KT.db.profile.installer.step = 1 end
+
+    -- Forever removed the Mythic+ Timer page. Convert saved page numbers from
+    -- the previous 20-step installer so reload/resume cannot open the wrong page.
+    local installerDB = KT.db.profile.installer
+    if not installerDB._foreverMythicPlusTimerRemoved20260919 then
+        local function MigrateInstallerStep(key)
+            local value = tonumber(installerDB[key])
+            if value and value >= 13 and value <= 20 then
+                installerDB[key] = value - 1
+            end
+        end
+        MigrateInstallerStep("step")
+        MigrateInstallerStep("reopenStep")
+        MigrateInstallerStep("resumeStep")
+        installerDB._foreverMythicPlusTimerRemoved20260919 = true
+    end
     
     -- Keep the installer on its welcome step after version changes, but let
     -- the main launcher handle the auto-open changelog flow.
     local currentVersion = C_AddOns.GetAddOnMetadata("KullThranUI", "Version") or "0"
+    if currentVersion:find("@", 1, true) then
+        currentVersion = "5.0.7"
+    end
     local reopenStep = tonumber(KT.db.profile.installer.reopenStep) or tonumber(KT.db.profile.installer.resumeStep)
     if KT.db.profile.installer.lastVersion ~= currentVersion then
         if not KT.db.profile.installer.reopenOnReload
@@ -2783,11 +2713,19 @@ function Mod:OnInitialize()
 end
 
 function Mod:OnEnable()
+    if KT.PersistDebug then KT:PersistDebug("INSTALLER ENABLE enter db=%s dsa=%s show=%s reopen=%s auto=%s", tostring(KT.db and KT.db.profile and KT.db.profile.installer), tostring(KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.dontShowAgain), tostring(KT and KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.showOnLogin), tostring(KT and KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.reopenOnReload), tostring(KT and KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.autoOpenRequested)) end
+    local startupDb = KT and KT.db and KT.db.profile and KT.db.profile.installer
+    if startupDb and KT.IsInstallerAutoOpenSuppressed and KT:IsInstallerAutoOpenSuppressed() then
+        startupDb.showOnLogin = false
+        if KT.PersistDebug then KT:PersistDebug("INSTALLER ENABLE auto paths blocked by dontShowAgain") end
+        return
+    end
     local reopenAttempts = 0
     local function ReopenInstallerAfterReload()
         reopenAttempts = reopenAttempts + 1
         local db = KT and KT.db and KT.db.profile and KT.db.profile.installer
-        if db and db.dontShowAgain ~= true and (db.reopenOnReload or db.reopenStep or db.resumeStep) then
+        if KT.PersistDebug then KT:PersistDebug("INSTALLER REOPEN attempt=%d db=%s dsa=%s reopen=%s step=%s resume=%s", reopenAttempts, tostring(db), tostring(db and db.dontShowAgain), tostring(db and db.reopenOnReload), tostring(db and db.reopenStep), tostring(db and db.resumeStep)) end
+        if db and not (KT.IsInstallerAutoOpenSuppressed and KT:IsInstallerAutoOpenSuppressed()) and db.dontShowAgain ~= true and (db.reopenOnReload or db.reopenStep or db.resumeStep) then
             self:CreateInstallerWindow()
             return
         end
@@ -2797,6 +2735,9 @@ function Mod:OnEnable()
     end
     C_Timer.After(0, ReopenInstallerAfterReload)
     local currentVersion = C_AddOns.GetAddOnMetadata("KullThranUI", "Version") or "0"
+    if currentVersion:find("@", 1, true) then
+        currentVersion = "5.0.7"
+    end
     
     if not KT.db or not KT.db.profile then return end
     KT.db.profile.installer = KT.db.profile.installer or {}
@@ -2983,15 +2924,14 @@ function Mod:OpenCurrentStep()
     elseif step == 9 then self:ShowEnhancedFriendListStep()
     elseif step == 10 then self:ShowBagsStep()
     elseif step == 11 then self:ShowDamageMeterStep()
-    elseif step == 12 then self:ShowMythicPlusTimerStep()
-    elseif step == 13 then self:ShowUnitFramesStep()
-    elseif step == 14 then self:ShowPartyFramesStep()
-    elseif step == 15 then self:ShowResourceBarsStep()
-    elseif step == 16 then self:ShowCooldownManagerStep()
-    elseif step == 17 then self:ShowNameplatesStep()
-    elseif step == 18 then self:ShowAddonListStep()
-    elseif step == 19 then self:ShowProfileStep()
-    elseif step == 20 then self:ShowModuleSelectionStep()
+    elseif step == 12 then self:ShowUnitFramesStep()
+    elseif step == 13 then self:ShowPartyFramesStep()
+    elseif step == 14 then self:ShowResourceBarsStep()
+    elseif step == 15 then self:ShowCooldownManagerStep()
+    elseif step == 16 then self:ShowNameplatesStep()
+    elseif step == 17 then self:ShowAddonListStep()
+    elseif step == 18 then self:ShowProfileStep()
+    elseif step == 19 then self:ShowModuleSelectionStep()
     else self:ShowWelcomeStep() end
 end
 
@@ -3058,6 +2998,7 @@ function Mod:UpdateKTColor()
 end
 
 function Mod:CreateInstallerWindow(onlyConflicts)
+    if KT.PersistDebug then KT:PersistDebug("INSTALLER WINDOW create onlyConflicts=%s db=%s dsa=%s show=%s", tostring(onlyConflicts), tostring(KT.db and KT.db.profile and KT.db.profile.installer), tostring(KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.dontShowAgain), tostring(KT.db and KT.db.profile and KT.db.profile.installer and KT.db.profile.installer.showOnLogin)) end
     if not self.frame then
         local f = CreateFrame("Frame", "KullThranUIInstallerFrame", UIParent, "BackdropTemplate")
         f:SetSize(800, 600)
@@ -5847,33 +5788,8 @@ function Mod:ShowDamageMeterStep()
                 pcall(enhancements.RefreshSettings, enhancements)
             end
         end,
-        next = function() self:ShowMythicPlusTimerStep() end,
-        back = function() self:ShowBagsStep() end,
-    })
-end
-
-function Mod:ShowMythicPlusTimerStep()
-    local db, enhancements = GetInstallerEnhancementsDB()
-    db.mplusTracker = db.mplusTracker or {}
-    if db.mplusTracker.enabled == nil then db.mplusTracker.enabled = true end
-
-    ShowInstallerModuleToggleStep(self, {
-        step = 12,
-        title = "KullThranUI Mythic+ Timer",
-        question = "Do you want to enable or disable the KullThranUI Mythic+ Timer?",
-        location = "You can configure it later in Enhancements > Mythic+ Timer.",
-        enableLabel = "Enable KullThranUI Mythic+ Timer",
-        disableLabel = "Disable KullThranUI Mythic+ Timer",
-        createPreview = CreateMythicPlusTimerInstallerLivePreview,
-        get = function() return db.mplusTracker.enabled ~= false end,
-        set = function(value) db.mplusTracker.enabled = value and true or false end,
-        apply = function()
-            if enhancements and enhancements.RefreshMythicPlusTracker then
-                pcall(enhancements.RefreshMythicPlusTracker, enhancements)
-            end
-        end,
         next = function() self:ShowUnitFramesStep() end,
-        back = function() self:ShowDamageMeterStep() end,
+        back = function() self:ShowBagsStep() end,
     })
 end
 
@@ -5883,7 +5799,7 @@ function Mod:ShowUnitFramesStep()
     if profile.unitFrames.enable == nil then profile.unitFrames.enable = true end
 
     ShowInstallerModuleToggleStep(self, {
-        step = 13,
+        step = 12,
         requiresReload = true,
         title = "KullThranUI Unit Frames",
         question = "Which unit frame system do you want to use?",
@@ -5895,7 +5811,7 @@ function Mod:ShowUnitFramesStep()
         get = function() return profile.unitFrames.enable ~= false end,
         set = function(value) profile.unitFrames.enable = value end,
         next = function() self:ShowPartyFramesStep() end,
-        back = function() self:ShowMythicPlusTimerStep() end,
+        back = function() self:ShowDamageMeterStep() end,
     })
 end
 
@@ -5905,7 +5821,7 @@ function Mod:ShowPartyFramesStep()
     if profile.partyFrames.enable == nil then profile.partyFrames.enable = true end
 
     ShowInstallerModuleToggleStep(self, {
-        step = 14,
+        step = 13,
         requiresReload = true,
         title = "KullThranUI Party Frames",
         question = "Which party frame system do you want to use?",
@@ -5926,7 +5842,7 @@ function Mod:ShowResourceBarsStep()
     if profile.resourceBars.enabled == nil then profile.resourceBars.enabled = true end
 
     ShowInstallerModuleToggleStep(self, {
-        step = 15,
+        step = 14,
         requiresReload = true,
         title = 'Resource Bars',
         question = 'Do you want to enable or disable KullThranUI Resource Bars?',
@@ -5949,7 +5865,7 @@ function Mod:ShowCooldownManagerStep()
     end
 
     ShowInstallerModuleToggleStep(self, {
-        step = 16,
+        step = 15,
         title = "KullThranUI Cooldown Manager",
         question = "Do you want to enable or disable the KullThranUI Cooldown Manager?",
         enableLabel = "Enable KullThranUI Cooldown Manager",
@@ -6003,7 +5919,7 @@ function Mod:ShowNameplatesStep()
     end
 
     ShowInstallerModuleToggleStep(self, {
-        step = 17,
+        step = 16,
         requiresReload = true,
         title = "KullThranUI Nameplates",
         question = "Which nameplate system do you want to use?",
@@ -6021,8 +5937,8 @@ end
 
 function Mod:ShowAddonListStep()
     L = KT:GetLocale()
-    KT.db.profile.installer.step = 18
-    self:UpdateProgressBar(18)
+    KT.db.profile.installer.step = 17
+    self:UpdateProgressBar(17)
     if self.content then self.content:Hide() end
     local content = CreateFrame("Frame", nil, self.frame)
     content:SetAllPoints()
@@ -6354,8 +6270,8 @@ end
 
 function Mod:ShowProfileStep()
     L = KT:GetLocale()
-    KT.db.profile.installer.step = 19
-    self:UpdateProgressBar(19)
+    KT.db.profile.installer.step = 18
+    self:UpdateProgressBar(18)
     if self.content then self.content:Hide() end
     local content = CreateFrame("Frame", nil, self.frame)
     content:SetAllPoints()
@@ -6458,8 +6374,8 @@ end
 
 function Mod:ShowModuleSelectionStep()
     L = KT:GetLocale()
-    KT.db.profile.installer.step = 20
-    self:UpdateProgressBar(20)
+    KT.db.profile.installer.step = 19
+    self:UpdateProgressBar(19)
     if self.content then self.content:Hide() end
     local content = CreateFrame("Frame", nil, self.frame)
     content:SetAllPoints()
@@ -6505,8 +6421,6 @@ function Mod:ShowModuleSelectionStep()
     p.enhancements = p.enhancements or { enable = true }
     p.externalAddons = p.externalAddons or { enable = true }
     p.enhancements.damageMeter = p.enhancements.damageMeter or { moduleEnabled = true }
-    p.enhancements.mplusTracker = p.enhancements.mplusTracker or { enabled = true }
-    if p.enhancements.mplusTracker.enabled == nil then p.enhancements.mplusTracker.enabled = true end
     _G.KullThranUINameplatesDB = _G.KullThranUINameplatesDB or { enable = true }
     p.cooldownManager = p.cooldownManager or { cdmBars = { enabled = false } }
     p.cooldownManager.cdmBars = p.cooldownManager.cdmBars or { enabled = false }
@@ -6568,7 +6482,6 @@ function Mod:ShowModuleSelectionStep()
         { L["Party Frames"], function() return p.partyFrames.enable ~= false end, function(v) p.partyFrames.enable = v end },
         { L["Enhancements"], function() return p.enhancements.enable ~= false end, function(v) p.enhancements.enable = v end },
         { "   - " .. L["Damage Meter"], function() return p.enhancements.damageMeter.moduleEnabled ~= false end, function(v) p.enhancements.damageMeter.moduleEnabled = v and true or false end },
-        { "   - " .. L["Mythic+ Timer"], function() return p.enhancements.mplusTracker.enabled ~= false end, function(v) p.enhancements.mplusTracker.enabled = v and true or false end },
         { L["External Addons"], function() return p.externalAddons.enable ~= false end, function(v) p.externalAddons.enable = v end },
         { L["Cursor"], function() return p.cursor.enable ~= false end, function(v) p.cursor.enable = v end },
         { L["Teleport Menu"], function() return p.teleportMenu.enable ~= false end, function(v) p.teleportMenu.enable = v end },

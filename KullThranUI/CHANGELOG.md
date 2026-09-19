@@ -2,8 +2,37 @@
 
 Current addon version: **@project-version@**
 
-Primary source: https://addons.wago.io/addons/kullthranui/versions
-Secondary source: https://www.curseforge.com/wow/addons/kui-kullthranui/files/all?page=1&pageSize=20&showAlphaFiles=show
+Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
+Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
+
+## 0.0.2 (2026-09-19)
+
+Cumulative WoW Forever beta release notes from the 0.0.1 baseline. This branch is versioned independently from Retail 5.0.7.
+
+- Updated the package, core addon, module TOCs, MinimapStats metadata, release tooling, and in-game version sources to 0.0.2.
+- Added Forever/Camelot detection and compatibility guards for the reduced API surface, specialization data, item information, range checks, protected values, and secret values.
+- Hardened startup, AceDB/profile ownership, saved-variable migration, Installer state, changelog suppression, language selection, reload continuation, and Unlock Mode persistence.
+- Fixed the Installer Don't show again state so it remains selected after reload and no longer reopens on every login; preserved the changelog suppression migration from 5.0.7.
+- Connected Experience Bar to the current Unlock Mode registry, restored its visibility, position saving, and a safe default above the Blizzard action bars while Forever saved variables are incomplete.
+- Removed Dragon Riding from the Forever-facing module flow and removed Mythic+ Timer from the Forever TOC, Installer, previews, and startup; retained Mythic+ History as normal Dungeon History.
+- Disabled Combat Timer by default and migrated old profiles without overwriting an explicit later user choice.
+- Added Forever-safe Aura Reminders filtering for available auras, weapon enchants, instance reminders, and Party Frame missing-buff reminders.
+- Added Unit Frame and Party Frame level and PvP indicators, configurable typography and offsets, Elite/Rare classification indicators, circular portrait defaults, portrait borders, and correct overlay strata.
+- Added visible Unit Frames and Party Frames toggles and live-preview rendering for level and PvP indicators; Target PvP now sits outside the right side of a right-hand portrait.
+- Moved Target portrait to the right by default and made Target level, PvP, and classification indicators follow the actual portrait anchor whenever the portrait is moved.
+- Corrected Unit Frames and Party Frames module enable toggles and made dispel overlay toggles apply immediately to every relevant aura/border path.
+- Added configurable friendly-player levels to Nameplates and retained shared font, size, outline, shadow, color, X, and Y controls.
+- Restyled Objective Tracker quest titles with the accent color across Forever legacy tracker blocks and added safer tracker discovery without assuming Retail ScrollBox APIs.
+- Restored Armory visibility and Forever-compatible stats handling without feeding missing Retail stat strings into Blizzard tooltip formatters.
+- Hardened BlizzMove for Forever build/version semantics, accepted existing Forever frames marked with obsolete Retail ranges, and suppressed expected missing-frame noise.
+- Fixed Skins option builders and other Forever frame/API differences that caused nil callback failures.
+- Protected TeleportMenu cooldown comparisons, Action Bar and TextStatusBar paths, and other tainted/secret-number operations from Lua arithmetic and comparisons.
+- Patched Rogue/Feral Combo Points in Resource Bars, Unit Frames custom Class Power, oUF ClassPower, and the oUF cpoints tag; Feral-only Druid mapping avoids applying Combo Points to other Druid specs.
+- Fixed Aura Reminders and Party Frame APIs for Forever-only spell/item availability and removed Retail-only assumptions from reminder catalogs.
+- Improved Chat whisper history so all outgoing whispers display, including Forever events with lineID 0, while keeping protected native chat handling safe.
+- Moved the default Damage Meter position down and left, improved its protected-value handling, and kept custom user positions intact.
+- Kept diagnostics available through /ktdebug and /ktpersistdebug, with persistence logging disabled by default after the migration was verified.
+- Validated changed Lua files with Lua 5.1 syntax checks and validated repository whitespace with git diff --check.
 
 ## 5.0.7 (2026-09-18)
 - Added WoW Forever and WoW Forever Beta detection to Enhanced Friend List, including the dedicated WoW Forever artwork and distinct tooltip labels.

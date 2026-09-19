@@ -543,6 +543,32 @@ initFrame:SetScript("OnEvent", function(self)
         return defaults[key]
     end
 
+    local function SetPVLevelFont(fs)
+        if not (fs and fs.SetFont) then return end
+
+        local fontValue = DBVal("levelFont") or defaults.levelFont
+        local fontPath = ns.ResolveNameplateFont(fontValue)
+        local size = math.max(6, math.min(48, tonumber(DBVal("levelFontSize")) or defaults.levelFontSize or 11))
+        local outline = DBVal("levelFontOutline")
+        if outline == "NONE" then outline = "" end
+        if type(outline) ~= "string" then outline = "OUTLINE" end
+
+        local ok = pcall(fs.SetFont, fs, fontPath, size, outline)
+        if not ok then
+            pcall(fs.SetFont, fs, ns.DEFAULT_FONT_PATH, size, outline)
+        end
+
+        local color = DBVal("levelColor") or defaults.levelColor
+        fs:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
+        if DBVal("levelShadow") ~= false then
+            fs:SetShadowColor(0, 0, 0, 1)
+            fs:SetShadowOffset(1, -1)
+        else
+            fs:SetShadowColor(0, 0, 0, 0)
+            fs:SetShadowOffset(0, 0)
+        end
+    end
+
     local function GetTopDebuffAlignValue()
         local align = DBVal("topDebuffAlign") or defaults.topDebuffAlign or "center"
         if align == "left" or align == "right" then
@@ -1289,6 +1315,17 @@ initFrame:SetScript("OnEvent", function(self)
         nameFS:SetText(LText("Enemy Name Text"))
         nameFS:SetTextColor(1, 1, 1, 1)
 
+        local levelFS = topTextFrame:CreateFontString(nil, "OVERLAY")
+        SetPVLevelFont(levelFS)
+        levelFS:SetJustifyH("LEFT")
+        levelFS:SetWordWrap(false)
+        levelFS:SetMaxLines(1)
+        levelFS:SetText("30")
+        levelFS:SetWidth(160)
+        levelFS:SetHeight(48)
+        levelFS:SetPoint("BOTTOMLEFT", health, "TOPLEFT", 24, 4)
+        pf._levelFS = levelFS
+
         -- Health percentage text (right-aligned inside health bar)
         local hpText = healthTextFrame:CreateFontString(nil, "OVERLAY")
         SetPVFont(hpText, FONT_PATH, 10, GetNPOptOutline())
@@ -1583,6 +1620,21 @@ initFrame:SetScript("OnEvent", function(self)
             local rawBarW    = BAR_W + DBVal("healthBarWidth")
             local barW       = IsDragging() and rawBarW or Snap(rawBarW)
             local castH      = Snap(DBVal("castBarHeight") or defaults.castBarHeight)
+
+            local levelFS = pf._levelFS
+            SetPVLevelFont(levelFS)
+            levelFS:SetText("30")
+            levelFS:SetWidth(math.max(80, barW + 80))
+            levelFS:SetHeight(math.max(16, (tonumber(DBVal("levelFontSize")) or 11) + 6))
+            levelFS:ClearAllPoints()
+            levelFS:SetPoint("BOTTOMLEFT", health, "TOPLEFT",
+                tonumber(DBVal("levelXOffset")) or 24,
+                tonumber(DBVal("levelYOffset")) or 4)
+            if DBVal("showLevel") == false then
+                levelFS:Hide()
+            else
+                levelFS:Show()
+            end
             local showArrows = DBVal("showTargetArrows") == true
             local arrowScale = DBVal("targetArrowScale") or defaults.targetArrowScale or 1.0
             local indicatorStyle = DBVal("targetIndicatorStyle") or defaults.targetIndicatorStyle or "arrows"
@@ -5682,6 +5734,140 @@ initFrame:SetScript("OnEvent", function(self)
             LayoutInlineWidgets(rgn)
         end
 
+        local function RefreshNameplateLevelSettings()
+            for _, plate in pairs(plates) do
+                if plate.UpdateLevel then plate:UpdateLevel() end
+            end
+            if ns.RefreshFriendlyPlayerLevels then
+                ns.RefreshFriendlyPlayerLevels()
+            end
+            UpdatePreview()
+        end
+
+        local levelFontValues, levelFontOrder = {}, {}
+        if LSM and LSM.List then
+            for _, fontName in ipairs(LSM:List("font")) do
+                levelFontValues[fontName] = fontName
+                levelFontOrder[#levelFontOrder + 1] = fontName
+            end
+        end
+        local currentLevelFont = DBVal("levelFont") or defaults.levelFont
+        if currentLevelFont and not levelFontValues[currentLevelFont] then
+            levelFontValues[currentLevelFont] = currentLevelFont
+            levelFontOrder[#levelFontOrder + 1] = currentLevelFont
+        end
+
+        local levelOutlineValues = {
+            NONE = "None",
+            OUTLINE = "Outline",
+            THICKOUTLINE = "Thick Outline",
+            MONOCHROME = "Monochrome",
+            OUTLINEMONOCHROME = "Monochrome Outline",
+        }
+        local levelOutlineOrder = { "NONE", "OUTLINE", "THICKOUTLINE", "MONOCHROME", "OUTLINEMONOCHROME" }
+
+        _, h = W:SectionHeader(parent, "NAMEPLATE LEVEL", y); y = y - h
+        _, h = W:DualRow(parent, y,
+            {
+                type = "toggle",
+                text = LText("Show Level"),
+                getValue = function() return DBVal("showLevel") ~= false end,
+                setValue = function(v)
+                    DB().showLevel = v and true or false
+                    RefreshNameplateLevelSettings()
+                end,
+            },
+            {
+                type = "dropdown",
+                text = LText("Level Font"),
+                values = levelFontValues,
+                order = levelFontOrder,
+                getValue = function() return DBVal("levelFont") or defaults.levelFont end,
+                setValue = function(v)
+                    DB().levelFont = v
+                    RefreshNameplateLevelSettings()
+                end,
+            }); y = y - h
+
+        _, h = W:DualRow(parent, y,
+            {
+                type = "slider",
+                text = LText("Level Font Size"),
+                min = 6,
+                max = 48,
+                step = 1,
+                getValue = function() return tonumber(DBVal("levelFontSize")) or 11 end,
+                setValue = function(v)
+                    DB().levelFontSize = v
+                    RefreshNameplateLevelSettings()
+                end,
+            },
+            {
+                type = "dropdown",
+                text = LText("Level Text Outline"),
+                values = levelOutlineValues,
+                order = levelOutlineOrder,
+                getValue = function() return DBVal("levelFontOutline") or "OUTLINE" end,
+                setValue = function(v)
+                    DB().levelFontOutline = v
+                    RefreshNameplateLevelSettings()
+                end,
+            }); y = y - h
+
+        _, h = W:DualRow(parent, y,
+            {
+                type = "toggle",
+                text = LText("Level Text Shadow"),
+                getValue = function() return DBVal("levelShadow") ~= false end,
+                setValue = function(v)
+                    DB().levelShadow = v and true or false
+                    RefreshNameplateLevelSettings()
+                end,
+            },
+            {
+                type = "colorpicker",
+                text = LText("Level Text Color"),
+                getValue = function()
+                    local c = DBVal("levelColor") or defaults.levelColor
+                    return c.r or 1, c.g or 1, c.b or 1
+                end,
+                setValue = function(r, g, b)
+                    DB().levelColor = { r = r, g = g, b = b, a = 1 }
+                    RefreshNameplateLevelSettings()
+                end,
+            }); y = y - h
+
+        _, h = W:DualRow(parent, y,
+            {
+                type = "slider",
+                text = LText("Level X Offset"),
+                min = -200,
+                max = 200,
+                step = 1,
+                getValue = function() return tonumber(DBVal("levelXOffset")) or 24 end,
+                setValue = function(v)
+                    DB().levelXOffset = v
+                    RefreshNameplateLevelSettings()
+                end,
+            },
+            {
+                type = "slider",
+                text = LText("Level Y Offset"),
+                min = -100,
+                max = 200,
+                step = 1,
+                getValue = function() return tonumber(DBVal("levelYOffset")) or 4 end,
+                setValue = function(v)
+                    DB().levelYOffset = v
+                    RefreshNameplateLevelSettings()
+                end,
+            }); y = y - h
+
+        _, h = W:Label(parent,
+            LText("Default: above the nameplate on the left, with room for the Elite/Rare icon."),
+            y, 10, { r = 0.75, g = 0.75, b = 0.78 }); y = y - h
+
+        _, h = W:Spacer(parent, y, 20); y = y - h
         -----------------------------------------------------------------------
         --  AURA POSITIONS
         -----------------------------------------------------------------------

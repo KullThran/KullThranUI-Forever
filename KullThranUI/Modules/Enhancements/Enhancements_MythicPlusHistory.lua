@@ -4,6 +4,7 @@ local Mod = KT and KT:GetModule("Enhancements", true)
 if not Mod then return end
 
 local H = {}
+Mod.DungeonHistory = H
 Mod.MythicPlusHistory = H
 local MAX_RUNS = 50
 local slots = {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
@@ -53,21 +54,24 @@ local function guid(unit) return text(call(UnitGUID, unit)) end
 
 function H:Config()
     local db = Mod:GetDB()
-    db.mplusHistory = db.mplusHistory or {}
-    local config = db.mplusHistory
+    local legacy = db.mplusHistory
+    local migratedLegacy = not db.dungeonHistory and legacy ~= nil
+    db.dungeonHistory = db.dungeonHistory or legacy or { enabled = true }
+    local config = db.dungeonHistory
+    if migratedLegacy and config._dungeonHistoryMigrationVersion ~= 1 then
+        -- The previous safe-CPU migration disabled this unfinished feature.
+        -- It is now a lightweight dungeon recorder, so enable that legacy state
+        -- once; subsequent user toggles are respected.
+        config.enabled = true
+        config._dungeonHistoryMigrationVersion = 1
+    end
     if not config.fontMigrationVersion then
         config.font = config.font or (KT.db and KT.db.global and KT.db.global.mythicPlusHistoryFont)
         config.fontMigrationVersion = 1
     end
-    -- Opt-in during migration: this feature performs Blizzard history/party
-    -- queries and must never add background work merely because Enhancements is
-    -- loaded. Reset old enabled state once, then require an explicit enable.
-    if config._safeCpuMigrationVersion ~= 1 then
-        config.enabled = false
-        config._safeCpuMigrationVersion = 1
-    elseif config.enabled == nil then
-        config.enabled = false
-    end
+    -- Dungeon history only tracks party instances, so it is lightweight.
+    -- An explicitly disabled legacy profile remains disabled.
+    if config.enabled == nil then config.enabled = true end
     if config.autoShow == nil then config.autoShow = true end
     return config, db
 end
@@ -80,8 +84,10 @@ function H:Store()
     if not owner or not KT.db then return end
     KT.db.global = KT.db.global or {}
     local db = KT.db.global
-    db.mythicPlusHistory = db.mythicPlusHistory or { version = 1, characters = {} }
-    local root = db.mythicPlusHistory
+    db.dungeonHistory = db.dungeonHistory or db.mythicPlusHistory or { version = 1, characters = {} }
+    local root = db.dungeonHistory
+    -- Keep the old key as a compatibility alias while profiles migrate.
+    db.mythicPlusHistory = root
     root.characters[owner] = root.characters[owner] or { runs = {}, sequence = 0 }
     return root.characters[owner]
 end
@@ -328,6 +334,61 @@ function H:Begin()
     if self.window then self.window:Hide() end
 end
 
+function H:BeginDungeon()
+    if not self:Enabled() then return end
+    local dungeon, instanceType, difficultyID, difficultyName, _, _, _, instanceID = call(GetInstanceInfo)
+    if instanceType ~= "party"
+        or call(C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive) == true
+        or call(C_ChallengeMode and C_ChallengeMode.HasSlottedKeystone) == true then
+        return
+    end
+    dungeon = text(dungeon)
+    local store = self:Store()
+    if not store or not dungeon then return end
+    local active = store.active
+    if active and active.mode ~= "dungeon" then return end
+    if active and active.instanceID == number(instanceID) and active.dungeon == dungeon then
+        return
+    end
+    if active then
+        self:CompleteDungeon()
+        store = self:Store()
+    end
+    if not store then return end
+    store.sequence = (number(store.sequence) or 0) + 1
+    store.active = {
+        id = guid("player") .. ":dungeon:" .. now() .. ":" .. store.sequence,
+        mode = "dungeon", source = "dungeon", dungeon = dungeon,
+        instanceID = number(instanceID), difficultyID = number(difficultyID),
+        difficultyName = text(difficultyName), startedAt = now(), members = {},
+    }
+    self.completing = nil
+    self:CaptureParty()
+    if self.window then self.window:Hide() end
+end
+
+function H:CompleteDungeon()
+    if not self:Enabled() then return false end
+    local store = self:Store()
+    local active = store and store.active
+    if not active or active.mode ~= "dungeon" then return false end
+    local completedAt = now()
+    local run = clone(active)
+    if not run then return false end
+    run.id = run.id or (guid("player") .. ":dungeon-finish:" .. completedAt)
+    run.completedAt = completedAt
+    run.durationMS = math.max(0, completedAt - (number(run.startedAt) or completedAt)) * 1000
+    run.members = run.members or {}
+    run.source, run.mode = "dungeon", "dungeon"
+    table.insert(store.runs, 1, run)
+    while #store.runs > MAX_RUNS do table.remove(store.runs) end
+    store.lastCompletion = { signature = "dungeon:" .. tostring(run.id), at = completedAt }
+    store.active = nil
+    self.completing, pendingInspect = nil, nil
+    self.finished = true
+    if self.window and self.window:IsShown() and self.Render then self:Render(run.id) end
+    return true
+end
 function H:Complete()
     if not self:Enabled() then return false end
     local info = tbl(call(C_ChallengeMode and C_ChallengeMode.GetChallengeCompletionInfo))
@@ -507,17 +568,23 @@ function H:Tick()
     end
     local active = call(C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive) == true
     local _, instanceType = call(IsInInstance)
-    local keyed = instanceType == "party"
-        and call(C_ChallengeMode and C_ChallengeMode.HasSlottedKeystone) == true
-    if not active and not keyed and not self.completing and not self.pendingShow then
+    local inDungeon = instanceType == "party"
+    local keyed = inDungeon and call(C_ChallengeMode and C_ChallengeMode.HasSlottedKeystone) == true
+    if not active and not inDungeon and not self.completing and not self.pendingShow then
+        local store = self:Store()
+        if store and store.active and store.active.mode == "dungeon" then
+            self:CompleteDungeon()
+        end
         self:StopTicker()
         if profileStarted then profiler:End("enh.mplusHistory.tick", profileStarted) end
         return
     end
-    if active and not self.completing and not self.finished then self:Begin() end
-    -- Only pre-scan a normal dungeon when a key is actually slotted; otherwise
-    -- every 5-man (heroics, delves, leveling) triggered a continuous scan.
-    if (active or keyed) and not self.completing and clock() >= nextRoster then
+    if active and not self.completing and not self.finished then
+        self:Begin()
+    elseif inDungeon and not keyed and not self.completing and not self.finished then
+        self:BeginDungeon()
+    end
+    if (active or keyed or inDungeon) and not self.completing and clock() >= nextRoster then
         nextRoster = clock() + ROSTER_INTERVAL
         for id, member in pairs(cache) do
             if now() - (member.seenAt or 0) > 300 then cache[id] = nil end
@@ -571,10 +638,21 @@ function H:Event(event, ...)
         if store and store.active and not self.completing then self:CaptureUnit("player", false) end
     elseif event == "PLAYER_ENTERING_WORLD" then
         self:RequestHistory()
+        local _, instanceType = call(IsInInstance)
         if call(C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive) == true then
             self:StartTicker()
             self:Begin()
-        elseif store and not self.completing then store.active = nil end
+        elseif instanceType == "party" then
+            self:StartTicker()
+            self:BeginDungeon()
+        elseif store and store.active and store.active.mode == "dungeon" and not self.completing then
+            self:CompleteDungeon()
+        elseif store and not self.completing then
+            store.active = nil
+        end
+    elseif event == "ZONE_CHANGED_NEW_AREA" then
+        self:StartTicker()
+        self:Tick()
     elseif event == "GROUP_ROSTER_UPDATE" then
         self:StartTicker()
     elseif event == "CHALLENGE_MODE_MAPS_UPDATE" then
@@ -607,6 +685,8 @@ function Mod:InitializeMythicPlusHistory()
     H:RequestHistory()
     H:Tick()
 end
+
+Mod.InitializeDungeonHistory = Mod.InitializeMythicPlusHistory
 
 -- Include imports and event dispatch in the lightweight capture, even at idle.
 for _, method in ipairs({"ImportBlizzardHistory", "RequestHistory", "Event"}) do

@@ -657,7 +657,11 @@ local function KT_GetWhisperEventLineID(event, lineID)
         return nil
     end
 
-    return type(lineID) == "number" and lineID or nil
+    -- Forever may expose a constant zero instead of a usable line id.
+    -- In Lua zero is truthy, which previously made every outgoing whisper
+    -- share the same dedupe key and only the first one survived.
+    local accessibleLineID = KT_GetAccessibleNumber(lineID)
+    return accessibleLineID and accessibleLineID > 0 and accessibleLineID or nil
 end
 
 local function KT_BuildWhisperEventDedupeKey(event, ...)

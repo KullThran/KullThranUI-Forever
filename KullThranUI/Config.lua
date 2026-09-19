@@ -409,7 +409,13 @@ function KT:SetupOptions()
     }
 
     -- Comandos de Debugging
-    self:RegisterChatCommand("ktdebug", function() self:Print("DB Loaded: " .. (self.db and "Yes" or "No")) end)
+    self:RegisterChatCommand("ktdebug", function()
+        if self.RunCompatibilityDebug then
+            self:RunCompatibilityDebug()
+        else
+            self:Print("DB Loaded: " .. (self.db and "Yes" or "No"))
+        end
+    end)
     self:RegisterChatCommand("ktframe", function()
         local frame
         if _G.GetMouseFoci then

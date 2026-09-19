@@ -12,7 +12,7 @@ param(
     [string]$OptionsPath,
     [string]$TocPath,
     [string]$ChangelogPath,
-    [string]$AddonSlug = "kullthranui",
+    [string]$AddonSlug = "kullthranui-forever",
     [switch]$SkipWagoSync
 )
 
@@ -152,7 +152,7 @@ $tocVersion = Get-TocVersion -Path $TocPath
 $optionsContent = Get-Content $OptionsPath -Raw
 
 $wagoUrl = "https://addons.wago.io/addons/$AddonSlug/versions"
-$curseUrl = "https://www.curseforge.com/wow/addons/kui-kullthranui/files"
+$curseUrl = "https://www.curseforge.com/wow/addons/kullthranui-forever/files"
 
 if ($optionsContent -match 'local\s+CHANGELOG_WAGO_URL\s*=\s*"([^"]+)"') {
     $wagoUrl = $Matches[1]

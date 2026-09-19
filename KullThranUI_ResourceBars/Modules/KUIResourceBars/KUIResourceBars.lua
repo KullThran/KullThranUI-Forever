@@ -2036,10 +2036,31 @@ function KRB:UpdateBars(event, unit)
                             pips[i]._ktColorB, pips[i]._ktColorA = b, a
                         end
                         
-                        local active = i <= ppNum
-                        if pips[i]._ktActive ~= active then
-                            pips[i]._fill:SetShown(active)
-                            pips[i]._ktActive = active
+                        -- Forever can expose Combo Points as a secret number.  Do
+                        -- not compare it in Lua; let a StatusBar consume it and
+                        -- fill each pip through its own [i-1, i] range.
+                        if IsSecret(ppRaw) then
+                            local secretBar = pips[i]._secretBar
+                            if not secretBar then
+                                secretBar = CreateFrame("StatusBar", nil, pips[i])
+                                secretBar:SetAllPoints(pips[i])
+                                secretBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                                secretBar:SetFrameLevel(pips[i]:GetFrameLevel() + 1)
+                                pips[i]._secretBar = secretBar
+                            end
+                            secretBar:SetMinMaxValues(i - 1, i)
+                            SetStatusBarValueSafe(secretBar, ppRaw)
+                            secretBar:SetStatusBarColor(r, g, b, 1)
+                            secretBar:Show()
+                            pips[i]._fill:Hide()
+                            pips[i]._ktActive = nil
+                        else
+                            if pips[i]._secretBar then pips[i]._secretBar:Hide() end
+                            local active = i <= ppNum
+                            if pips[i]._ktActive ~= active then
+                                pips[i]._fill:SetShown(active)
+                                pips[i]._ktActive = active
+                            end
                         end
                     end
                 end

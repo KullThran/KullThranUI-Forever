@@ -18,7 +18,6 @@ $addonFolders = @(
     "KullThranUI_Chat",
     "KullThranUI_CooldownManager",
     "KullThranUI_Cursor",
-    "KullThranUI_DragonRiding",
     "KullThranUI_Enhancements",
     "KullThranUI_ExperienceBar",
     "KullThranUI_ExternalAddons",
@@ -105,7 +104,12 @@ function Test-AddonManifest {
     }
 
     $tocContent = [System.IO.File]::ReadAllText($tocPath)
-    if ($tocContent -notmatch ('(?m)^## Interface:.*(?:^|[ ,])' + [regex]::Escape($currentInterface) + '(?:$|[ ,])')) {
+    $tocInterfaceMatch = [regex]::Match($tocContent, '(?m)^## Interface:\s*([^\r\n]+)')
+    $tocInterfaces = @()
+    if ($tocInterfaceMatch.Success) {
+        $tocInterfaces = $tocInterfaceMatch.Groups[1].Value -split '[,\s]+' | Where-Object { $_ }
+    }
+    if ($tocInterfaces -notcontains $currentInterface) {
         throw "$AddonName does not declare current Interface $currentInterface."
     }
     if ($AddonName -ne "KullThranUI" -and $tocContent -notmatch '(?m)^## Dependencies:\s*KullThranUI(?:\s|$)') {
@@ -121,7 +125,7 @@ function Test-AddonManifest {
         $referencedPath = [System.IO.Path]::GetFullPath(
             (Join-Path $addonRoot ($entry -replace '/', '\'))
         )
-        $addonPrefix = [System.IO.Path]::GetFullPath($addonRoot).TrimEnd('\') + '\'
+        $addonPrefix = [System.IO.Path]::GetFullPath($addonsRoot).TrimEnd('\') + '\'
         if (-not $referencedPath.StartsWith($addonPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "TOC reference escapes addon root: $referencedPath"
         }

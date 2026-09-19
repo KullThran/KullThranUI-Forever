@@ -57,6 +57,10 @@ local SPELL_POWER_ESSENCE = Enum.PowerType.Essence or 19
 
 local ClassPowerEnable, ClassPowerDisable
 
+local function IsSecretValue(value)
+    return type(issecretvalue) == "function" and issecretvalue(value) == true
+end
+
 -- holds class-specific information for enablement toggles
 local classPowerID, classPowerType
 local requireSpec, requirePower, requireSpell
@@ -98,7 +102,7 @@ local function Update(self, event, unit, powerType)
 		element:PreUpdate()
 	end
 
-	local cur, max, mod, oldMax, chargedPoints
+	local cur, max, mod, oldMax, chargedPoints, isSecretCurrent
 	if(event ~= 'ClassPowerDisable') then
 		local powerID = unit == 'vehicle' and SPELL_POWER_COMBO_POINTS or classPowerID
 		cur = UnitPower(unit, powerID, true)
@@ -109,35 +113,57 @@ local function Update(self, event, unit, powerType)
 		-- UNIT_POWER_POINT_CHARGE doesn't provide a power type
 		powerType = powerType or classPowerType
 
-		-- mod should never be 0, but according to Blizz code it can actually happen
-		cur = mod == 0 and 0 or cur / mod
+        -- UnitPower can be a secret number on Forever (notably Combo Points).
+        -- Never divide, add, subtract or compare it in Lua. StatusBars can
+        -- consume the value directly when each pip owns an [i-1, i] range.
+        isSecretCurrent = IsSecretValue(cur)
+        if type(max) ~= "number" or IsSecretValue(max) then
+            max = element.__max or 0
+        end
 
-		-- BUG: Destruction is supposed to show partial soulshards, but Affliction and Demonology should only show full ones
-		if(classPowerType == 'SOUL_SHARDS' and C_SpecializationInfo.GetSpecialization() ~= SPEC_WARLOCK_DESTRUCTION) then
-			cur = cur - cur % 1
-		end
+        oldMax = element.__max
+        if isSecretCurrent then
+            for i = 1, max do
+                local bar = element[i]
+                if bar then
+                    if bar.SetMinMaxValues then
+                        bar:SetMinMaxValues(i - 1, i)
+                    end
+                    bar:Show()
+                    local valueOK = pcall(bar.SetValue, bar, cur)
+                    if not valueOK then bar:Hide() end
+                end
+            end
+        else
+            -- mod should never be 0, but according to Blizz code it can actually happen
+            cur = mod == 0 and 0 or cur / mod
 
-		local numActive = cur + 0.9
-		for i = 1, max do
-			if(i > numActive) then
-				element[i]:Hide()
-				element[i]:SetValue(0)
-			else
-				element[i]:Show()
-				element[i]:SetValue(cur - i + 1)
-			end
-		end
+            -- BUG: Destruction is supposed to show partial soulshards, but Affliction and Demonology should only show full ones
+            if(classPowerType == "SOUL_SHARDS" and C_SpecializationInfo.GetSpecialization() ~= SPEC_WARLOCK_DESTRUCTION) then
+                cur = cur - cur % 1
+            end
 
-		oldMax = element.__max
-		if(max ~= oldMax) then
-			if(max < oldMax) then
-				for i = max + 1, oldMax do
-					element[i]:Hide()
-					element[i]:SetValue(0)
-				end
-			end
+            local numActive = cur + 0.9
+            for i = 1, max do
+                if(i > numActive) then
+                    element[i]:Hide()
+                    element[i]:SetValue(0)
+                else
+                    element[i]:Show()
+                    element[i]:SetValue(cur - i + 1)
+                end
+            end
+        end
 
-			element.__max = max
+        if(max ~= oldMax) then
+            if(oldMax and max < oldMax) then
+                for i = max + 1, oldMax do
+                    element[i]:Hide()
+                    element[i]:SetValue(0)
+                end
+            end
+
+            element.__max = max
 		end
 	end
 	--[[ Callback: ClassPower:PostUpdate(cur, max, hasMaxChanged, powerType)
@@ -150,7 +176,7 @@ local function Update(self, event, unit, powerType)
 	* powerType     - the active power type (string)
 	* ...           - the indices of currently charged power points, if any
 	--]]
-	if(element.PostUpdate) then
+	if(element.PostUpdate and not isSecretCurrent) then
 		return element:PostUpdate(cur, max, oldMax ~= max, powerType, unpack(chargedPoints or {}))
 	end
 end

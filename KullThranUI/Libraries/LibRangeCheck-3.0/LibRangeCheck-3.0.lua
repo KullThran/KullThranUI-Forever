@@ -4458,6 +4458,10 @@ function lib:LEARNED_SPELL_IN_TAB()
   self:scheduleInit()
 end
 
+function lib:LEARNED_SPELL_IN_SKILL_LINE()
+  self:scheduleInit()
+end
+
 function lib:CHARACTER_POINTS_CHANGED()
   self:scheduleInit()
 end
@@ -4596,7 +4600,9 @@ function lib:activate()
     self.frame = frame
 
     if not (isMidnight or isTBC) then
-      frame:RegisterEvent("LEARNED_SPELL_IN_TAB")
+      -- Forever/Camelot usa LEARNED_SPELL_IN_SKILL_LINE (la API antigua LEARNED_SPELL_IN_TAB
+      -- fue renombrada en 11.0). Registrar con pcall por si algún flavour la omite.
+      pcall(function() frame:RegisterEvent("LEARNED_SPELL_IN_SKILL_LINE") end)
     end
     frame:RegisterEvent("CHARACTER_POINTS_CHANGED")
     frame:RegisterEvent("SPELLS_CHANGED")

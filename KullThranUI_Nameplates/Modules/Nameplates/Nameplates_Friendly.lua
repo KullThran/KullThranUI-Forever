@@ -302,8 +302,93 @@ local function ApplyFriendlyNameOnlyTextAnchors(nameplate)
     end
 end
 
-local ApplyFontToNameText
-local IsNameOnlyMode
+local function GetFriendlyLevelNameWidth(name)
+    if name and name.GetStringWidth then
+        local ok, width = pcall(name.GetStringWidth, name)
+        if ok and IsAccessible(width) and type(width) == "number" then
+            return math.max(0, width)
+        end
+    end
+    return 0
+end
+
+local function AnchorFriendlyLevelBeforeName(level, name, alignment)
+    if not (level and name) then return end
+    local width = GetFriendlyLevelNameWidth(name)
+    level:ClearAllPoints()
+    if alignment == "left" then
+        level:SetPoint("RIGHT", name, "LEFT", -4, 0)
+    elseif alignment == "right" then
+        level:SetPoint("RIGHT", name, "RIGHT", -width - 4, 0)
+    else
+        level:SetPoint("RIGHT", name, "CENTER", -(width * 0.5) - 4, 0)
+    end
+end
+
+local function ApplyFriendlyPlayerLevelStyle(level)
+    if ns.ApplyNameplateLevelTextStyle then
+        ns.ApplyNameplateLevelTextStyle(level)
+        return
+    end
+    SetFriendlyFSFont(level, 11, "OUTLINE")
+end
+
+local function HideFriendlyPlayerLevel(nameplate)
+    local level = nameplate and nameplate._kuiFriendlyPlayerLevel
+    if level then
+        level:SetText("")
+        level:Hide()
+    end
+end
+
+local function IsFriendlyPlayerUnit(unit)
+    if not unit then return false end
+    if not UnitIsPlayer(unit) then return false end
+    if UnitIsUnit(unit, "player") then return false end
+    return not UnitCanAttack("player", unit)
+end
+
+local function UpdateFriendlyPlayerLevel(nameplate, unit)
+    local db = KullThranUINameplatesDB or {}
+    if not nameplate or not unit or db.friendlyNameOnly == false
+        or db.showFriendlyPlayers == false or db.showLevel == false
+        or not IsFriendlyPlayerUnit(unit) then
+        HideFriendlyPlayerLevel(nameplate)
+        return
+    end
+
+    local uf = nameplate.UnitFrame
+    local name = uf and uf.name
+    if not name then
+        HideFriendlyPlayerLevel(nameplate)
+        return
+    end
+
+    local level = nameplate._kuiFriendlyPlayerLevel
+    if not level then
+        level = uf:CreateFontString(nil, "OVERLAY")
+        level:SetJustifyH("RIGHT")
+        level:SetWordWrap(false)
+        level:SetMaxLines(1)
+        nameplate._kuiFriendlyPlayerLevel = level
+    end
+
+    local text = ns.GetNameplateLevelText and ns.GetNameplateLevelText(unit)
+    if not text then
+        level:SetText("")
+        level:Hide()
+        return
+    end
+
+    ApplyFriendlyPlayerLevelStyle(level)
+    level:SetText(text)
+    level:SetWidth(math.max(24, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 10))
+    level:SetHeight(math.max(12, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 4))
+    AnchorFriendlyLevelBeforeName(level, name, GetFriendlyPlayerNameAlignment())
+    level:Show()
+end
+
+ns.UpdateFriendlyPlayerLevel = UpdateFriendlyPlayerLevel
 
 local function RestoreFriendlyPlayerNameText(nameplate, unit)
     if not (nameplate and unit) then return end
@@ -854,6 +939,7 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         HideNPCOverlay(nameplate)
         nameOnlyNPCSuppressed[nameplate] = nil
         HidePlayerGuildLine(nameplate)
+        HideFriendlyPlayerLevel(nameplate)
     end
     if modifiedUFs[unit] then
         RestoreBlizzardUF(unit)
@@ -948,6 +1034,12 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
     plate.name:SetWordWrap(false)
     plate.name:SetMaxLines(1)
 
+    plate.level = plate:CreateFontString(nil, "OVERLAY")
+    plate.level:SetJustifyH("RIGHT")
+    plate.level:SetWordWrap(false)
+    plate.level:SetMaxLines(1)
+    plate.level:Hide()
+
     plate.guild = plate:CreateFontString(nil, "OVERLAY")
     SetFriendlyFSFont(plate.guild, GetFriendlyGuildTextSize(),
         (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
@@ -997,6 +1089,39 @@ end)
 --  FriendlyFrame mixin
 -------------------------------------------------------------------------------
 local FriendlyFrame = {}
+
+local function UpdateFriendlyBarLevel(plate)
+    local level = plate and plate.level
+    local name = plate and plate.name
+    local unit = plate and plate.unit
+    local db = KullThranUINameplatesDB or {}
+    if not (level and name and unit) or db.showLevel == false
+        or db.showFriendlyPlayers == false or not IsFriendlyPlayerUnit(unit) then
+        if level then
+            level:SetText("")
+            level:Hide()
+        end
+        return
+    end
+
+    local text = ns.GetNameplateLevelText and ns.GetNameplateLevelText(unit)
+    if not text then
+        level:SetText("")
+        level:Hide()
+        return
+    end
+
+    ApplyFriendlyPlayerLevelStyle(level)
+    level:SetText(text)
+    level:SetWidth(math.max(24, (tonumber(db.levelFontSize) or 11) + 10))
+    level:SetHeight(math.max(12, (tonumber(db.levelFontSize) or 11) + 4))
+    AnchorFriendlyLevelBeforeName(level, name, GetFriendlyPlayerNameAlignment())
+    level:Show()
+end
+
+function FriendlyFrame:UpdateLevel()
+    UpdateFriendlyBarLevel(self)
+end
 
 function FriendlyFrame:SetUnit(unit, nameplate)
     self.unit = unit
@@ -1063,6 +1188,7 @@ end
 function FriendlyFrame:ClearUnit()
     self:UnregisterAllEvents()
     self.name:SetText("")
+    if self.level then self.level:SetText(""); self.level:Hide() end
     if self.guild then self.guild:SetText(""); self.guild:Hide() end
     -- Restore Blizzard UF before clearing our reference
     if self.unit then RestoreBlizzardUF(self.unit) end
@@ -1175,6 +1301,7 @@ function FriendlyFrame:UpdateName()
     end
     ApplyFriendlyHealthAnchor(self)
     ApplyFriendlyBarTextAnchors(self)
+    self:UpdateLevel()
 end
 
 function FriendlyFrame:UpdateRaidIcon()
@@ -1438,6 +1565,23 @@ end
 function ns.RefreshFriendlyHealthText()
     for _, plate in pairs(friendlyPlates) do
         plate:UpdateHealth()
+    end
+end
+
+function ns.RefreshFriendlyPlayerLevels()
+    local db = KullThranUINameplatesDB or {}
+    if db.friendlyNameOnly == false then
+        for _, plate in pairs(friendlyPlates) do
+            if plate.UpdateLevel then plate:UpdateLevel() end
+        end
+        return
+    end
+
+    for _, nameplate in ipairs(GetAccessibleNamePlates(true)) do
+        local unit = nameplate.namePlateUnitToken
+        if unit then
+            UpdateFriendlyPlayerLevel(nameplate, unit)
+        end
     end
 end
 
