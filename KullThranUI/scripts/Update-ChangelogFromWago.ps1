@@ -4,7 +4,7 @@ Uso:
 #>
 
 param(
-    [string]$AddonSlug = "kullthranui",
+    [string]$AddonSlug = "kullthranui-forever",
     [string]$OptionsPath = (Join-Path (Split-Path $PSScriptRoot -Parent) "Options.lua")
 )
 

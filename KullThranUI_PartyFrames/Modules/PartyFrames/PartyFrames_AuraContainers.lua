@@ -50,7 +50,7 @@ local function ConfigureStyle(frame, db, kind, size)
         width = size, height = size,
         texCoord = { 0.08, 0.92, 0.08, 0.92 },
         border = { 0, 0, 0, 0.9, size = 1 },
-        dispelBorder = kind ~= "buffs",
+        dispelBorder = db.showDispelOverlay ~= false and kind ~= "buffs",
         dispelBorderPx = tonumber(db.dispelBorderThickness) or 2,
         dispelColorMap = dispelColorMap,
         dispelColorFP = dispelColorFP,
@@ -65,6 +65,44 @@ local function ConfigureStyle(frame, db, kind, size)
     }
     return key
 end
+
+-- AuraKit styles are created once and survive option changes. Keep their
+-- dispel-border state synchronized with the live toggle so existing aura
+-- buttons change immediately instead of waiting for a container rebuild.
+local function RefreshAuraDispelStyles(frame, db)
+    if not (frame and db and AK.styles) then return end
+
+    local showDispel = db.showDispelOverlay ~= false
+    local thickness = tonumber(db.dispelBorderThickness) or 2
+    local colorMap, colorFP = BuildDispelColorMap(db)
+    local fingerprint = (showDispel and "1" or "0") .. ":" .. tostring(thickness) .. ":" .. colorFP
+    if frame._ktAuraDispelStyleFP == fingerprint then return end
+
+    local changed = false
+    for _, kind in ipairs({ "buffs", "debuffs", "cc" }) do
+        local key = StyleKey(frame, kind)
+        local style = AK.styles[key]
+        if style then
+            local wantBorder = showDispel and kind ~= "buffs"
+            local needsRestyle = style.dispelBorder ~= wantBorder
+                or style.dispelBorderPx ~= thickness
+                or style.dispelColorFP ~= colorFP
+            style.dispelBorder = wantBorder
+            style.dispelBorderPx = thickness
+            style.dispelColorMap = colorMap
+            style.dispelColorFP = colorFP
+            changed = true
+            if needsRestyle and AK.RestyleSoon then
+                AK.RestyleSoon(key)
+            end
+        end
+    end
+
+    if changed then
+        frame._ktAuraDispelStyleFP = fingerprint
+    end
+end
+
 local function BuildAuraContainerSpec(frame, db, kind, filter, count, size)
     local key = ConfigureStyle(frame, db, kind, size)
     -- processAura is intentionally absent: SetAuraProcessingPolicy has caused
@@ -298,6 +336,7 @@ function ns.PF_UpdateAuraContainers(frame, db)
     local b = Ensure(frame, db)
     if not b then return false end
     ConfigureDispelStyles(frame, db)
+    RefreshAuraDispelStyles(frame, db)
 
     -- LAYOUT signature: pure geometry. SetAuraGroupLayout / SetContainerAnchor
     -- re-position the existing buttons in place without creating or discarding

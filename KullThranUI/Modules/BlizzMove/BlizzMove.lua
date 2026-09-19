@@ -54,6 +54,16 @@ local function SafeBooleanCall(func)
     return ok and not IsSecret(value) and value == true;
 end
 
+local function IsForeverProject()
+    local projectID = _G.WOW_PROJECT_ID
+    local betaID = _G.WOW_PROJECT_FOREVER_BETA or _G.WOW_PROJECT_WOW_FOREVER_BETA
+    local foreverID = _G.WOW_PROJECT_FOREVER or _G.WOW_PROJECT_WOW_FOREVER
+    if projectID ~= nil and (projectID == betaID or projectID == foreverID) then return true end
+    local _, _, _, version = GetBuildInfo()
+    local numericVersion = tonumber(version)
+    return numericVersion ~= nil and numericVersion >= 16000 and numericVersion < 17000
+end
+
 local name = "BlizzMove";
 local INTERNAL_ADDON_NAME = "KullThranUI";
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
@@ -494,6 +504,7 @@ do
     local _, buildNumber, _, gameVersion = GetBuildInfo();
     BlizzMove.gameBuild   = tonumber(buildNumber);
     BlizzMove.gameVersion = tonumber(gameVersion);
+    BlizzMove.isForever = IsForeverProject();
 
     local function checkRanges(ranges, needle)
         for _, range in ipairs(ranges) do
@@ -513,6 +524,8 @@ do
         return false;
     end
     function BlizzMove:MatchesCurrentBuild(frameData)
+        -- Forever uses a 1.60.x game version; retail MinVersion/MaxVersion values are not comparable.
+        if self.isForever then return true; end
         -- Compare versus current build version.
         if frameData.MinBuild and frameData.MinBuild > self.gameBuild then return false; end
         if frameData.MaxBuild and frameData.MaxBuild <= self.gameBuild then return false; end
@@ -1474,7 +1487,7 @@ do
             end
             self.notFoundFrames = self.notFoundFrames or {};
             tinsert(self.notFoundFrames, frameName);
-            self:Print(L["Could not find frame"], "( Build:", self.gameBuild, "| Version:", self.gameVersion, "| BMVersion:", self.Config.version, "):", frameName);
+            if not self.isForever then self:Print(L["Could not find frame"], "( Build:", self.gameBuild, "| Version:", self.gameVersion, "| BMVersion:", self.Config.version, "):", frameName); end
 
             return false;
         end

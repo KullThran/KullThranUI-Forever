@@ -21,18 +21,93 @@ local SetupPlayerStatusIndicators
 
 -- ─── Ruta base para los iconos de indicadores de estado ────────────
 local KUI_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\UnitFramesIcons\\"
+local PVP_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\"
 
+local CLASSIFICATION_ATLASES = {
+    elite = "nameplates-icon-elite-gold",
+    worldboss = "nameplates-icon-elite-gold",
+    rareelite = "nameplates-icon-elite-silver",
+    rare = "nameplates-icon-star",
+}
+local OVERLAY_ANCHORS = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true,
+    LEFT = true, CENTER = true, RIGHT = true,
+    BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+local function IsForeverSecretValue(value)
+    return type(issecretvalue) == "function" and issecretvalue(value)
+end
+
+local function SafeUnitPvPFaction(unit)
+    if not unit or type(UnitIsPVP) ~= "function" or type(UnitFactionGroup) ~= "function" then
+        return nil
+    end
+    local ok, enabled = pcall(UnitIsPVP, unit)
+    if not ok or IsForeverSecretValue(enabled) or (enabled ~= true and enabled ~= 1) then
+        return nil
+    end
+    ok, enabled = pcall(UnitFactionGroup, unit)
+    if not ok or IsForeverSecretValue(enabled) then return nil end
+    if enabled == "Horde" or enabled == "Alliance" then return enabled end
+    return nil
+end
+
+
+local function SafeUnitLevelText(unit)
+    if not unit then return nil end
+
+    local level
+    if type(UnitLevel) == "function" then
+        local ok, value = pcall(UnitLevel, unit)
+        if ok and not IsForeverSecretValue(value) and type(value) == "number" then
+            level = value
+        end
+    end
+
+    -- Forever follows the oUF level tag and may expose the effective level
+    -- even when UnitLevel is unavailable or returns an unknown sentinel.
+    if (type(level) ~= "number" or level <= 0) and type(UnitEffectiveLevel) == "function" then
+        local ok, value = pcall(UnitEffectiveLevel, unit)
+        if ok and not IsForeverSecretValue(value) and type(value) == "number" then
+            level = value
+        end
+    end
+
+    if type(level) ~= "number" or level <= 0 then return nil end
+    return tostring(level)
+end
+
+local function SafeUnitClassificationAtlas(unit)
+    if not unit or type(UnitClassification) ~= "function" then return nil end
+    local ok, atlas = pcall(function()
+        return CLASSIFICATION_ATLASES[UnitClassification(unit)]
+    end)
+    return ok and type(atlas) == "string" and atlas or nil
+end
 local defaults = {
     profile = {
         enable = true,
+        showCharacterLevel = true,
+        showClassification = true,
+        showPvPIcon = true,
+        levelFont = "AAA_ITC_Avant_Garde",
+        levelFontSize = 11,
+        levelFontOutline = "OUTLINE",
+        levelColor = { r = 1, g = 0.82, b = 0.20, a = 1 },
+        levelX = 2,
+        levelY = 2,
+        levelAnchor = "AUTO",
+        pvpAnchor = "AUTO",
+        pvpX = 2,
+        pvpY = 1,
         showPortrait = false,
         castbarOpacity = 1.0,
         castbarColor = nil,  -- Follows the active theme accent
         selectedFont = "AAA_ITC_Avant_Garde",
         use3DPortrait = false,
         portraitMode = "2d",
-        portraitStyle = "attached",
-        circularPortraitBorderUseCustomColor = false,
+        portraitStyle = "circular",
+        circularPortraitBorderUseCustomColor = true,
         circularPortraitBorderColor = nil,  -- Follows the active theme accent
         healthBarTexture = "Melli Reforged",
         healthBarOpacity = 90,
@@ -114,7 +189,7 @@ local defaults = {
             btbClassIconLocation = "left",
             btbClassIconX = 0,
             btbClassIconY = 0,
-            showPortrait = false,
+            showPortrait = true,
             portraitMode = "2d",
             classThemeStyle = "modern",
             portraitFacing = "normal",
@@ -265,10 +340,10 @@ local defaults = {
             btbClassIconLocation = "left",
             btbClassIconX = 0,
             btbClassIconY = 0,
-            showPortrait = false,
+            showPortrait = true,
             portraitMode = "2d",
             classThemeStyle = "modern",
-            portraitSide = "left",
+            portraitSide = "right",
             portraitSize = 0,
             portraitX = 0,
             portraitY = 0,
@@ -555,8 +630,12 @@ local function SetUnitFrameTreeStrata(frame, seen)
         return
     end
 
-    -- Skip portrait backdrops - they need MEDIUM strata to render above LOW frame
+    -- Portrait backdrops use MEDIUM; metadata overlays must remain above them.
     if frame._isPortraitBackdrop then
+        return
+    end
+    if frame._kuiAbovePortraitOverlay then
+        pcall(frame.SetFrameStrata, frame, "HIGH")
         return
     end
 
@@ -928,6 +1007,39 @@ local function SetFSFont(fs, size, flags)
 end
 
 -- Disable WoW's automatic pixel snapping on a texture (prevents sub-pixel jitter)
+local function ApplyForeverLevelTextStyle(text, profile, frame)
+    if not (text and text.SetFont) then return end
+    profile = profile or {}
+    local fontName = profile.levelFont or "AAA_ITC_Avant_Garde"
+    local fontPath = Compat.fontPaths and Compat.fontPaths[fontName]
+    if not fontPath then
+        local LSM = LibStub("LibSharedMedia-3.0", true)
+        fontPath = LSM and LSM:Fetch("font", fontName, true)
+    end
+    fontPath = fontPath or DEFAULT_FONT
+    local size = math.max(6, math.min(48, tonumber(profile.levelFontSize) or 11))
+    local outline = profile.levelFontOutline
+    if outline == "NONE" then outline = "" end
+    if type(outline) ~= "string" then outline = "OUTLINE" end
+    text:SetFont(fontPath, size, outline)
+    if KT and KT.EnableTextFontFallback then
+        KT:EnableTextFontFallback(text, fontPath)
+    end
+    local color = profile.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
+    text:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
+    if frame then
+        text:ClearAllPoints()
+        local anchor = profile.levelAnchor
+        if OVERLAY_ANCHORS[anchor] then
+            text:SetPoint(anchor, frame, anchor,
+                tonumber(profile.levelX) or 2, tonumber(profile.levelY) or 2)
+        else
+            text:SetPoint("BOTTOMLEFT", frame, "TOPLEFT",
+                tonumber(profile.levelX) or 2, tonumber(profile.levelY) or 2)
+        end
+    end
+end
+
 local function UnsnapTex(tex)
     local PP = Compat and Compat.PP
     if PP then PP.DisablePixelSnap(tex)
@@ -3715,9 +3827,32 @@ local function SyncTargetAuraContainer(frame, unit)
     container:UpdateAllAuras()
 end
 
+local function RefreshTargetDebuffDispelStyle(settings)
+    local AK = _G.KTAuraKit
+    local style = AK and AK.styles and AK.styles["kuiuf:target-debuffs"]
+    if not style then return end
+
+    local enabled = not (settings and settings.dispelOverlay == false)
+        and not (settings and settings.debuffDispelBorder == false)
+    local thickness = tonumber(settings and settings.debuffDispelBorderSize)
+        or tonumber(settings and settings.dispelBorderThickness)
+        or 2
+    local state = (enabled and "1" or "0") .. ":" .. tostring(thickness)
+    if style._ktDispelState == state then return end
+
+    style._ktDispelState = state
+    style.dispelBorder = enabled
+    style.dispelBorderPx = thickness
+    if AK.RestyleSoon then
+        AK.RestyleSoon("kuiuf:target-debuffs")
+    end
+end
+
 local function ApplyTargetAuraSettings(frame, settings)
     local container = frame and frame.KTDebuffs
     if not container then return end
+
+    RefreshTargetDebuffDispelStyle(settings)
 
     if settings.showDebuffs == false then
         container:Hide()
@@ -3877,8 +4012,10 @@ local function CreateTargetAuras(frame, unit)
             texCoord = { 0.07, 0.93, 0.07, 0.93 },
             border = { 0, 0, 0, 1, size = 1 },
             cooldownReverse = true,
-            dispelBorder = settings.debuffDispelBorder ~= false,
-            dispelBorderPx = tonumber(settings.debuffDispelBorderSize) or 2,
+            dispelBorder = settings.dispelOverlay ~= false
+                and settings.debuffDispelBorder ~= false,
+            dispelBorderPx = tonumber(settings.debuffDispelBorderSize)
+                or tonumber(settings.dispelBorderThickness) or 2,
         }
         local debuffs = AK.CreateContainer(frame, unit, {
             point = { "CENTER", frame, "CENTER" },
@@ -4069,12 +4206,115 @@ local function SetupUnitIndicators(frame, unit)
     if not frame._kuiIndicatorOverlay then
         local ovr = CreateFrame("Frame", nil, frame)
         ovr:SetAllPoints(frame)
-        ovr:SetFrameStrata(frame:GetFrameStrata())
-        ovr:SetFrameLevel(frame:GetFrameLevel() + 2)
+        ovr._kuiAbovePortraitOverlay = true
+        ovr:SetFrameStrata("HIGH")
+        ovr:SetFrameLevel(frame:GetFrameLevel() + 60)
         frame._kuiIndicatorOverlay = ovr
     end
     local iOvr = frame._kuiIndicatorOverlay
 
+    if not frame._kuiLevelText then
+        local levelText = iOvr:CreateFontString(nil, "OVERLAY")
+        SetFSFont(levelText, 11, "OUTLINE")
+        levelText:SetJustifyH("LEFT")
+        levelText:SetWordWrap(false)
+        levelText:SetTextColor(1, 0.82, 0.20, 1)
+        levelText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2, 2)
+        levelText:SetWidth(38)
+        levelText:SetHeight(14)
+        levelText:Hide()
+        frame._kuiLevelText = levelText
+    end
+    if not frame._kuiClassificationIndicator then
+        local classification = iOvr:CreateTexture(nil, "OVERLAY", nil, 7)
+        classification:SetSize(18, 18)
+        classification:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 40, 1)
+        classification:Hide()
+        frame._kuiClassificationIndicator = classification
+    end
+
+    if not frame._kuiPvPIcon then
+        local pvp = iOvr:CreateTexture(nil, "OVERLAY", nil, 7)
+        pvp:SetSize(16, 16)
+        pvp:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", -2, 1)
+        pvp:Hide()
+        frame._kuiPvPIcon = pvp
+    end
+
+    local function RefreshForeverMetadata()
+        local u = frame.unit or (frame.GetAttribute and frame:GetAttribute("unit")) or unit
+        local profile = db and db.profile
+        local portraitAnchor = (frame.Portrait and (frame.Portrait.backdrop or frame.Portrait)) or frame
+        local showLevel = not profile or profile.showCharacterLevel ~= false
+        local showClassification = not profile or profile.showClassification ~= false
+        ApplyForeverLevelTextStyle(frame._kuiLevelText, profile, portraitAnchor)
+        if (not profile or not OVERLAY_ANCHORS[profile.levelAnchor]) and u == "target" then
+            frame._kuiLevelText:ClearAllPoints()
+            frame._kuiLevelText:SetPoint("BOTTOMRIGHT", portraitAnchor, "TOPRIGHT",
+                -(tonumber(profile and profile.levelX) or 2), tonumber(profile and profile.levelY) or 2)
+        end
+        frame._kuiClassificationIndicator:ClearAllPoints()
+        if u == "target" then
+            frame._kuiClassificationIndicator:SetPoint("BOTTOMRIGHT", portraitAnchor, "TOPRIGHT", -40, 1)
+        else
+            frame._kuiClassificationIndicator:SetPoint("BOTTOMLEFT", portraitAnchor, "TOPLEFT", 40, 1)
+        end
+        frame._kuiPvPIcon:ClearAllPoints()
+        local pvpAnchor = profile and profile.pvpAnchor
+        if OVERLAY_ANCHORS[pvpAnchor] then
+            frame._kuiPvPIcon:SetPoint(pvpAnchor, portraitAnchor, pvpAnchor,
+                tonumber(profile.pvpX) or 0, tonumber(profile.pvpY) or 0)
+        elseif u == "target" then
+            frame._kuiPvPIcon:SetPoint("LEFT", portraitAnchor, "RIGHT", 2, 1)
+        else
+            frame._kuiPvPIcon:SetPoint("RIGHT", portraitAnchor, "LEFT", -2, 1)
+        end
+        local levelText = showLevel and SafeUnitLevelText(u) or nil
+        if levelText then
+            frame._kuiLevelText:SetText(levelText)
+            frame._kuiLevelText:Show()
+        else
+            frame._kuiLevelText:Hide()
+        end
+        local atlas = showClassification and SafeUnitClassificationAtlas(u) or nil
+        local pvpFaction = (profile and profile.showPvPIcon ~= false
+            and (u == "player" or u == "target"))
+            and SafeUnitPvPFaction(u) or nil
+        if pvpFaction == "Horde" then
+            frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. "Horde.png")
+            frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
+            frame._kuiPvPIcon:Show()
+        elseif pvpFaction == "Alliance" then
+            frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. "Alliance.png")
+            frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
+            frame._kuiPvPIcon:Show()
+        else
+            frame._kuiPvPIcon:Hide()
+        end
+        if atlas then
+            local applied = pcall(frame._kuiClassificationIndicator.SetAtlas, frame._kuiClassificationIndicator, atlas, true)
+            if not applied then
+                pcall(frame._kuiClassificationIndicator.SetAtlas, frame._kuiClassificationIndicator, atlas)
+            end
+            frame._kuiClassificationIndicator:Show()
+        else
+            frame._kuiClassificationIndicator:Hide()
+        end
+    end
+
+    frame._refreshForeverMetadata = RefreshForeverMetadata
+    if not frame._kuiForeverMetadataEvents then
+        frame._kuiForeverMetadataEvents = true
+        for _, ev in ipairs({
+            "PLAYER_ENTERING_WORLD", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED",
+            "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "UNIT_FLAGS", "UNIT_FACTION", "PLAYER_FLAGS_CHANGED",
+        }) do
+            frame:RegisterEvent(ev, function()
+                RefreshForeverMetadata()
+            end, true)
+        end
+    end
+    RefreshForeverMetadata()
     -- ── Leader ──────────────────────────────────────────────────
     if not frame.LeaderIndicator then
         local tex = iOvr:CreateTexture(nil, "OVERLAY", nil, 7)
@@ -4491,8 +4731,9 @@ SetupPlayerStatusIndicators = function(frame, settings)
     if not frame._kuiIndicatorOverlay then
         local ovr = CreateFrame("Frame", nil, frame)
         ovr:SetAllPoints(frame)
-        ovr:SetFrameStrata(frame:GetFrameStrata())
-        ovr:SetFrameLevel(frame:GetFrameLevel() + 2)
+        ovr._kuiAbovePortraitOverlay = true
+        ovr:SetFrameStrata("HIGH")
+        ovr:SetFrameLevel(frame:GetFrameLevel() + 60)
         frame._kuiIndicatorOverlay = ovr
     end
     local iOvr = frame._kuiIndicatorOverlay
@@ -5170,7 +5411,7 @@ end
 -------------------------------------------------------------------------------
 local CLASS_POWER_TYPES = {
     ROGUE       = Enum.PowerType.ComboPoints,
-    DRUID       = Enum.PowerType.ComboPoints,
+    DRUID       = { [103] = { Enum.PowerType.ComboPoints, 5 } }, -- Feral only; other specs use their own resource
     MAGE        = { [62]  = { Enum.PowerType.ArcaneCharges, 4 } }, -- Arcane only
     WARLOCK     = Enum.PowerType.SoulShards,
     PALADIN     = Enum.PowerType.HolyPower,
@@ -5427,7 +5668,7 @@ local function CreateCustomClassPower(playerFrame, style)
             end
         end
 
-        if isSecretResource then
+        if isSecretResource or IsSecret(cur) then
             -- Secret-value path: use StatusBar overlays per pip
             for i = 1, #pips do
                 if pips[i] then
@@ -5440,9 +5681,9 @@ local function CreateCustomClassPower(playerFrame, style)
                         pips[i]._secretBar = sb
                     end
                     pips[i]._secretBar:SetMinMaxValues(i - 1, i)
-                    pips[i]._secretBar:SetValue(cur)
+                    local secretValueOK = pcall(pips[i]._secretBar.SetValue, pips[i]._secretBar, cur)
                     pips[i]._secretBar:SetStatusBarColor(cr, cg, cb, 1)
-                    pips[i]._secretBar:Show()
+                    pips[i]._secretBar:SetShown(secretValueOK)
                     -- Hide normal fill; StatusBar replaces it
                     if pips[i]._fill then pips[i]._fill:Hide() end
                 end
@@ -6887,6 +7128,28 @@ local function ReloadFrames()
                     SetFSFont(frame.Castbar.Time, 11)
                 end
             end
+
+            -- Apply the global dispel toggle to every Unit Frame variant. The
+            -- player uses dedicated AuraKit slots while focus/pet/boss use a
+            -- frame border; both must be hidden immediately when the option is
+            -- switched off, not only after the next UNIT_AURA event.
+            local showDispelOverlay = settings.dispelOverlay ~= false
+            if frame.KTDispelSlots then
+                frame.KTDispelSlots:SetShown(showDispelOverlay)
+            end
+            if frame.dispelBorderFrame then
+                frame.dispelBorderFrame:SetShown(showDispelOverlay)
+                if not showDispelOverlay then
+                    SetDispelFrameBorder(frame, nil)
+                elseif frame.dispelBorderFrame.GetScript
+                    and frame.dispelBorderFrame:GetScript("OnEvent") then
+                    UpdateUnitDispelBorderEvent(frame.dispelBorderFrame, "UNIT_AURA", frame.unit)
+                end
+            end
+            if unit == "target" then
+                RefreshTargetDebuffDispelStyle(settings)
+            end
+
             end -- else (enabled frame processing)
         end
     end
@@ -6939,6 +7202,11 @@ local function UpdateBlizzardRestTargets(shouldShow)
 end
 
 RefreshPlayerStatusIndicators = function()
+    local targetFrame = frames and frames.target
+    if targetFrame and targetFrame._refreshForeverMetadata then
+        targetFrame._refreshForeverMetadata()
+    end
+
     local frame = frames and frames.player
     local playerDB = db and db.profile and db.profile.player
     if not frame or not playerDB then return end
@@ -7937,6 +8205,16 @@ local function MigratePlayerTarget()
     p._playerTargetMigrated = true
 end
 
+local function ApplyForeverPortraitDefaults()
+    local profile = db and db.profile
+    if not profile or profile._foreverPortraitDefaults20260919c then return end
+    if profile.player and profile.player.showPortrait == false then profile.player.showPortrait = true end
+    if profile.target and profile.target.showPortrait == false then profile.target.showPortrait = true end
+    if profile.target and profile.target.portraitSide == "left" then profile.target.portraitSide = "right" end
+    if profile.circularPortraitBorderUseCustomColor == false then profile.circularPortraitBorderUseCustomColor = true end
+    if profile.portraitStyle == nil or profile.portraitStyle == "attached" then profile.portraitStyle = "circular" end
+    profile._foreverPortraitDefaults20260919c = true
+end
 local function ClampImportedNumber(value, minValue, maxValue, fallback)
     value = tonumber(value)
     if not value then return fallback end
@@ -8321,6 +8599,7 @@ function Mod:OnInitialize()
     self:BindDatabase()
     self:SetEnabledState(self.db.enable ~= false)
     MigratePlayerTarget()
+    ApplyForeverPortraitDefaults()
     SanitizeImportedLayout()
     MigrateLegacyCrimsonAccent()
     ApplyUpdatedDefaultPreset()
@@ -8500,6 +8779,10 @@ end
 
 function Mod:OnEnable()
     self:BindDatabase()
+    if self.db.enable == false then
+        self:SetEnabledState(false)
+        return
+    end
     InitializeFrames()
     SetupOptionsPanel()
     Compat.ApplyColorsToOUF()
@@ -8512,6 +8795,19 @@ function Mod:OnEnable()
     end
 end
 
+function Mod:OnDisable()
+    local function HideFrameTree(value)
+        if not value then return end
+        if value.Hide then
+            value:Hide()
+        elseif type(value) == "table" then
+            for _, child in pairs(value) do
+                HideFrameTree(child)
+            end
+        end
+    end
+    HideFrameTree(frames)
+end
 
 
 

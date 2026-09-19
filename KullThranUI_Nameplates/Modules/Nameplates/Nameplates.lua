@@ -149,6 +149,17 @@ ns._IsSecretValue = ns._IsSecretValue or function(value)
     return false
 end
 
+local function SafeUnitLevelText(unit)
+    if not unit or type(UnitLevel) ~= "function" then return nil end
+
+    local ok, level = pcall(UnitLevel, unit)
+    if not ok or ns._IsSecretValue(level) or type(level) ~= "number" then
+        return nil
+    end
+    if level < 0 then return nil end
+    return tostring(level)
+end
+
 -- Tabla constante de slots de texto sobre la barra de vida (elevada a file-scope
 -- para evitar asignaciones por cada llamada a UpdateHealthValues).
 local HP_BAR_SLOTS = {
@@ -232,6 +243,16 @@ local defaults = {
     hitboxScaleY = 100,
     nameplateYOffset = 0,
     enemyNameTextSize = 12,
+    showLevel = true,
+    levelFont = ns.DEFAULT_FONT_PATH,
+    levelFontSize = 11,
+    levelFontOutline = "OUTLINE",
+    levelShadow = true,
+    levelColor = { r = 1, g = 0.82, b = 0.20, a = 1 },
+    -- La clasificación ocupa el extremo izquierdo superior por defecto;
+    -- el nivel empieza después del icono para evitar solapamiento.
+    levelXOffset = 24,
+    levelYOffset = 4,
     debuffTimerColor = { r = 1, g = 1, b = 1 },
     auraTextPosition = "topleft",
     debuffTimerPosition = "topleft",
@@ -904,6 +925,45 @@ local function GetNameYOffset()
     return KullThranUINameplatesDB and KullThranUINameplatesDB.nameYOffset or defaults.nameYOffset
 end
 ns.GetNameYOffset = GetNameYOffset
+
+local function GetLevelConfigValue(key)
+    local live = KullThranUINameplatesDB
+    if live and live[key] ~= nil then return live[key] end
+    return defaults[key]
+end
+
+local function ApplyLevelTextStyle(fontString)
+    if not (fontString and fontString.SetFont) then return end
+
+    local fontValue = GetLevelConfigValue("levelFont") or ns.DEFAULT_FONT_PATH
+    local fontPath = ns.ResolveNameplateFont(fontValue)
+    local size = tonumber(GetLevelConfigValue("levelFontSize")) or defaults.levelFontSize or 11
+    size = math.max(6, math.min(48, size))
+
+    local outline = GetLevelConfigValue("levelFontOutline")
+    if outline == "NONE" then outline = "" end
+    if type(outline) ~= "string" then outline = "OUTLINE" end
+
+    local ok = pcall(fontString.SetFont, fontString, fontPath, size, outline)
+    if not ok then
+        pcall(fontString.SetFont, fontString, ns.DEFAULT_FONT_PATH, size, outline)
+    end
+
+    local color = GetLevelConfigValue("levelColor") or defaults.levelColor
+    fontString:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
+
+    if GetLevelConfigValue("levelShadow") ~= false then
+        fontString:SetShadowColor(0, 0, 0, 1)
+        fontString:SetShadowOffset(1, -1)
+    else
+        fontString:SetShadowColor(0, 0, 0, 0)
+        fontString:SetShadowOffset(0, 0)
+    end
+end
+
+ns.GetNameplateLevelText = SafeUnitLevelText
+ns.ApplyNameplateLevelTextStyle = ApplyLevelTextStyle
+
 local textSlotKeys = { "textSlotTop", "textSlotRight", "textSlotLeft", "textSlotCenter" }
 ns.textSlotKeys = textSlotKeys
 
@@ -2102,6 +2162,18 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     PP.Width(plate.name, math.max(GetHealthBarWidth(), 20))
     plate.name:SetWordWrap(false)
     plate.name:SetMaxLines(1)
+    -- Forever level text: independent of the four health/name text slots.
+    plate.level = plate.topTextFrame:CreateFontString(nil, "OVERLAY")
+    ApplyLevelTextStyle(plate.level)
+    plate.level:SetJustifyH("LEFT")
+    plate.level:SetWordWrap(false)
+    plate.level:SetMaxLines(1)
+    plate.level:SetWidth(120)
+    plate.level:SetHeight(48)
+    plate.level:SetPoint("BOTTOMLEFT", plate.health, "TOPLEFT",
+        GetLevelConfigValue("levelXOffset") or 24,
+        GetLevelConfigValue("levelYOffset") or 4)
+    plate.level:Hide()
     plate.raidFrame = CreateFrame("Frame", nil, plate)
     local rmSize = GetRaidMarkerSize()
     PP.Size(plate.raidFrame, rmSize, rmSize)
@@ -2670,6 +2742,7 @@ function ns.RefreshAllSettings()
         end
     end
     if ns.ApplyClassPowerSetting then ns.ApplyClassPowerSetting() end
+    if ns.RefreshFriendlyPlayerLevels then ns.RefreshFriendlyPlayerLevels() end
 end
 local kickWatcher = CreateFrame("Frame")
 kickWatcher:RegisterEvent("PLAYER_LOGIN")
@@ -4214,7 +4287,7 @@ end
 -- en una sola pasada al adquirir la placa.
 ns._TRACKED_PLATE_EVENTS = {
     "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE",
-    "UNIT_AURA", "LOSS_OF_CONTROL_UPDATE", "LOSS_OF_CONTROL_ADDED",
+    "UNIT_LEVEL", "UNIT_AURA", "LOSS_OF_CONTROL_UPDATE", "LOSS_OF_CONTROL_ADDED",
     "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_FACTION",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
@@ -4234,6 +4307,7 @@ end
 function NameplateFrame:RefreshPlateState()
     self:UpdateHealth()
     self:UpdateName()
+    self:UpdateLevel()
     self:UpdateClassification()
     self:UpdateRaidIcon()
     self:ApplyTarget()
@@ -4320,6 +4394,10 @@ function NameplateFrame:ClearUnit()
 
     -- 3. Limpiar ranuras de auras: CC primero (2 ranuras), luego debuffs+buffs (4 c/u)
     self.name:SetText("")
+    if self.level then
+        self.level:SetText("")
+        self.level:Hide()
+    end
     local resetCD = ns._ResetAuraCooldown
     for i = 1, 2 do
         local slot = self.cc[i]
@@ -4831,6 +4909,34 @@ function NameplateFrame:UpdateName()
     local displayName = UnitName(unit)
     self.name:SetText(type(displayName) == "string" and displayName or "")
 end
+-- Muestra el nivel de la unidad con estilo y posición independientes.
+function NameplateFrame:UpdateLevel()
+    if not self.level then return end
+
+    local unit = SyncPlateUnitToken(self)
+    if not unit or GetLevelConfigValue("showLevel") == false then
+        self.level:SetText("")
+        self.level:Hide()
+        return
+    end
+
+    local levelText = SafeUnitLevelText(unit)
+    if not levelText then
+        self.level:SetText("")
+        self.level:Hide()
+        return
+    end
+
+    ApplyLevelTextStyle(self.level)
+    self.level:SetText(levelText)
+    self.level:SetWidth(math.max(60, GetHealthBarWidth() + 80))
+    self.level:SetHeight(math.max(16, (tonumber(GetLevelConfigValue("levelFontSize")) or 11) + 6))
+    self.level:ClearAllPoints()
+    self.level:SetPoint("BOTTOMLEFT", self.health, "TOPLEFT",
+        tonumber(GetLevelConfigValue("levelXOffset")) or 24,
+        tonumber(GetLevelConfigValue("levelYOffset")) or 4)
+    self.level:Show()
+end
 -- Muestra/oculta el icono de clasificación (elite, worldboss, rareelite, rare)
 -- según el slot configurado. Dentro de instancia se oculta siempre.
 function NameplateFrame:UpdateClassification()
@@ -4896,6 +5002,7 @@ function NameplateFrame:RefreshNamePosition()
 
     self:UpdateAuras()
     self:UpdateClassification()
+    self:UpdateLevel()
 end
 -- Muestra/oculta el icono de marca de raid en la posición configurada.
 function NameplateFrame:UpdateRaidIcon()
@@ -5732,6 +5839,7 @@ local PLATE_HANDLER_GROUPS = {
     { "UpdateAbsorbValue",  "UNIT_ABSORB_AMOUNT_CHANGED" },
     { "UpdateAuras",        "LOSS_OF_CONTROL_UPDATE", "LOSS_OF_CONTROL_ADDED" },
     { "UpdateName",         "UNIT_NAME_UPDATE" },
+    { "UpdateLevel",        "UNIT_LEVEL" },
     { "UpdateHealthColor",  "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_FACTION" },
     { "UpdateCast",         "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START",
                             "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE",
@@ -5758,6 +5866,7 @@ local manager = CreateFrame("Frame")
 manager:RegisterEvent("PLAYER_LOGIN")
 manager:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 manager:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+manager:RegisterEvent("UNIT_LEVEL")
 manager:RegisterEvent("PLAYER_TARGET_CHANGED")
 manager:RegisterEvent("PLAYER_FOCUS_CHANGED")
 manager:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
@@ -6180,6 +6289,9 @@ manager:SetScript("OnEvent", function(self, event, unit)
                     nameplate._enoYOffset = true
                 end
                 -- La fuente se aplica globalmente vía SystemFont_NamePlate override
+                if ns.UpdateFriendlyPlayerLevel then
+                    ns.UpdateFriendlyPlayerLevel(nameplate, unit)
+                end
             end
             return
         end
@@ -6200,6 +6312,9 @@ manager:SetScript("OnEvent", function(self, event, unit)
         -- Restaurar elementos del UnitFrame de Blizzard para que el nameplate reciclado quede limpio
         local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
         if nameplate then
+            if ns.UpdateFriendlyPlayerLevel then
+                ns.UpdateFriendlyPlayerLevel(nameplate, nil)
+            end
             RestoreBlizzardFrame(nameplate)
         end
         -- Restaurar color de nombre de NPC si lo teñimos
@@ -6261,6 +6376,15 @@ manager:SetScript("OnEvent", function(self, event, unit)
             newTargetPlate:ApplyTarget()
         end
         ns.currentTargetPlate = newTargetPlate
+    elseif event == "UNIT_LEVEL" then
+        local nameplate = unit and C_NamePlate.GetNamePlateForUnit(unit)
+        if nameplate and ns.UpdateFriendlyPlayerLevel then
+            ns.UpdateFriendlyPlayerLevel(nameplate, unit)
+        end
+        local friendlyPlate = nameplate and ns.friendlyPlatesByNameplate and ns.friendlyPlatesByNameplate[nameplate]
+        if friendlyPlate and friendlyPlate.UpdateLevel then
+            friendlyPlate:UpdateLevel()
+        end
     elseif event == "PLAYER_FOCUS_CHANGED" then
         local focusPct = GetFocusCastHeight()
         local focusNameplate = UnitExists("focus") and C_NamePlate.GetNamePlateForUnit("focus")
@@ -6465,6 +6589,8 @@ do
         AddPresetKeys(
             "textSlotTop", "textSlotRight", "textSlotLeft", "textSlotCenter",
             "nameYOffset",
+            "showLevel", "levelFont", "levelFontSize", "levelFontOutline", "levelShadow",
+            "levelColor", "levelXOffset", "levelYOffset",
             "healthBarHeight", "healthBarWidth", "castBarHeight",
             "castNameSize", "castNameColor", "castTargetSize", "castTargetClassColor", "castTargetColor"
         )

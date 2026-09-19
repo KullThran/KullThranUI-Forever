@@ -4,6 +4,12 @@ local KT = _G.KT
 local Mod = KT:NewModule("ExperienceBar", "AceEvent-3.0", "AceHook-3.0")
 local LSM = LibStub("LibSharedMedia-3.0", true)
 
+local function ExperienceDebug(fmt, ...)
+    if KT and KT.PersistDebug then
+        KT:PersistDebug("EXPBAR " .. fmt, ...)
+    end
+end
+
 local UIParent = _G.UIParent
 local min, max, floor = math.min, math.max, math.floor
 local time = time
@@ -125,16 +131,39 @@ local function CanPlayerGainLevels()
     return maxLevel <= 0 or level < maxLevel
 end
 
+local function GetPlayerXPMax()
+    if UnitXPMax then
+        local ok, value = pcall(UnitXPMax, "player")
+        if ok and type(value) == "number" then return value end
+    end
+    if GetXPMax then
+        local ok, value = pcall(GetXPMax)
+        if ok and type(value) == "number" then return value end
+    end
+    return 0
+end
+
+local function HasUsableXPBar()
+    -- Forever can report the beta cap through CanPlayerGainLevels() while
+    -- still exposing a real XP pool. The bar should remain usable in that
+    -- state; disableAtMaxLevel is the explicit user-controlled policy.
+    return GetPlayerXPMax() > 0
+end
+local DEFAULT_EXPERIENCE_BAR_POINT = "BOTTOM"
+local DEFAULT_EXPERIENCE_BAR_Y = 82
+
 local DEFAULTS = {
     enable = true,
     visible = true,
-    disableAtMaxLevel = true,
+    disableAtMaxLevel = false,
     mode = "AUTO",
     autoTrackReputation = false,
     width = 300,
     height = 10,
+    point = DEFAULT_EXPERIENCE_BAR_POINT,
+    relativePoint = DEFAULT_EXPERIENCE_BAR_POINT,
     x = 0,
-    y = 0,
+    y = DEFAULT_EXPERIENCE_BAR_Y,
     texture = "Melli",
     font = "AAA_ITC_Avant_Garde",
     fontSize = 12,
@@ -144,6 +173,7 @@ local DEFAULTS = {
 }
 
 function Mod:OnInitialize()
+    ExperienceDebug("OnInitialize KT=%s db=%s profile=%s", tostring(KT), tostring(KT and KT.db), tostring(KT and KT.db and KT.db.profile))
     if KT.db and KT.db.profile then
         KT.db.profile.experienceBar = KT.db.profile.experienceBar or {}
         self.db = KT.db.profile.experienceBar
@@ -160,7 +190,21 @@ function Mod:OnInitialize()
             end
             self.db._defaultTrackingModeMigrated_v1 = true
         end
+
+        -- The old module only stored x/y offsets and did not register with
+        -- UnlockMode. Give those profiles a visible, safe starting position
+        -- just above the Blizzard action bars.
+        if not self.db._foreverDefaultPosition20260919a then
+            if not self.db.point and not self.db.relativePoint then
+                self.db.point = DEFAULT_EXPERIENCE_BAR_POINT
+                self.db.relativePoint = DEFAULT_EXPERIENCE_BAR_POINT
+                self.db.x = 0
+                self.db.y = DEFAULT_EXPERIENCE_BAR_Y
+            end
+            self.db._foreverDefaultPosition20260919a = true
+        end
     end
+    ExperienceDebug("initialized db=%s enable=%s visible=%s mode=%s", tostring(self.db), tostring(self.db and self.db.enable), tostring(self.db and self.db.visible), tostring(self.db and self.db.mode))
 end
 
 function Mod:OnEnable()
@@ -183,6 +227,7 @@ function Mod:OnEnable()
     self:RegisterEvent("DISABLE_XP_GAIN", "UpdateBar")
 
     self:Refresh()
+    ExperienceDebug("OnEnable frame=%s shown=%s mode=%s xpMax=%s", tostring(self.frame), tostring(self.frame and self.frame:IsShown()), tostring(self:GetTrackingMode()), tostring(GetPlayerXPMax()))
 end
 
 function Mod:OnDisable()
@@ -297,7 +342,7 @@ end
 function Mod:GetTrackingMode()
     local mode = (self.db and self.db.mode) or "AUTO"
     if mode == "AUTO" then
-        if CanPlayerGainLevels() then
+        if HasUsableXPBar() then
             return "XP"
         end
         if self:ShouldAutoTrackHonor() then
@@ -309,7 +354,10 @@ function Mod:GetTrackingMode()
                 return "REPUTATION"
             end
         end
-        return "NONE"
+        -- Forever may expose the XP API with a zero/secret max at the level
+        -- cap. Keep the module in XP mode so the replacement frame remains
+        -- available instead of silently disappearing as mode NONE.
+        return "XP"
     end
     return mode
 end
@@ -360,7 +408,7 @@ end
 function Mod:EnsureFrame()
     if self.frame then return end
     local f = CreateFrame("Frame", "KT_ExperienceBar", UIParent)
-    f:SetFrameStrata("BACKGROUND")
+    f:SetFrameStrata("MEDIUM")
     f:SetFrameLevel(10)
     f:SetSize(400, 12)
     f:SetClampedToScreen(true)
@@ -393,22 +441,81 @@ function Mod:EnsureFrame()
         KT:AddBorder(f, 0, 0, 0, 1)
     end
 
-    local EM = KT:GetModule("EditMode", true)
-    if EM then
-        EM:RegisterFrame(f, "Experience Bar", "experience_bar", {
-            resizable = false,
-            onDragStop = function()
+    self.frame = f
+
+    -- Register against KUI UnlockMode. The previous EditMode registration
+    -- was not consumed by the current mover registry, so the bar could not be
+    -- selected or saved from UnlockMode.
+    if KT.RegisterUnlockElement then
+        KT.RegisterUnlockElement("experience_bar", {
+            label = "Experience Bar",
+            group = "Progress Bars",
+            order = 25,
+            getFrame = function()
+                return f
+            end,
+            getSize = function()
+                return f:GetWidth(), f:GetHeight()
+            end,
+            getScale = function()
+                return f:GetScale()
+            end,
+            setScale = function(_, scale)
+                if scale and f.SetScale then
+                    f:SetScale(scale)
+                end
+            end,
+            isHidden = function()
+                return false
+            end,
+            loadPosition = function()
+                local saved = KT.db and KT.db.profile
+                    and KT.db.profile.editMode
+                    and KT.db.profile.editMode.frames
+                    and KT.db.profile.editMode.frames.experience_bar
+                if saved and saved.point then
+                    return {
+                        point = saved.point,
+                        relativePoint = saved.relativePoint or saved.point,
+                        x = saved.x or 0,
+                        y = saved.y or 0,
+                        scale = saved.scale or f:GetScale() or 1,
+                    }
+                end
+                return {
+                    point = Mod.db.point or DEFAULT_EXPERIENCE_BAR_POINT,
+                    relativePoint = Mod.db.relativePoint or Mod.db.point or DEFAULT_EXPERIENCE_BAR_POINT,
+                    x = tonumber(Mod.db.x) or 0,
+                    y = tonumber(Mod.db.y) or DEFAULT_EXPERIENCE_BAR_Y,
+                    scale = f:GetScale() or 1,
+                }
+            end,
+            savePosition = function(_, point, relativePoint, x, y, scale)
                 if not Mod.db then return end
-                local point, _, relativePoint, x, y = f:GetPoint()
-                Mod.db.point = point
-                Mod.db.relativePoint = relativePoint
-                Mod.db.x = x
-                Mod.db.y = y
+                Mod.db.point = point or DEFAULT_EXPERIENCE_BAR_POINT
+                Mod.db.relativePoint = relativePoint or Mod.db.point
+                Mod.db.x = tonumber(x) or 0
+                Mod.db.y = tonumber(y) or 0
+                if scale and f.SetScale then
+                    f:SetScale(scale)
+                end
+                Mod:ApplyLayout()
+            end,
+            applyPosition = function()
+                local saved = KT.db and KT.db.profile
+                    and KT.db.profile.editMode
+                    and KT.db.profile.editMode.frames
+                    and KT.db.profile.editMode.frames.experience_bar
+                if saved and saved.point and Mod.db then
+                    Mod.db.point = saved.point
+                    Mod.db.relativePoint = saved.relativePoint or saved.point
+                    Mod.db.x = tonumber(saved.x) or 0
+                    Mod.db.y = tonumber(saved.y) or 0
+                end
+                Mod:ApplyLayout()
             end,
         })
     end
-
-    self.frame = f
 end
 
 function Mod:ApplyLayout()
@@ -459,11 +566,6 @@ function Mod:UpdateBar()
     if mode == "NONE" then
         barActive = false
     end
-
-    if mode == "XP" and not CanPlayerGainLevels() then
-        barActive = false
-    end
-
     if mode == "XP" and db.disableAtMaxLevel and IsMaxLevel() then
         barActive = false
     end

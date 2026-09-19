@@ -22,7 +22,6 @@ ns.PAGE_ICON_MAP = {
     tooltip        = "Tooltip",
     armory         = "Armory",
     inspectarmory  = "Inspect",
-    dragonriding   = "DragonRiding",
     expbar         = "ExperienceBar",
     chat           = "Chat",
     bags           = "Bags",
@@ -68,7 +67,6 @@ ns.PAGE_CATEGORY_MAP = {
     objectivetracker = "hud_navigation",
     expbar = "hud_navigation",
     minimap = "hud_navigation",
-    dragonriding = "hud_navigation",
     teleportmenu = "hud_navigation",
 
     chat = "utility_social",
@@ -101,7 +99,6 @@ ns.MODULE_ICON_MAP = {
     objectivetracker = "Tracker",
     expbar = "ExperienceBar",
     minimap = "Minimap",
-    dragonriding = "DragonRiding",
     teleportmenu = "TeleportMenu",
     chat = "Chat",
     bags = "Bags",
@@ -143,7 +140,6 @@ ns.MODULE_DESCRIPTION_MAP = {
     objectivetracker = "Customize quests, objectives and scenario tracking.",
     expbar = "Track experience, reputation and other progression values.",
     minimap = "Configure the minimap, buttons and navigation information.",
-    dragonriding = "Customize skyriding vigor and related movement information.",
     teleportmenu = "Access hearthstones, portals and teleportation spells quickly.",
 
     chat = "Customize chat windows, private conversations and message behavior.",
@@ -911,8 +907,8 @@ local function LTextFmt(text, ...)
     return fmt
 end
 
-local CHANGELOG_WAGO_URL = "https://addons.wago.io/addons/kullthranui/versions"
-local CHANGELOG_FILES_URL = "https://www.curseforge.com/wow/addons/kui-kullthranui/files/all?page=1&pageSize=20&showAlphaFiles=show"
+local CHANGELOG_WAGO_URL = "https://addons.wago.io/addons/kullthranui-forever/versions"
+local CHANGELOG_FILES_URL = "https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show"
 local CHANGELOG_DISCORD_URL = "https://discord.gg/cqAVWpeVvd"
 
 local function EnsureDiscordPopupDialog()
@@ -958,15 +954,37 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "5.0.7"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.2"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.0.2"] = {
+        version = "0.0.2",
+        published = "2026-09-19",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Cumulative WoW Forever beta migration from the 0.0.1 baseline; Retail remains on 5.0.7.",
+            "Updated package and module metadata, Forever detection, reduced-API guards, protected values, and secret-value handling.",
+            "Fixed Installer persistence, Don't show again, changelog suppression, language selection, profile startup, reload continuation, and Unlock Mode saved positions.",
+            "Restored the Experience Bar module and Unlock Mode registration with a safe default above the Blizzard action bars.",
+            "Removed Dragon Riding and Mythic+ Timer from the Forever flow; retained Mythic+ History as Dungeon History and disabled Combat Timer by default.",
+            "Added Forever-safe Aura Reminders and Party Frame missing-buff filtering for available spells, instances, items, and weapon enchants.",
+            "Added configurable Unit Frame and Party Frame levels, PvP indicators, Elite/Rare icons, circular portrait defaults, portrait borders, and immediate dispel-overlay toggles.",
+            "Added visible Unit Frames and Party Frames toggles and live-preview rendering for level and PvP indicators; Target metadata mirrors to the right side when its portrait is on the right.",
+            "Moved Target portrait to the right by default and made Target metadata follow the actual portrait anchor.",
+            "Added friendly-player levels to Nameplates with configurable font, size, outline, shadow, color, X, and Y.",
+            "Fixed Objective Tracker accent quest titles, Armory Forever visibility/stats, Skins nil callbacks, BlizzMove frame detection, TeleportMenu cooldown handling, and protected chat paths.",
+            "Patched Rogue/Feral Combo Points across Resource Bars, Unit Frames, oUF ClassPower, and the oUF cpoints tag so secret numbers are never compared or arithmetized in Lua.",
+            "Fixed outgoing whisper history for Forever lineID 0 events and adjusted the default Damage Meter position.",
+            "Persistence diagnostics are off by default; Lua syntax and repository whitespace checks completed successfully.",
+        },
+    },
     ["5.0.7"] = {
         version = "5.0.7",
         published = "2026-09-18",
         sourceLabel = "GitHub",
-        sourceUrl = "https://github.com/KullThran/KullThranUI/releases",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
         notes = {
             "Added WoW Forever and WoW Forever Beta detection to Enhanced Friend List, including the dedicated WoW Forever artwork and distinct tooltip labels.",
             "Hardened Enhanced Friend List native tab handoff and embedded Raid navigation while preserving Blizzard's protected click path.",
@@ -1148,12 +1166,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "5.0.7"
+        or "0.0.2"
     -- When loaded from the source tree without the BigWigs packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "5.0.7"
+        ver = "0.0.2"
     end
     return ver
 end
@@ -1638,6 +1656,10 @@ function KT:ShowChangelogPopup(version)
     popup.changelogVersion = requestedVersion
     popup.header:SetText(LText("Changelog"))
     popup.body:SetText(bodyText)
+    if self.db and self.db.global then
+        self.db.global.changelog = self.db.global.changelog or {}
+        self.db.global.changelog.lastAutoShownVersion = requestedVersion
+    end
     RefreshChangelogPopupTheme(popup)
     RefreshChangelogPopupLayout(popup)
     popup:Show()
@@ -2204,7 +2226,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "5.0.7")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.2")))
     end
 
     for _, btn in ipairs(menu._sizePresetButtons or {}) do
@@ -2814,7 +2836,6 @@ local MODULE_PAGE_RESTORE_CONFIG = {
         end,
     },
     buffs = { profileKeys = { "buffsAndDebuffs" } },
-    dragonriding = { profileKeys = { "dragonRiding" } },
     expbar = { profileKeys = { "experienceBar" } },
     external = {
         profileKeys = { "uufIntegration" },
@@ -3860,12 +3881,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "5.0.7") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.2") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "5.0.7"
+	f._versionValue = KT.VERSION or "0.0.2"
 
     -- Corrupted generated comment removed.
     local nav = CreateFrame("Frame", nil, f)
@@ -5197,11 +5218,9 @@ local PROFILE_MODULE_ICON_MAP = {
     tooltip = "Tooltip",
     armory = "Armory",
     inspectarmory = "Inspect",
-    dragonriding = "DragonRiding",
     expbar = "ExperienceBar",
     enhancements = "Enhacements",
     damagemeter = "Enhacements",
-    mythicplustimer = "Enhacements",
     objectivetracker = "Tracker",
     nameplates = "Nameplates",
     aurareminders = "AuraReminders",
@@ -5865,7 +5884,28 @@ local function BuildGeneralCore(sc, W, y)
                 ["zhTW"] = "Traditional Chinese", ["zhCN"] = "Simplified Chinese"
             },
             function() return KT.db.profile.language end,
-            function(v) KT.db.profile.language = v; ReloadUI() end,
+            function(v)
+                KT.db.profile.language = v
+                KT.db.global = KT.db.global or {}
+                KT.db.global.kuiLanguageByProfile = KT.db.global.kuiLanguageByProfile or {}
+                KT.db.global.kuiLanguageByCharacter = KT.db.global.kuiLanguageByCharacter or {}
+                local profileName = KT.db.GetCurrentProfile and KT.db:GetCurrentProfile() or "Default"
+                local characterKey = KT.GetInstallerCharacterKey and KT:GetInstallerCharacterKey() or nil
+                KT.db.global.kuiLanguageByProfile[profileName] = v
+                if characterKey then
+                    KT.db.global.kuiLanguageByCharacter[characterKey] = v
+                end
+                if KT.NormalizeProfileFontsForLocale then
+                    pcall(KT.NormalizeProfileFontsForLocale, KT)
+                end
+                if KT.FlushPersistence then
+                    KT:FlushPersistence()
+                end
+                -- ReloadUI() directly from a dropdown OnClick is protected on
+                -- Forever and can produce the generic "interface action"
+                -- error. Reuse KUI's confirmation popup instead.
+                Reload()
+            end,
             { "auto", "enUS", "esES", "frFR", "deDE", "itIT", "ptBR", "ruRU", "koKR", "zhTW", "zhCN" },
             { localeFlags = true }
         ); by = by + h
@@ -6619,7 +6659,6 @@ local function BuildFontsColorsTab(sc, W, y)
         by = AddFontChoice(container, LText("Minimap Statistics"), by, profile.minimap, "statsFont")
         by = AddFontChoice(container, LText("Tooltip"), by, profile.tooltip, "font")
         by = AddFontChoice(container, LText("Cast Bar"), by, profile.castbar, "font")
-        by = AddFontChoice(container, LText("Dragon Riding"), by, profile.dragonRiding, "font")
         by = AddFontChoice(container, LText("Experience Bar"), by, profile.experienceBar, "font")
         return by
     end)
@@ -6936,7 +6975,6 @@ local function BuildDisableModulesTab(sc, W, y)
     KT.db.profile.castbar = KT.db.profile.castbar or { enable = true }
     KT.db.profile.tooltip = KT.db.profile.tooltip or { enable = true }
     KT.db.profile.armory = KT.db.profile.armory or { enable = true }
-    KT.db.profile.dragonRiding = KT.db.profile.dragonRiding or { enable = true }
     KT.db.profile.experienceBar = KT.db.profile.experienceBar or { enable = true }
     KT.db.profile.chat = KT.db.profile.chat or { enable = true }
     KT.db.profile.bags = KT.db.profile.bags or { enable = true }
@@ -6944,8 +6982,7 @@ local function BuildDisableModulesTab(sc, W, y)
     KT.db.profile.enhancements = KT.db.profile.enhancements or { enable = true }
     KT.db.profile.externalAddons = KT.db.profile.externalAddons or { enable = true }
     KT.db.profile.enhancements.damageMeter = KT.db.profile.enhancements.damageMeter or { moduleEnabled = true }
-    KT.db.profile.enhancements.mplusTracker = KT.db.profile.enhancements.mplusTracker or { enabled = true }
-    if KT.db.profile.enhancements.mplusTracker.enabled == nil then KT.db.profile.enhancements.mplusTracker.enabled = true end
+    KT.db.profile.enhancements.mplusTracker = KT.db.profile.enhancements.mplusTracker or { enabled = false }
     KT.db.profile.unitFrames = KT.db.profile.unitFrames or { enable = true }
     KT.db.profile.partyFrames = KT.db.profile.partyFrames or { enable = true }
     KT.db.profile.cursor = KT.db.profile.cursor or { enable = true }
@@ -6967,14 +7004,12 @@ local function BuildDisableModulesTab(sc, W, y)
         { label = "Cast Bar", get = function() return KT.db.profile.castbar.enable end, set = function(v) KT.db.profile.castbar.enable = v; Reload() end },
         { label = "Tooltip", get = function() return KT.db.profile.tooltip.enable end, set = function(v) KT.db.profile.tooltip.enable = v; Reload() end },
         { label = "Armory", get = function() return KT.db.profile.armory.enable end, set = function(v) KT.db.profile.armory.enable = v; Reload() end },
-        { label = "Dragon Riding", get = function() return KT.db.profile.dragonRiding.enable end, set = function(v) KT.db.profile.dragonRiding.enable = v; Reload() end },
         { label = "Experience Bar", get = function() return KT.db.profile.experienceBar.enable end, set = function(v) KT.db.profile.experienceBar.enable = v; Reload() end },
         { label = "Chat", get = function() return KT.db.profile.chat.enable end, set = function(v) KT.db.profile.chat.enable = v; Reload() end },
         { label = "Bags", get = function() return KT.db.profile.bags.enable end, set = function(v) KT.db.profile.bags.enable = v; Reload() end },
         { label = "Objective Tracker", get = function() return KT.db.profile.objectiveTracker.enable ~= false end, set = function(v) KT.db.profile.objectiveTracker.enable = v; Reload() end },
         { label = LText("Enhancements"), get = function() return KT.db.profile.enhancements.enable ~= false end, set = function(v) KT.db.profile.enhancements.enable = v; Reload() end },
         { label = "   - " .. LText("Damage Meter"), get = function() return KT.db.profile.enhancements.damageMeter.moduleEnabled ~= false end, set = function(v) KT.db.profile.enhancements.damageMeter.moduleEnabled = v and true or false; Reload() end },
-        { label = "   - " .. LText("Mythic+ Timer"), get = function() return KT.db.profile.enhancements.mplusTracker.enabled ~= false end, set = function(v) KT.db.profile.enhancements.mplusTracker.enabled = v and true or false; Reload() end },
         { label = "External Addons", get = function() return KT.db.profile.externalAddons.enable ~= false end, set = function(v) KT.db.profile.externalAddons.enable = v; Reload() end },
         { label = "Unit Frames", get = function() return KT.db.profile.unitFrames.enable ~= false end, set = function(v) KT.db.profile.unitFrames.enable = v; Reload() end },
         { label = "Party Frames", get = function() return KT.db.profile.partyFrames.enable ~= false end, set = function(v) KT.db.profile.partyFrames.enable = v; Reload() end },

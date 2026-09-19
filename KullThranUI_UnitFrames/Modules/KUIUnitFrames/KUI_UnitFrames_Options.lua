@@ -380,7 +380,7 @@ local function ScrollToOptionBlock(block)
         hl:SetBlendMode("ADD")
         hl:Hide()
         block._previewHighlight = hl
-        
+
         local ag = hl:CreateAnimationGroup()
         local a1 = ag:CreateAnimation("Alpha")
         a1:SetFromAlpha(0)
@@ -396,7 +396,7 @@ local function ScrollToOptionBlock(block)
         ag:SetScript("OnPlay", function() hl:Show() end)
         block._previewHighlightAnim = ag
     end
-    
+
     if block._previewHighlightAnim then
         block._previewHighlightAnim:Stop()
         block._previewHighlightAnim:Play()
@@ -908,23 +908,23 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
             return (db.portraitStyle == "circular" and mode == "3d") and "2d" or mode
         end,
         function(v) SetAndRefresh(function() s.portraitMode = v end) end); y = y + h
-    
+
     -- Portrait Side (for attached and circular portraits)
     if db.portraitStyle ~= "none" then
         _, h = W:Dropdown(sc, "Portrait Side", -y, PORTRAIT_SIDES,
-            function() 
+            function()
                 local defaultSide = (unitKey == "player" or unitKey == "pet") and "left" or "right"
-                return s.portraitSide or defaultSide 
+                return s.portraitSide or defaultSide
             end,
             function(v) SetAndRefresh(function() s.portraitSide = v end) end); y = y + h
     end
-    
+
     if opts.allowPortraitFacing then
         _, h = W:Dropdown(sc, "Portrait Facing", -y, PORTRAIT_FACING,
             function() return s.portraitFacing or GetDefaultPortraitFacing(unitKey) end,
             function(v) SetAndRefresh(function() s.portraitFacing = v end) end); y = y + h
     end
-    
+
     -- Portrait position and size controls (always shown when portrait options exist)
     _, h = W:Slider(sc, "Portrait Size Adjustment", -y,
         function() return s.portraitSize or 0 end,
@@ -959,7 +959,7 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
         _, h = W:Toggle(sc, opts.showDispelOverlayLabel or "Dispel Overlay", -y,
             function() return s[opts.showDispelOverlayKey] ~= false end,
             function(v) SetAndRefresh(function() s[opts.showDispelOverlayKey] = v end) end); y = y + h
-            
+
         local function AddColorSwatch(key, label, defR, defG, defB)
             _, h = W:ColorSwatch(sc, label, -y,
                 function()
@@ -1082,7 +1082,7 @@ local function CreateUnitFramesLivePreview(parent, options)
         end
     end
     preview:Refresh()
-    
+
     -- Store preview frames for external access
     preview.playerPreview = playerPreview
     preview.targetPreview = targetPreview
@@ -1090,7 +1090,7 @@ local function CreateUnitFramesLivePreview(parent, options)
     preview.petPreview = petPreview
     preview.targetTargetPreview = targetTargetPreview
     preview.focusTargetPreview = focusTargetPreview
-    
+
     return preview
 end
 
@@ -1157,9 +1157,53 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
             _, h = W:Toggle(container, 'Enable Module', -by,
                 function() return db.enable ~= false end,
                 function(v)
-                    db.enable = v
+                    db.enable = v and true or false
+                    local module = GetModule()
+                    if module then
+                        if v then module:Enable() else module:Disable() end
+                    end
                     ReloadUI()
                 end); by = by + h
+            _, h = W:Toggle(container, 'Show Character Level', -by,
+                function() return db.showCharacterLevel ~= false end,
+                function(v) SetAndRefresh(function() db.showCharacterLevel = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Show Elite / Rare Indicator', -by,
+                function() return db.showClassification ~= false end,
+                function(v) SetAndRefresh(function() db.showClassification = v and true or false end) end); by = by + h
+            _, h = W:Dropdown(container, 'Level Font', -by, FontValues,
+                function() return db.levelFont or 'AAA_ITC_Avant_Garde' end,
+                function(v) SetAndRefresh(function() db.levelFont = v end) end); by = by + h
+            _, h = W:Slider(container, 'Level Font Size', -by,
+                function() return db.levelFontSize or 11 end,
+                function(v) SetAndRefresh(function() db.levelFontSize = v end) end,
+                6, 48, 1, '%d'); by = by + h
+            local LEVEL_OUTLINE_VALUES = {
+                [''] = 'None', ['OUTLINE'] = 'Outline', ['THICKOUTLINE'] = 'Thick Outline',
+                ['MONOCHROME'] = 'Monochrome', ['OUTLINEMONOCHROME'] = 'Monochrome Outline',
+            }
+            local LEVEL_OUTLINE_ORDER = { '', 'OUTLINE', 'THICKOUTLINE', 'MONOCHROME', 'OUTLINEMONOCHROME' }
+            _, h = W:Dropdown(container, 'Level Text Outline', -by, LEVEL_OUTLINE_VALUES,
+                function() return db.levelFontOutline or 'OUTLINE' end,
+                function(v) SetAndRefresh(function() db.levelFontOutline = v end) end,
+                LEVEL_OUTLINE_ORDER); by = by + h
+            _, h = W:ColorSwatch(container, 'Level Text Color', -by,
+                function()
+                    local c = db.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
+                    return c.r, c.g, c.b, c.a
+                end,
+                function(r, g, b, a)
+                    SetAndRefresh(function()
+                        db.levelColor = { r = r, g = g, b = b, a = a or 1 }
+                    end)
+                end, false); by = by + h
+            _, h = W:Slider(container, 'Level X Offset', -by,
+                function() return db.levelX or 2 end,
+                function(v) SetAndRefresh(function() db.levelX = v end) end,
+                -100, 100, 1, '%d'); by = by + h
+            _, h = W:Slider(container, 'Level Y Offset', -by,
+                function() return db.levelY or 2 end,
+                function(v) SetAndRefresh(function() db.levelY = v end) end,
+                -100, 100, 1, '%d'); by = by + h
             _, h = W:Dropdown(container, 'Portrait Style', -by, PORTRAIT_STYLES,
                 function() return db.portraitStyle or 'attached' end,
                 function(v) SetAndRefresh(function() db.portraitStyle = v end) end); by = by + h

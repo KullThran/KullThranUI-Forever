@@ -225,16 +225,18 @@ end
 local function GetActiveCategory()
     local db = DB()
     db.ui = db.ui or {}
-    if not db.ui.activeEnhancementCategory then
-        db.ui.activeEnhancementCategory = "instance"
+    local key = db.ui.activeEnhancementCategory
+    if not key or key == "timer" then
+        key = "instance"
+        db.ui.activeEnhancementCategory = key
     end
-    return db.ui.activeEnhancementCategory
+    return key
 end
 
 local function SetActiveCategory(key)
     local db = DB()
     db.ui = db.ui or {}
-    db.ui.activeEnhancementCategory = key
+    db.ui.activeEnhancementCategory = key == "timer" and "instance" or key
 end
 
 local function GetSystemSectionState(key, defaultOpen)
@@ -252,7 +254,7 @@ local function SetSystemSectionState(key, value)
     db.ui.activeEnhancementSystemSection = value and key or nil
 end
 
-local CATEGORY_ORDER = { "instance", "damage", "timer", "automation", "interface", "system" }
+local CATEGORY_ORDER = { "instance", "damage", "automation", "interface", "system" }
 
 local CATEGORY_META = {
     instance = {
@@ -855,7 +857,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         end
     end
 
-    MakeEnhancementPreviewClickable(preview, "timer")
+
     preview:SetScript("OnUpdate", function(self, elapsed)
         self._acc = (self._acc or 0) + elapsed
         if self._acc < 0.15 then
@@ -2263,21 +2265,21 @@ local function BuildSystemAccordion(parent, W, db, startY)
     return y
 end
 
-local function BuildMythicPlusHistoryBlock(container, W, db)
-    local history = Mod.MythicPlusHistory
+local function BuildDungeonHistoryBlock(container, W, db)
+    local history = Mod.DungeonHistory or Mod.MythicPlusHistory
     if not history then return 0 end
     local config = history:Config()
     local y, h = 0, 0
-    _, h = W:Toggle(container, LText("Record Mythic+ history"), -y,
+    _, h = W:Toggle(container, LText("Record dungeon history"), -y,
         function() return config.enabled == true end,
         function(value)
             config.enabled = value and true or false
             if config.enabled then
-                KT:Print(LText("Mythic+ History will initialize after /reload."))
+                KT:Print(LText("Dungeon History will initialize after /reload."))
             end
         end)
     y = y + h
-    _, h = W:Toggle(container, LText("Open history after completing a key"), -y,
+    _, h = W:Toggle(container, LText("Open history after completing a dungeon"), -y,
         function() return config.autoShow ~= false end,
         function(value) config.autoShow = value and true or false end)
     y = y + h
@@ -2291,19 +2293,19 @@ local function BuildMythicPlusHistoryBlock(container, W, db)
         function() local _, order = BuildTrackerMediaChoices("font"); return order end,
         "font")
     y = y + h
-    _, h = W:Button(container, LText("Open Mythic+ history"), -y,
-        function() if Mod.ShowMythicPlusHistory then Mod:ShowMythicPlusHistory() end end)
+    _, h = W:Button(container, LText("Open dungeon history"), -y,
+        function() if Mod.ShowDungeonHistory then Mod:ShowDungeonHistory() elseif Mod.ShowMythicPlusHistory then Mod:ShowMythicPlusHistory() end end)
     y = y + h
     _, h = W:Button(container, LText("Preview history (not saved)"), -y,
         function() if history.Preview then history:Preview() end end)
     y = y + h
-    _, h = W:Label(container, LText("Stores 50 keys per character and imports available Blizzard history. Imported keys have no historical gear or party data. Open with /ktkeys."), -y, 11)
+    _, h = W:Label(container, LText("Stores 50 dungeons per character. New runs include the party data KUI can capture. Open with /ktdungeons."), -y, 11)
     return y + h + 6
 end
 
 local CATEGORY_SECTIONS = {
     instance = {
-        { column = "left", title = LText("Mythic+ History"), build = BuildMythicPlusHistoryBlock },
+        { column = "left", title = LText("Dungeon History"), build = BuildDungeonHistoryBlock },
         { column = "left", title = LText("Combat Res"), build = BuildCombatRezBlock },
         { column = "right", title = LText("Equipment Reminder"), build = BuildEquipmentReminderBlock },
         { column = "left", title = LText("Items / Loot"), build = BuildItemsLootBlock },

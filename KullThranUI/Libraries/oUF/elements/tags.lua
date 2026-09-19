@@ -179,11 +179,14 @@ local tagStrings = {
 	['cpoints'] = [[function(u)
 		local cp = UnitPower(u, Enum.PowerType.ComboPoints)
 
-		if(cp > 0) then
-			return cp
+		if issecretvalue and issecretvalue(cp) then
+		    return cp
 		end
-	end]],
+		if cp and cp > 0 then
+		    return cp
+		end
 
+    end]],
 	['creature'] = [[function(u)
 		return UnitCreatureFamily(u) or UnitCreatureType(u)
 	end]],

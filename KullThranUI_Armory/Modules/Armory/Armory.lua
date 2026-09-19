@@ -19,7 +19,7 @@ local GetAverageItemLevel = GetAverageItemLevel
 local GetItemInfo = GetItemInfo
 local C_Item = C_Item
 local C_TooltipInfo = C_TooltipInfo
-local hooksecurefunc = hooksecurefunc
+
 local ItemLocation = ItemLocation
 local UnitClass = UnitClass
 local UnitName = UnitName
@@ -28,10 +28,12 @@ local GetZoneText = GetZoneText
 local C_ChallengeMode = C_ChallengeMode
 local C_ClassColor = C_ClassColor
 local MenuUtil = MenuUtil
-local GetSpecialization = GetSpecialization
-local GetSpecializationInfo = GetSpecializationInfo
+local GetSpecialization = type(GetSpecialization) == "function" and GetSpecialization or function() return nil end
+local GetSpecializationInfo = type(GetSpecializationInfo) == "function" and GetSpecializationInfo or function() return nil end
 local UnitStat = UnitStat
 local UnitArmor = UnitArmor
+local UnitResistance = UnitResistance
+local UnitWeaponAttackPower = UnitWeaponAttackPower
 local GetCritChance = GetCritChance
 local GetHaste = GetHaste
 local UnitSpellHaste = UnitSpellHaste
@@ -133,6 +135,53 @@ local function SafeArmoryNumberCall(func, ...)
 
     return SafeArmoryNumber(a), SafeArmoryNumber(b), SafeArmoryNumber(c), SafeArmoryNumber(d), SafeArmoryNumber(e)
 end
+
+local function ArmoryLabel(icon, text, fallback)
+    return (type(icon) == "string" and icon or "") .. (text or fallback or "")
+end
+
+local function ArmoryDamageClass(nameToken, enumName)
+    local damageClass = _G.Enum and _G.Enum.Damageclass and _G.Enum.Damageclass[enumName]
+    local name = _G[nameToken]
+    if damageClass == nil or type(name) ~= "string" or name == "" then
+        return nil
+    end
+    return { damageClass = damageClass, name = name }
+end
+-- Forever's localized PaperDollFrameStats can expose SPELL_STAT*_NAME
+-- (for example "Fuerza") without creating the matching *_TOOLTIP globals.
+-- Blizzard's PaperDollFrame_SetStatTooltip2 formats those globals directly,
+-- so provide aliases only when they are absent, during addon initialization.
+local function EnsurePaperDollStatTooltipLocales()
+    local statTokens = { "STRENGTH", "AGILITY", "STAMINA", "INTELLECT", "SPIRIT" }
+    local classTokens = {
+        "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST",
+        "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID",
+    }
+    local safeFallback = "Additional stat information is unavailable."
+
+    for index, englishToken in ipairs(statTokens) do
+        local localizedName = _G["SPELL_STAT" .. index .. "_NAME"]
+        if type(localizedName) == "string" and localizedName ~= "" then
+            local localizedToken = strupper(localizedName)
+            if localizedToken ~= englishToken then
+                local defaultKey = "DEFAULT_" .. localizedToken .. "_TOOLTIP"
+                local defaultText = _G["DEFAULT_" .. englishToken .. "_TOOLTIP"] or safeFallback
+                if not _G[defaultKey] then
+                    _G[defaultKey] = defaultText
+                end
+
+                for _, classToken in ipairs(classTokens) do
+                    local localizedKey = classToken .. "_" .. localizedToken .. "_TOOLTIP"
+                    if not _G[localizedKey] then
+                        _G[localizedKey] = _G[classToken .. "_" .. englishToken .. "_TOOLTIP"] or defaultText
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- GetSpeed is the tertiary Speed stat, not total movement. Use the run-speed
 -- result from GetUnitSpeed and normalize the 7 yards/sec base to 100%.
 local ARMORY_BASE_RUN_SPEED = 7
@@ -147,7 +196,7 @@ local function GetArmorySpeedPercent()
         return (unitSpeed / ARMORY_BASE_RUN_SPEED) * 100
     end
 
-    return 100
+    return nil
 end
 local function GetArmoryHastePercent()
     -- UnitSpellHaste matches the character-sheet value and
@@ -157,7 +206,7 @@ local function GetArmoryHastePercent()
         return haste
     end
 
-    return SafeArmoryNumberCall(GetHaste) or 0
+    return SafeArmoryNumberCall(GetHaste)
 end
 local function GetArmoryAccentColor(alpha)
     local skin = KT and KT.db and KT.db.profile and KT.db.profile.skin or nil
@@ -405,6 +454,7 @@ local CLASS_BACKGROUND_FILES = {
 }
 
 function AR:OnInitialize()
+    EnsurePaperDollStatTooltipLocales()
     local LSM = LibStub("LibSharedMedia-3.0", true)
     if LSM then
         LSM:Register("background", "Blizzard Quest Log", "Interface\\QuestFrame\\UI-QuestLog-Book-BG")
@@ -422,7 +472,7 @@ function AR:OnInitialize()
             avgIlvlPvPColor = {r=0.00, g=0.50, b=1.00, a=1}, avgIlvlPvPOffsetX = 0, avgIlvlPvPOffsetY = -2,
             showEnchant = true, enchantSize = 10, enchantFont = "Friz Quadrata TT", enchantColor = {r=0.00, g=1.00, b=0.6156862745, a=1},
             enchantX = 0, enchantY = 2, avgIlvlFontSize = 20,
-            
+
             -- Opciones de Puntuación M+
             scoreType = "M+",
             scoreFont = "Friz Quadrata TT", scoreSize = 22, scoreOutline = "OUTLINE",
@@ -482,39 +532,37 @@ function AR:OnInitialize()
     self.db.secondaryStatDisplayMode = self.db.secondaryStatDisplayMode or "percent"
 end
 
+local HideNativeArmoryStats
+
 function AR:OnEnable()
     if not self.db.enable then return end
 
-    if _G.CharacterFrame then 
+    if _G.CharacterFrame then
         _G.CharacterFrame:SetScale(self.db.scale)
 
         -- Ocultar textos de Blizzard
-        if _G.CharacterFrame.TitleText then 
+        if _G.CharacterFrame.TitleText then
              _G.CharacterFrame.TitleText:Hide()
-             hooksecurefunc(_G.CharacterFrame.TitleText, "Show", function(self) self:Hide() end)
+
         end
-        if _G.CharacterLevelText then 
+        if _G.CharacterLevelText then
              _G.CharacterLevelText:Hide()
-             hooksecurefunc(_G.CharacterLevelText, "Show", function(self) self:Hide() end)
+
         end
-        if _G.CharacterNameText then _G.CharacterNameText:Hide() end 
-        
+        if _G.CharacterNameText then _G.CharacterNameText:Hide() end
+
         -- Ocultar retrato nativo
         if _G.CharacterFramePortrait then
             if not self.db.showPortrait then _G.CharacterFramePortrait:Hide() end
-            hooksecurefunc(_G.CharacterFramePortrait, "Show", function(self) 
-                if not AR.db.showPortrait then self:Hide() end 
-            end)
+
         end
-        
+
         -- Crear Cabecera Personalizada
         self:CreateHeader()
     end
 
-    self:SecureHook("PaperDollItemSlotButton_Update", "UpdateSlot")
-    self:SecureHook("PaperDollFrame_UpdateStats", "UpdateMyStats")
 
-    self:RegisterEvent("UNIT_PORTRAIT_UPDATE", "UpdateHeader") 
+    self:RegisterEvent("UNIT_PORTRAIT_UPDATE", "UpdateHeader")
     self:RegisterEvent("UNIT_MODEL_CHANGED", "UpdateHeader")
     self:RegisterEvent("UPDATE_SHAPESHIFT_FORM", "UpdateHeader")
     self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -523,41 +571,36 @@ function AR:OnEnable()
     self:RegisterEvent("PLAYER_LEVEL_UP", "UpdateHeader")
     self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "RefreshEquippedItems")
     self:RegisterEvent("UNIT_INVENTORY_CHANGED", "RefreshEquippedItems")
-    
+
     self:RegisterEvent('PLAYER_MOUNT_DISPLAY_CHANGED', 'RefreshMovementStats')
-    self:RegisterEvent('UNIT_AURA', 'RefreshMovementStats')
-    self:CreateStatsPanel() 
-    self:CreateConfigButton() 
-    self:CreateBackgroundSelector() 
-    
-    C_Timer.After(0.5, function() self:SafeRefresh() end)
-    
-    _G.CharacterFrame:HookScript("OnShow", function() 
-        C_Timer.After(0.1, function()
-            self:SafeRefresh()
-        end)
-        
-        if _G.InspectFrame and _G.InspectFrame:IsShown() then
-             _G.CharacterFrame:ClearAllPoints()
-             _G.CharacterFrame:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", 40, -40)
-             _G.InspectFrame:ClearAllPoints()
-             _G.InspectFrame:SetPoint("TOPLEFT", _G.CharacterFrame, "TOPRIGHT", 60, 0)
-        end
-    end)
-
-    hooksecurefunc("PaperDollFrame_SetSidebar", function(self, index)
-        if AR.StatsFrame then
-            if index == 1 then
-                AR.StatsFrame:Show()
-            else
-                AR.StatsFrame:Hide()
-            end
-        end
-    end)
-
-    if _G.PaperDollFrame then
-        _G.PaperDollFrame:HookScript("OnHide", function() if self.StatsFrame then self.StatsFrame:Hide() end end)
+    self:RegisterEvent('UNIT_AURA', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_STATS', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_ATTACK', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_RANGED_ATTACK_POWER', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_RESISTANCES', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_ATTACK_SPEED', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_SPELL_HASTE', 'RefreshStatsEvent')
+    self:RegisterEvent('UNIT_MAXHEALTH', 'RefreshStatsEvent')
+    self:RegisterEvent('PLAYER_DAMAGE_DONE_MODS', 'RefreshStatsEvent')
+    self:RegisterEvent('SPELL_POWER_CHANGED', 'RefreshStatsEvent')
+    self:RegisterEvent('COMBAT_RATING_UPDATE', 'RefreshStatsEvent')
+    self:RegisterEvent('MASTERY_UPDATE', 'RefreshStatsEvent')
+    self:RegisterEvent('SPEED_UPDATE', 'RefreshStatsEvent')
+    self:RegisterEvent('LIFESTEAL_UPDATE', 'RefreshStatsEvent')
+    self:RegisterEvent('AVOIDANCE_UPDATE', 'RefreshStatsEvent')
+    self:CreateStatsPanel()
+    self:CreateConfigButton()
+    if _G.CharacterModelScene then
+        self:CreateBackgroundSelector()
+        self._backgroundSelectorReady = true
     end
+
+    C_Timer.After(0.5, function() self:SafeRefresh() end)
+
+    -- Visibility and initial refresh are handled by our own watcher.  Avoid
+    -- hooking CharacterFrame/PaperDollFrame functions because Forever calls
+    -- protected TextStatusBar code while opening the character panel.
+    self:InstallVisibilityWatcher()
 
     if KT.db and KT.db.RegisterCallback then
         KT.db.RegisterCallback(self, "OnProfileChanged", "Refresh")
@@ -667,7 +710,7 @@ function AR:ApplyStatsPanelTheme()
         ApplyArmoryPanelTexture(self.StatsFrame.Background)
         LayoutArmoryPanelTexture(self.StatsFrame.Background, self.StatsFrame)
     end
-    
+
     self.StatsFrame.GradientFill:SetColorTexture(0, 0, 0, 0)
     self.StatsFrame.GradientShade:SetColorTexture(0, 0, 0, 0)
     self.StatsFrame.TopGlow:SetColorTexture(0, 0, 0, 0)
@@ -680,19 +723,19 @@ end
 -- ============================================================================
 function AR:CreateHeader()
     if self.Header then return end
-    
+
     -- Marco contenedor
     local h = CreateFrame("Frame", "KT_ArmoryHeader", _G.PaperDollFrame)
     h:SetSize(380, 80)
-    h:SetPoint("TOPLEFT", _G.CharacterFrame, "TOPLEFT", 0, 0) 
+    h:SetPoint("TOPLEFT", _G.CharacterFrame, "TOPLEFT", 0, 0)
     h:SetFrameStrata("HIGH")
-    h:SetFrameLevel(_G.PaperDollFrame:GetFrameLevel() + 10) 
-    
+    h:SetFrameLevel(_G.PaperDollFrame:GetFrameLevel() + 10)
+
     -- 1. ICONO DE CLASE (Siempre visible)
     h.ClassIcon = h:CreateTexture(nil, "OVERLAY", nil, 7)
     h.ClassIcon:SetSize(60, 60)
-    h.ClassIcon:SetPoint("TOPLEFT", -5, 9) 
-    
+    h.ClassIcon:SetPoint("TOPLEFT", -5, 9)
+
     -- Mascara circular para icono de clase
     local mask = h:CreateMaskTexture()
     mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
@@ -709,7 +752,7 @@ function AR:CreateHeader()
 
     -- 2. NOMBRE (En InfoFrame)
     h.Name = info:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    h.Name:SetPoint("TOPLEFT", h.ClassIcon, "TOPRIGHT", 10, -24) 
+    h.Name:SetPoint("TOPLEFT", h.ClassIcon, "TOPRIGHT", 10, -24)
     h.Name:SetJustifyH("LEFT")
     h.Name:SetWordWrap(false)
 
@@ -719,19 +762,19 @@ function AR:CreateHeader()
 
     -- 4. ICONO DE SPEC (En InfoFrame)
     h.SpecIcon = info:CreateTexture(nil, "OVERLAY", nil, 7)
-    h.SpecIcon:SetSize(20, 20) 
+    h.SpecIcon:SetSize(20, 20)
     h.SpecIcon:SetPoint("LEFT", h.Name, "RIGHT", 5, 1)
-    
+
     local specMask = info:CreateMaskTexture()
     specMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
     specMask:SetAllPoints(h.SpecIcon)
     h.SpecIcon:AddMaskTexture(specMask)
-    
+
     -- 5. PUNTUACION M+ (En InfoFrame)
     h.Score = info:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    h.Score:SetPoint("TOP", _G.CharacterFrame, "TOP", 37, -24) 
+    h.Score:SetPoint("TOP", _G.CharacterFrame, "TOP", 37, -24)
     h.Score:SetJustifyH("CENTER")
-    
+
     h.ScoreLabel = info:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
     h.ScoreLabel:SetText(LText("M+"))
     h.ScoreLabel:SetTextColor(0.7, 0.7, 0.7)
@@ -757,12 +800,35 @@ function AR:OpenOptionsPage()
     end
 end
 
+function AR:KUIDebugCheck()
+    local missing = {}
+    local required = { "UnitStat", "UnitArmor", "GetAverageItemLevel", "GetSpecialization", "GetSpecializationInfo" }
+    for i = 1, #required do
+        if type(_G[required[i]]) ~= "function" then missing[#missing + 1] = required[i] end
+    end
+    return {
+        dbEnable = self.db and self.db.enable,
+        characterFrame = _G.CharacterFrame ~= nil,
+        paperDollFrame = _G.PaperDollFrame ~= nil,
+        statsFrame = self.StatsFrame ~= nil,
+        statsShown = self.StatsFrame and self.StatsFrame:IsShown() or false,
+        characterShown = _G.CharacterFrame and _G.CharacterFrame:IsShown() or false,
+        paperDollShown = _G.PaperDollFrame and _G.PaperDollFrame:IsShown() or false,
+        nativeStatsShown = _G.CharacterStatsPane and _G.CharacterStatsPane:IsShown() or false,
+        missingAPIs = (#missing > 0) and table.concat(missing, ",") or nil,
+        lastRefreshError = self._lastRefreshError,
+    }
+end
 function AR:SafeRefresh()
     local ok, err = pcall(function()
         self:Refresh()
     end)
-    if not ok and KT and KT.Print then
-        KT:Print("Armory refresh error: " .. tostring(err))
+    if not ok then
+        self._lastRefreshError = tostring(err)
+        if KT and KT.RecordDebugError then KT:RecordDebugError("Armory", err) end
+        if KT and KT.Print then KT:Print("Armory refresh error: " .. tostring(err)) end
+    else
+        self._lastRefreshError = nil
     end
 end
 
@@ -790,10 +856,88 @@ function AR:RefreshMovementStats(_, unit)
     end)
 end
 
+function AR:InstallVisibilityWatcher()
+    if self._visibilityWatcher then return end
+
+    local watcher = CreateFrame("Frame")
+    local elapsed = 0
+    watcher:SetScript("OnUpdate", function(_, delta)
+        elapsed = elapsed + (delta or 0)
+        if elapsed < 0.1 then return end
+        elapsed = 0
+
+        local characterFrame = _G.CharacterFrame
+        local paperDollFrame = _G.PaperDollFrame
+        if characterFrame then
+            if not self.Header then self:CreateHeader() end
+            if not self.StatsFrame then self:CreateStatsPanel() end
+            if not self.configBtn then self:CreateConfigButton() end
+            if not self._backgroundSelectorReady and _G.CharacterModelScene then
+                self:CreateBackgroundSelector()
+                self._backgroundSelectorReady = true
+            end
+        end
+        local nativeStatsPane = _G.CharacterStatsPane
+        HideNativeArmoryStats()
+        local characterShown = characterFrame and characterFrame.IsShown and characterFrame:IsShown()
+        local paperDollShown = paperDollFrame and paperDollFrame.IsShown and paperDollFrame:IsShown()
+        local nativeStatsShown = nativeStatsPane and nativeStatsPane.IsShown and nativeStatsPane:IsShown()
+        -- Forever puede dejar CharacterFrame oculto mientras PaperDollFrame sigue visible.
+        -- PaperDollFrame es la fuente fiable para decidir si mostrar nuestras estadisticas.
+        local shouldShow = paperDollShown and self._ktExternalPaneController ~= true
+
+        -- Keep Blizzard's replaced stats pane hidden without hooking its Show
+        -- method. This avoids entering the protected CharacterFrame path.
+        if nativeStatsShown then
+            nativeStatsPane:Hide()
+        end
+
+        if shouldShow then
+            if _G.CharacterFrame and _G.CharacterFrame.TitleText and _G.CharacterFrame.TitleText:IsShown() then
+                _G.CharacterFrame.TitleText:Hide()
+            end
+            if _G.CharacterLevelText and _G.CharacterLevelText:IsShown() then
+                _G.CharacterLevelText:Hide()
+            end
+            if not self.db.showPortrait and _G.CharacterFramePortrait and _G.CharacterFramePortrait:IsShown() then
+                _G.CharacterFramePortrait:Hide()
+            end
+            if self.StatsFrame and not self.StatsFrame:IsShown() then
+                self.StatsFrame:Show()
+            end
+            if not self._armoryWasVisible then
+                self._armoryWasVisible = true
+                self:UpdateBackground()
+                self:SafeRefresh()
+            end
+        elseif self._ktExternalPaneController ~= true then
+            self._armoryWasVisible = nil
+            if self.StatsFrame and self.StatsFrame:IsShown() then
+                self.StatsFrame:Hide()
+            end
+        end
+    end)
+
+    self._visibilityWatcher = watcher
+end
+
+function AR:RefreshStatsEvent(_, unit)
+    if unit and unit ~= "player" then return end
+    if self._statsRefreshQueued then return end
+
+    self._statsRefreshQueued = true
+    C_Timer.After(0.05, function()
+        self._statsRefreshQueued = nil
+        if self and self.SafeRefresh then
+            self:SafeRefresh()
+        end
+    end)
+end
+
 function AR:UpdateHeader()
     if not self.Header then return end
     local LSM = LibStub("LibSharedMedia-3.0", true)
-    
+
     -- A. AURA (CLASE)
     local _, class = UnitClass("player")
     if class and _G.CLASS_ICON_TCOORDS[class] then
@@ -806,7 +950,7 @@ function AR:UpdateHeader()
     -- B. NOMBRE Y CLASE TEXTO
     local name = UnitName("player")
     local classColor = C_ClassColor.GetClassColor(class)
-    
+
     local nameFont = SafeFont(self.db.charNameFont, STANDARD_TEXT_FONT)
     self.Header.Name:SetFont(nameFont, self.db.charNameSize or 16, self.db.charNameOutline or "OUTLINE")
     self.Header.Name:SetText(name)
@@ -815,7 +959,7 @@ function AR:UpdateHeader()
     else
         self.Header.Name:SetTextColor(1, 1, 1)
     end
-    
+
     -- C. NIVEL
     local levelFont = (self.db.charLevelFont and SafeFont(self.db.charLevelFont, "GameFontHighlight")) or "GameFontHighlight"
     self.Header.Level:SetFont(levelFont, self.db.charLevelSize or 12, self.db.charLevelOutline or "OUTLINE")
@@ -834,7 +978,7 @@ function AR:UpdateHeader()
     else
         self.Header.SpecIcon:Hide()
     end
-    
+
     -- E. SCORE (M+ / PVP)
     local scoreType = self.db.scoreType or "M+"
     local score = 0
@@ -848,21 +992,21 @@ function AR:UpdateHeader()
     elseif scoreType == "PVP" then
         labelText = "PvP"
         local maxRating = 0
-        
+
         -- Check 2v2, 3v3, RBG
         for _, bracket in pairs({1, 2, 4}) do
             local rating = select(1, GetPersonalRatedInfo(bracket))
             if rating and rating > maxRating then maxRating = rating end
         end
-        
+
         -- Check Solo Shuffle
         if C_PvP and C_PvP.GetSoloShufflePersonalRatedInfo then
             local shuffleRating = C_PvP.GetSoloShufflePersonalRatedInfo()
             if shuffleRating and shuffleRating > maxRating then maxRating = shuffleRating end
         end
-        
+
         score = maxRating
-        
+
         -- Colors based on rating thresholds
         if score >= 2400 then color = {r=1, g=0.5, b=0} -- Elite
         elseif score >= 2100 then color = {r=0.6, g=0.2, b=0.8} -- Duelist
@@ -871,11 +1015,11 @@ function AR:UpdateHeader()
         elseif score >= 1400 then color = {r=0.8, g=0.8, b=0} -- Combatant
         else color = {r=0.5, g=0.5, b=0.5} end
     end
-    
+
     local scoreFont = SafeFont(self.db.scoreFont, STANDARD_TEXT_FONT)
     local scoreSize = self.db.scoreSize or 22
     local scoreOutline = self.db.scoreOutline or "OUTLINE"
-    
+
     self.Header.Score:SetFont(scoreFont, scoreSize, scoreOutline)
     self.Header.ScoreLabel:SetFont(scoreFont, scoreSize, scoreOutline)
     self.Header.ScoreLabel:SetText(labelText)
@@ -888,7 +1032,7 @@ function AR:UpdateHeader()
         self.Header.Score:SetText("")
         self.Header.ScoreLabel:Hide()
     end
-    
+
     if self.db.showPortrait and _G.CharacterFramePortrait then
         SetPortraitTexture(_G.CharacterFramePortrait, "player")
     end
@@ -904,9 +1048,9 @@ function AR:CreateBackgroundSelector()
         modelScene.KT_Armory_BG = modelScene:CreateTexture(nil, "ARTWORK")
         modelScene.KT_Armory_BG:SetDrawLayer("ARTWORK", -8)
         modelScene.KT_Armory_BG:SetAllPoints(modelScene)
-        
+
         if modelScene.BackgroundOverlay then modelScene.BackgroundOverlay:SetAlpha(0) end
-        modelScene:HookScript("OnShow", function() self:UpdateBackground() end)
+
     end
 
     if modelScene then
@@ -920,14 +1064,14 @@ function AR:CreateBackgroundSelector()
         btn:SetNormalTexture("Interface\\Icons\\INV_Misc_Map02")
         btn:GetNormalTexture():SetTexCoord(0.1, 0.9, 0.1, 0.9)
         btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-        
+
         btn:SetScript("OnClick", function(self)
-            if not MenuUtil then return end 
+            if not MenuUtil then return end
             MenuUtil.CreateContextMenu(self, function(owner, root)
                 root:CreateTitle("Select Background")
                 for _, data in ipairs(BACKGROUND_LIST) do
-                    root:CreateCheckbox(data.name, 
-                        function() return AR.db.backgroundType == data.key end, 
+                    root:CreateCheckbox(data.name,
+                        function() return AR.db.backgroundType == data.key end,
                         function() AR.db.backgroundType = data.key; AR:UpdateBackground() end
                     )
                 end
@@ -1057,10 +1201,10 @@ function AR:UpdateSlot(button)
     if not button.ktEnchant then
         button.ktEnchant = button:CreateFontString(nil, "OVERLAY", "SystemFont_Tiny")
     end
-    
+
     button.ktEnchant:ClearAllPoints()
     local isRight = (slotID == 6 or slotID == 7 or slotID == 8 or slotID == 10 or slotID == 11 or slotID == 12 or slotID == 13 or slotID == 14 or slotID == 16)
-    
+
     if isRight then
         button.ktEnchant:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", (self.db.enchantX or 0), (self.db.enchantY or 2))
         button.ktEnchant:SetJustifyH("RIGHT")
@@ -1072,8 +1216,8 @@ function AR:UpdateSlot(button)
     local link = GetInventoryItemLink("player", slotID)
     local quality = UpdateSlotQualityBorder(button, slotID, link)
     if not link then
-        button.ktIlvl:SetText(""); button.ktEnchant:SetText(""); 
-        button.ktIlvl:Hide(); button.ktEnchant:Hide(); 
+        button.ktIlvl:SetText(""); button.ktEnchant:SetText("");
+        button.ktIlvl:Hide(); button.ktEnchant:Hide();
         return
     end
 
@@ -1081,20 +1225,20 @@ function AR:UpdateSlot(button)
     if self.db.showIlvl then
         local effectiveILvl = 0
         local itemLoc = ItemLocation:CreateFromEquipmentSlot(slotID)
-        
+
         if C_Item.DoesItemExist(itemLoc) then
             effectiveILvl = C_Item.GetCurrentItemLevel(itemLoc)
         end
-        
+
         if not effectiveILvl or effectiveILvl == 0 then effectiveILvl = C_Item.GetDetailedItemLevelInfo(link) end
-        
+
         local LSM = LibStub("LibSharedMedia-3.0", true)
         local font = STANDARD_TEXT_FONT
         if self.db.ilvlFont then font = SafeFont(self.db.ilvlFont, STANDARD_TEXT_FONT) end
         button.ktIlvl:SetFont(font, self.db.ilvlSize or 12, self.db.ilvlOutline or "OUTLINE")
         button.ktIlvl:SetText(effectiveILvl or "")
         button.ktIlvl:Show()
-        
+
         if self.db.ilvlColorByRarity and quality then
             local r, g, b = C_Item.GetItemQualityColor(quality)
             button.ktIlvl:SetTextColor(r, g, b)
@@ -1112,7 +1256,7 @@ function AR:UpdateSlot(button)
         local LSM = LibStub("LibSharedMedia-3.0", true)
         local font = STANDARD_TEXT_FONT
         if self.db.enchantFont then font = SafeFont(self.db.enchantFont, STANDARD_TEXT_FONT) end
-        
+
         button.ktEnchant:SetFont(font, self.db.enchantSize or 10, "OUTLINE")
         if enchantText then
             if string.len(enchantText) > 18 then enchantText = string.sub(enchantText, 1, 15).."..." end
@@ -1144,7 +1288,7 @@ function AR:GetEnchantText(itemLink)
     if (issecretvalue and issecretvalue(lines))
         or (canaccessvalue and not canaccessvalue(lines))
         or type(lines) ~= "table" then return nil end
-    
+
     local pattern = _G.ENCHANTED_TOOLTIP_LINE:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
     pattern = pattern:gsub("%%%%s", "(.+)")
 
@@ -1192,7 +1336,7 @@ local function GetIcon(spellID)
     if success and result then
         icon = result
     end
-    
+
     if icon then
         return string.format("|T%s:14:14:0:0:64:64:5:59:5:59|t ", icon)
     end
@@ -1266,17 +1410,35 @@ local function BuildSecondaryStatEntry(displayMode, label, percentValue, ratingV
     }
 end
 
-function AR:CreateStatsPanel()
-    if self.StatsFrame then return end
-    
-    if _G.CharacterStatsPane then
-        _G.CharacterStatsPane:Hide()
-        _G.CharacterStatsPane:SetParent(UIFrameHider)
-        hooksecurefunc(_G.CharacterStatsPane, "Show", function(self) self:Hide() end)
+HideNativeArmoryStats = function()
+    local pane = _G.CharacterStatsPane
+    if not pane or pane == AR.StatsFrame then return end
+    if not pane._ktNativeStatsSuppressed then
+        pane._ktNativeStatsSuppressed = true
+        if pane.HookScript then
+            pane:HookScript("OnShow", function(self) self:Hide() end)
+        end
     end
-    
-    local parent = _G.CharacterFrameInsetRight
-    
+    pane:Hide()
+    if _G.UIFrameHider and pane.GetParent and pane:GetParent() ~= _G.UIFrameHider then
+        pcall(pane.SetParent, pane, _G.UIFrameHider)
+    end
+end
+
+function AR:CreateStatsPanel()
+    if self.StatsFrame then
+        HideNativeArmoryStats()
+        return
+    end
+    HideNativeArmoryStats()
+
+    local parent = _G.CharacterFrameInsetRight or _G.PaperDollFrame or _G.CharacterFrame
+
+    if not parent then
+        self.StatsFrame = nil
+        return
+    end
+
     if _G.CharacterFrame and _G.CharacterFrameInsetRight then
         local w = _G.CharacterFrame:GetWidth()
         if w and w < 700 then
@@ -1287,7 +1449,9 @@ function AR:CreateStatsPanel()
 
     local f = CreateFrame("Frame", "KT_ArmoryStats", parent)
     f:SetAllPoints()
-    
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 30)
+
     f.BackgroundBase = f:CreateTexture(nil, "BACKGROUND")
     f.BackgroundBase:SetAllPoints()
     f.BackgroundBase:SetColorTexture(0, 0, 0, 1)
@@ -1316,30 +1480,30 @@ function AR:CreateStatsPanel()
     f.BottomLine:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
     f.BottomLine:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     f.BottomLine:SetHeight(1)
-    
+
     f.ScrollFrame = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     f.ScrollFrame:SetPoint("TOPLEFT", 10, -10)
     f.ScrollFrame:SetPoint("BOTTOMRIGHT", -20, 10)
-    
+
     if f.ScrollFrame.ScrollBar then
         local sb = f.ScrollFrame.ScrollBar
         sb:ClearAllPoints()
         sb:SetPoint("TOPLEFT", f.ScrollFrame, "TOPRIGHT", 2, -16)
         sb:SetPoint("BOTTOMLEFT", f.ScrollFrame, "BOTTOMRIGHT", 2, 16)
-        
+
         if sb.ScrollUpButton then sb.ScrollUpButton:Hide() end
         if sb.ScrollDownButton then sb.ScrollDownButton:Hide() end
         if sb.Top then sb.Top:Hide() end
         if sb.Bottom then sb.Bottom:Hide() end
         if sb.Middle then sb.Middle:Hide() end
         if sb.Background then sb.Background:Hide() end
-        
+
         local track = sb:CreateTexture(nil, "BACKGROUND")
         track:SetPoint("TOP", sb, "TOP", 0, 16)
         track:SetPoint("BOTTOM", sb, "BOTTOM", 0, -16)
         track:SetWidth(4)
         track:SetColorTexture(0, 0, 0, 0.4)
-        
+
         local thumb = sb:GetThumbTexture()
         if thumb then
             thumb:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -1352,7 +1516,7 @@ function AR:CreateStatsPanel()
             thumb:SetWidth(4)
         end
     end
-    
+
     f.ScrollChild = CreateFrame("Frame", nil, f.ScrollFrame)
     f.ScrollChild:SetSize(250, 1)
     f.ScrollFrame:SetScrollChild(f.ScrollChild)
@@ -1368,37 +1532,38 @@ function AR:CreateStatsPanel()
     f.IlvlTitle:SetJustifyH("CENTER")
     f.IlvlTitle:Hide() -- Hide the 'Item Level' text itself as the user just wants the number
     f.IlvlTitle:SetText(LText("Item Level"))
-    
+
     f.IlvlTitle:ClearAllPoints()
     f.IlvlTitle:SetPoint("TOP", f.ScrollChild, "TOP", 0, -11)
     f.IlvlTitle:SetJustifyH("CENTER")
-    
+
     f.IlvlSepLeft = f.ScrollChild:CreateTexture(nil, "ARTWORK")
     f.IlvlSepLeft:SetSize(80, 8)
     f.IlvlSepLeft:SetPoint("RIGHT", f.IlvlTitle, "LEFT", -5, 1)
     f.IlvlSepLeft:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
     f.IlvlSepLeft:SetTexCoord(1, 0, 0, 1)
     f.IlvlSepLeft:Hide()
-    
+
     f.IlvlSepRight = f.ScrollChild:CreateTexture(nil, "ARTWORK")
     f.IlvlSepRight:SetSize(80, 8)
     f.IlvlSepRight:SetPoint("LEFT", f.IlvlTitle, "RIGHT", 5, 1)
     f.IlvlSepRight:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
     f.IlvlSepRight:SetTexCoord(0, 1, 0, 1)
     f.IlvlSepRight:Hide()
-    
+
     -- Keep Item Level centered directly under its title.
     f.Ilvl = f.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     f.Ilvl:SetPoint("TOP", f.IlvlTitle, "BOTTOM", 0, -4)
     f.Ilvl:SetJustifyH("CENTER")
-    
+
     f.IlvlPvP = f.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.IlvlPvP:SetPoint("TOP", f.Ilvl, "BOTTOM", 0, -2)
     f.IlvlPvP:SetJustifyH("CENTER")
     f.IlvlPvP:SetFont(SafeFont(KT and KT.DEFAULT_FONT_NAME), 10, "OUTLINE")
-    
+
     f.Stats = {}
     self.StatsFrame = f
+    f:Hide()
 
     f:EnableMouseWheel(true)
     f:SetScript("OnMouseWheel", function(self, delta)
@@ -1411,14 +1576,6 @@ function AR:CreateStatsPanel()
         end
     end)
 
-    if _G.CharacterStatsPane then
-        self:SecureHook(_G.CharacterStatsPane, "Show", function() 
-            if self.StatsFrame and _G.PaperDollFrame:IsShown() then self.StatsFrame:Show() end 
-        end)
-        self:SecureHook(_G.CharacterStatsPane, "Hide", function() 
-            if self.StatsFrame then self.StatsFrame:Hide() end 
-        end)
-    end
 
     self:ApplyStatsPanelTheme()
 end
@@ -1429,16 +1586,16 @@ function AR:UpdateMyStats()
 
     if not self.StatsFrame then return end
     if (self.StatsFrame.IsShown and not self.StatsFrame:IsShown()) then return end
-    
+
     local LSM = LibStub("LibSharedMedia-3.0", true)
     local font = SafeFont(self.db.statFont, STANDARD_TEXT_FONT)
     local size = self.db.statFontSize or 11
-    
+
     local headerFontName = self.db.headerFont or "Friz Quadrata TT"
     local headerFont = SafeFont(headerFontName, STANDARD_TEXT_FONT)
     local headerOutline = self.db.headerOutline or "OUTLINE"
     local headerSize = size + 2
-    
+
     self:ApplyStatsPanelTheme()
 
     if self.db.showAvgIlvl then
@@ -1450,7 +1607,7 @@ function AR:UpdateMyStats()
             ilvlText = string.format("%d / %d", math.floor(avgEquipped), math.floor(avg))
         end
         self.StatsFrame.Ilvl:SetText(ilvlText)
-        
+
         if avgPvp and avgPvp > 0 and self.db.showAvgIlvlPvP ~= false then
             local pvpValue = self.db.avgIlvlPvPDecimals and string.format("%.1f", avgPvp) or tostring(math.floor(avgPvp))
             local pvpText = self.db.avgIlvlPvPShowLabel == false and pvpValue or ("PvP: " .. pvpValue)
@@ -1467,17 +1624,17 @@ function AR:UpdateMyStats()
         else
             if self.StatsFrame.IlvlPvP then self.StatsFrame.IlvlPvP:Hide() end
         end
-        
+
         local ilvlSize = self.db.avgIlvlFontSize or 20
         local ilvlColor = self.db.avgIlvlColor or self.db.itemLevelColor or ARMORY_ILVL_PURPLE
         local ilvlFont = SafeFont(self.db.avgIlvlFont, font)
         local ilvlOutline = self.db.avgIlvlOutline or "OUTLINE"
-        
+
         self.StatsFrame.Ilvl:SetFont(ilvlFont, ilvlSize, ilvlOutline)
         self.StatsFrame.Ilvl:SetJustifyH("CENTER")
         self.StatsFrame.Ilvl:SetTextColor(ilvlColor.r, ilvlColor.g, ilvlColor.b)
         self.StatsFrame.Ilvl:Show()
-        
+
         if self.db.ilvlHeaderColor then
             local c = self.db.ilvlHeaderColor
             self.StatsFrame.IlvlTitle:SetTextColor(c.r, c.g, c.b)
@@ -1496,21 +1653,21 @@ function AR:UpdateMyStats()
         self.StatsFrame.IlvlSepRight:Hide()
         if self.StatsFrame.IlvlSepLeft then self.StatsFrame.IlvlSepLeft:Hide() end
     end
-    
+
     local statsList = {}
     local unit = "player"
     local secondaryMode = self.db.secondaryStatDisplayMode or "percent"
     local spec = GetSpecialization()
     local _, class = UnitClass(unit)
-    
+
     -- ATTRIBUTES
     local attrHeaderColor = self.db.attrHeaderColor or ARMORY_HEADER_ATTRIBUTE
     table.insert(statsList, { type = "header", label = _G["STAT_CATEGORY_ATTRIBUTES"] or "Attributes", color = attrHeaderColor })
-    
+
     local primaryStatID = nil
-    if class == "HUNTER" or class == "ROGUE" or class == "DEMONHUNTER" then primaryStatID = 2 
-    elseif class == "MAGE" or class == "WARLOCK" or class == "PRIEST" or class == "EVOKER" then primaryStatID = 4 
-    elseif class == "WARRIOR" or class == "DEATHKNIGHT" then primaryStatID = 1 
+    if class == "HUNTER" or class == "ROGUE" or class == "DEMONHUNTER" then primaryStatID = 2
+    elseif class == "MAGE" or class == "WARLOCK" or class == "PRIEST" or class == "EVOKER" then primaryStatID = 4
+    elseif class == "WARRIOR" or class == "DEATHKNIGHT" then primaryStatID = 1
     elseif class == "PALADIN" then primaryStatID = (spec == 1) and 4 or 1
     elseif class == "SHAMAN" then primaryStatID = (spec == 2) and 2 or 4
     elseif class == "MONK" then primaryStatID = (spec == 2) and 4 or 2
@@ -1524,54 +1681,56 @@ function AR:UpdateMyStats()
         if primaryStatID == 1 then statColor = self.db.strengthColor; icon = ICONS.Strength
         elseif primaryStatID == 2 then statColor = self.db.agilityColor; icon = ICONS.Agility
         elseif primaryStatID == 4 then statColor = self.db.intellectColor; icon = ICONS.Intellect end
-        
-        table.insert(statsList, { 
+
+        local primaryValue = effectiveStat or statVal
+        table.insert(statsList, {
             statKey = (primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil,
-            label = icon .. statName, 
-            value = effectiveStat or statVal, 
-            numericValue = FormatArmoryNumber(effectiveStat or statVal),
+            label = ArmoryLabel(icon, statName, "Primary Stat"),
+            value = primaryValue,
+            numericValue = FormatArmoryNumber(primaryValue),
             numericValueLabel = "Value",
-            color = statColor or self.db.attrColor, 
+            color = statColor or self.db.attrColor,
             tooltip = _G["DEFAULT_STAT"..primaryStatID.."_TOOLTIP"],
-            showLabel = self:IsStatLabelVisible((primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil),
+            showLabel = primaryValue ~= nil and self:IsStatLabelVisible((primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil),
         })
     end
-    
+
     local stamBase, stamEffective = SafeArmoryNumberCall(UnitStat, unit, 3)
-    table.insert(statsList, { 
+    local staminaValue = stamEffective or stamBase
+    table.insert(statsList, {
         statKey = "stamina",
-        label = ICONS.Stamina .. _G["SPELL_STAT3_NAME"], 
-        value = stamEffective or stamBase, 
-        numericValue = FormatArmoryNumber(stamEffective or stamBase),
+        label = ArmoryLabel(ICONS.Stamina, _G["SPELL_STAT3_NAME"], "Stamina"),
+        value = staminaValue,
+        numericValue = FormatArmoryNumber(staminaValue),
         numericValueLabel = "Value",
-        color = self.db.staminaColor or self.db.attrColor, 
+        color = self.db.staminaColor or self.db.attrColor,
         tooltip = _G["DEFAULT_STAT3_TOOLTIP"],
-        showLabel = self:IsStatLabelVisible("stamina"),
+        showLabel = staminaValue ~= nil and self:IsStatLabelVisible("stamina"),
     })
 
     local health = SafeArmoryNumberCall(UnitHealthMax, unit)
     local healthText = health and FormatArmoryNumber(health) or "—"
-    table.insert(statsList, { 
+    table.insert(statsList, {
         statKey = "health",
-        label = ICONS.Health .. _G["HEALTH"], 
-        value = health or "—", 
+        label = ArmoryLabel(ICONS.Health, _G["HEALTH"], "Health"),
+        value = health or "—",
         numericValue = healthText,
         numericValueLabel = "Value",
-        color = self.db.healthColor or self.db.attrColor, 
+        color = self.db.healthColor or self.db.attrColor,
         tooltip = _G["STAT_HEALTH_TOOLTIP"],
-        showLabel = true,
+        showLabel = health ~= nil,
     })
 
     local mana = SafeArmoryNumberCall(UnitPowerMax, unit, 0)
     if mana and mana > 0 then
         local manaText = FormatArmoryNumber(mana)
-        table.insert(statsList, { 
+        table.insert(statsList, {
             statKey = "mana",
-            label = ICONS.Mana .. _G["MANA"], 
-            value = mana, 
+            label = ArmoryLabel(ICONS.Mana, _G["MANA"], "Mana"),
+            value = mana,
             numericValue = manaText,
             numericValueLabel = "Value",
-            color = self.db.manaColor or self.db.attrColor, 
+            color = self.db.manaColor or self.db.attrColor,
             tooltip = _G["STAT_MANA_TOOLTIP"],
             showLabel = true,
         })
@@ -1581,45 +1740,68 @@ function AR:UpdateMyStats()
     local secHeaderColor = self.db.enhHeaderColor or ARMORY_HEADER_SECONDARY
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_ENHANCEMENTS or "Secondary", color = secHeaderColor })
 
-    local crit = SafeArmoryNumberCall(GetCritChance) or 0
+    local crit = SafeArmoryNumberCall(GetCritChance)
     local critRating = (CR_CRIT_MELEE and SafeArmoryNumberCall(GetCombatRating, CR_CRIT_MELEE)) or 0
-    local critEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Crit .. _G["STAT_CRITICAL_STRIKE"], crit, critRating, self.db.critColor, _G["CR_CRIT_TOOLTIP"])
-    critEntry.statKey = "crit"; critEntry.showLabel = self:IsStatLabelVisible("crit"); table.insert(statsList, critEntry)
-    
+    local critEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Crit, _G["STAT_CRITICAL_STRIKE"], "Critical Strike"), crit, critRating, self.db.critColor, _G["CR_CRIT_TOOLTIP"])
+    critEntry.statKey = "crit"; critEntry.showLabel = crit ~= nil and self:IsStatLabelVisible("crit"); table.insert(statsList, critEntry)
+
     local haste = GetArmoryHastePercent()
-    local hasteRating = (CR_HASTE_MELEE and SafeArmoryNumberCall(GetCombatRating, CR_HASTE_MELEE)) or 0
-    local hasteEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Haste .. _G["STAT_HASTE"], haste, hasteRating, self.db.hasteColor, _G["STAT_HASTE_TOOLTIP"])
-    hasteEntry.statKey = "haste"; hasteEntry.showLabel = self:IsStatLabelVisible("haste"); table.insert(statsList, hasteEntry)
-    
-    local mastery = SafeArmoryNumberCall(GetMasteryEffect) or 0
+    local hasteRating = CR_HASTE_MELEE and SafeArmoryNumberCall(GetCombatRating, CR_HASTE_MELEE)
+    local hasteEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Haste, _G["STAT_HASTE"], "Haste"), haste, hasteRating, self.db.hasteColor, _G["STAT_HASTE_TOOLTIP"])
+    hasteEntry.statKey = "haste"; hasteEntry.showLabel = haste ~= nil and self:IsStatLabelVisible("haste"); table.insert(statsList, hasteEntry)
+
+    local mastery = SafeArmoryNumberCall(GetMasteryEffect)
     local masteryRating = (CR_MASTERY and SafeArmoryNumberCall(GetCombatRating, CR_MASTERY)) or 0
-    local masteryEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Mastery .. _G["STAT_MASTERY"], mastery, masteryRating, self.db.masteryColor, _G["STAT_MASTERY_TOOLTIP"])
-    masteryEntry.statKey = "mastery"; masteryEntry.showLabel = self:IsStatLabelVisible("mastery"); table.insert(statsList, masteryEntry)
-    
-    local versRating = (CR_VERSATILITY_DAMAGE_DONE and SafeArmoryNumberCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)) or 0
-    local versBonusA = SafeArmoryNumberCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE) or 0
-    local versBonusB = SafeArmoryNumberCall(GetVersatilityBonus, CR_VERSATILITY_DAMAGE_DONE) or 0
-    local vers = versBonusA + versBonusB
-    local versEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Versatility .. _G["STAT_VERSATILITY"], vers, versRating, self.db.versatilityColor, _G["CR_VERSATILITY_TOOLTIP"])
-    versEntry.statKey = "versatility"; versEntry.showLabel = self:IsStatLabelVisible("versatility"); table.insert(statsList, versEntry)
-    
+    local masteryEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Mastery, _G["STAT_MASTERY"], "Mastery"), mastery, masteryRating, self.db.masteryColor, _G["STAT_MASTERY_TOOLTIP"])
+    masteryEntry.statKey = "mastery"; masteryEntry.showLabel = mastery ~= nil and self:IsStatLabelVisible("mastery"); table.insert(statsList, masteryEntry)
+
+    local versRating = CR_VERSATILITY_DAMAGE_DONE and SafeArmoryNumberCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+    local versBonusA = SafeArmoryNumberCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+    local versBonusB = SafeArmoryNumberCall(GetVersatilityBonus, CR_VERSATILITY_DAMAGE_DONE)
+    local versAvailable = versRating ~= nil or versBonusA ~= nil or versBonusB ~= nil
+    local vers = (versBonusA or 0) + (versBonusB or 0)
+    local versEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Versatility, _G["STAT_VERSATILITY"], "Versatility"), vers, versRating, self.db.versatilityColor, _G["CR_VERSATILITY_TOOLTIP"])
+    versEntry.statKey = "versatility"; versEntry.showLabel = versAvailable and self:IsStatLabelVisible("versatility"); table.insert(statsList, versEntry)
+
     -- ATTACK
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_ATTACK or "Attack", color = {r=0.8, g=0.2, b=0.2, a=1} })
+
+    -- Forever may expose weapon attack power separately from total attack
+    -- power.  Add only the hands that return a safe value.
+    local mainHandWeaponAP, offHandWeaponAP, rangedWeaponAP = SafeArmoryNumberCall(UnitWeaponAttackPower, unit)
+    if mainHandWeaponAP ~= nil or offHandWeaponAP ~= nil or rangedWeaponAP ~= nil then
+        local function AddWeaponPowerRow(statKey, label, value)
+            if value == nil then return end
+            table.insert(statsList, {
+                statKey = statKey,
+                label = ArmoryLabel(ICONS.AttackPower, label, "Weapon Attack Power"),
+                value = FormatArmoryNumber(value),
+                numericValue = FormatArmoryNumber(value),
+                numericValueLabel = "Value",
+                color = self.db.attackPowerColor or self.db.attrColor,
+                tooltip = _G["STAT_ATTACK_POWER_TOOLTIP"],
+                showLabel = true,
+            })
+        end
+        AddWeaponPowerRow("mainhand_weapon_attack_power", _G["MAINHANDSLOT"] or "Main-hand Weapon AP", mainHandWeaponAP)
+        AddWeaponPowerRow("offhand_weapon_attack_power", _G["OFFHANDSLOT"] or "Off-hand Weapon AP", offHandWeaponAP)
+        AddWeaponPowerRow("ranged_weapon_attack_power", _G["RANGEDSLOT"] or "Ranged Weapon AP", rangedWeaponAP)
+    end
 
     -- UnitAttackPower can return secret numbers during combat.  Never perform
     -- arithmetic on the raw values; keep the row visible when unavailable.
     local apBase, apPos, apNeg = SafeArmoryNumberCall(UnitAttackPower, unit)
     local ap = apBase and apPos and apNeg and (apBase + apPos + apNeg) or nil
     local attackPowerText = ap and FormatArmoryNumber(ap) or "—"
-    table.insert(statsList, { 
+    table.insert(statsList, {
         statKey = "attackpower",
-        label = ICONS.AttackPower .. (_G["STAT_ATTACK_POWER"] or "Attack Power"), 
-        value = ap or "—", 
+        label = ArmoryLabel(ICONS.AttackPower, _G["STAT_ATTACK_POWER"], "Attack Power"),
+        value = ap or "—",
         numericValue = attackPowerText,
         numericValueLabel = "Value",
-        color = self.db.attackPowerColor or self.db.attrColor, 
+        color = self.db.attackPowerColor or self.db.attrColor,
         tooltip = _G["STAT_ATTACK_POWER_TOOLTIP"],
-        showLabel = true,
+        showLabel = ap ~= nil,
     })
 
     local mhSpeed, ohSpeed = SafeArmoryNumberCall(UnitAttackSpeed, unit)
@@ -1630,26 +1812,26 @@ function AR:UpdateMyStats()
     if mhSpeed and ohSpeed and ohSpeed > 0 then
         asText = string.format("%.2fs / %.2fs", mhSpeed, ohSpeed)
     end
-    table.insert(statsList, { 
+    table.insert(statsList, {
         statKey = "attackspeed",
-        label = ICONS.AttackSpeed .. (_G["STAT_ATTACK_SPEED"] or "Attack Speed"), 
-        value = asText, 
-        color = self.db.attackSpeedColor or self.db.attrColor, 
+        label = ArmoryLabel(ICONS.AttackSpeed, _G["STAT_ATTACK_SPEED"], "Attack Speed"),
+        value = asText,
+        color = self.db.attackSpeedColor or self.db.attrColor,
         tooltip = _G["STAT_ATTACK_SPEED_TOOLTIP"],
-        showLabel = true,
+        showLabel = mhSpeed ~= nil or ohSpeed ~= nil,
     })
 
     local sp = SafeArmoryNumberCall(GetSpellBonusDamage, 7)
     local spellPowerText = sp and FormatArmoryNumber(sp) or "—"
-    table.insert(statsList, { 
+    table.insert(statsList, {
         statKey = "spellpower",
-        label = ICONS.SpellPower .. (_G["STAT_SPELL_POWER"] or "Spell Power"), 
-        value = sp or "—", 
+        label = ArmoryLabel(ICONS.SpellPower, _G["STAT_SPELL_POWER"], "Spell Power"),
+        value = sp or "—",
         numericValue = spellPowerText,
         numericValueLabel = "Value",
-        color = self.db.spellPowerColor or self.db.attrColor, 
+        color = self.db.spellPowerColor or self.db.attrColor,
         tooltip = _G["STAT_SPELL_POWER_TOOLTIP"],
-        showLabel = true,
+        showLabel = sp ~= nil,
     })
 
     -- DEFENSE
@@ -1657,51 +1839,93 @@ function AR:UpdateMyStats()
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_DEFENSE or "Defense", color = defHeaderColor })
 
     local baseArmor, effectiveArmor = SafeArmoryNumberCall(UnitArmor, unit)
-    table.insert(statsList, { 
+    table.insert(statsList, {
         statKey = "armor",
-        label = ICONS.Armor .. _G["STAT_ARMOR"], 
-        value = effectiveArmor, 
+        label = ArmoryLabel(ICONS.Armor, _G["STAT_ARMOR"], "Armor"),
+        value = effectiveArmor,
         numericValue = FormatArmoryNumber(effectiveArmor),
         numericValueLabel = "Value",
-        color = self.db.armorColor or self.db.attrColor, 
+        color = self.db.armorColor or self.db.attrColor,
         tooltip = _G["STAT_ARMOR_TOOLTIP"],
-        showLabel = self:IsStatLabelVisible("armor"),
+        showLabel = effectiveArmor ~= nil and self:IsStatLabelVisible("armor"),
     })
 
-    local dodge = SafeArmoryNumberCall(GetDodgeChance) or 0
+    local dodge = SafeArmoryNumberCall(GetDodgeChance)
     local dodgeRating = (CR_DODGE and SafeArmoryNumberCall(GetCombatRating, CR_DODGE)) or 0
-    local dodgeEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Dodge .. _G["STAT_DODGE"], dodge, dodgeRating, self.db.dodgeColor, _G["CR_DODGE_TOOLTIP"])
-    dodgeEntry.statKey = "dodge"; dodgeEntry.showLabel = self:IsStatLabelVisible("dodge"); table.insert(statsList, dodgeEntry)
-    
-    local parry = SafeArmoryNumberCall(GetParryChance) or 0
+    local dodgeEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Dodge, _G["STAT_DODGE"], "Dodge"), dodge, dodgeRating, self.db.dodgeColor, _G["CR_DODGE_TOOLTIP"])
+    dodgeEntry.statKey = "dodge"; dodgeEntry.showLabel = dodge ~= nil and self:IsStatLabelVisible("dodge"); table.insert(statsList, dodgeEntry)
+
+    local parry = SafeArmoryNumberCall(GetParryChance)
     local parryRating = (CR_PARRY and SafeArmoryNumberCall(GetCombatRating, CR_PARRY)) or 0
-    local parryEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Parry .. _G["STAT_PARRY"], parry, parryRating, self.db.parryColor, _G["CR_PARRY_TOOLTIP"])
-    parryEntry.statKey = "parry"; parryEntry.showLabel = self:IsStatLabelVisible("parry"); table.insert(statsList, parryEntry)
-    
-    local block = SafeArmoryNumberCall(GetBlockChance) or 0
+    local parryEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Parry, _G["STAT_PARRY"], "Parry"), parry, parryRating, self.db.parryColor, _G["CR_PARRY_TOOLTIP"])
+    parryEntry.statKey = "parry"; parryEntry.showLabel = parry ~= nil and self:IsStatLabelVisible("parry"); table.insert(statsList, parryEntry)
+
+    local block = SafeArmoryNumberCall(GetBlockChance)
     local blockRating = (CR_BLOCK and SafeArmoryNumberCall(GetCombatRating, CR_BLOCK)) or 0
-    local blockEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Block .. _G["STAT_BLOCK"], block, blockRating, self.db.blockColor, _G["CR_BLOCK_TOOLTIP"])
-    blockEntry.statKey = "block"; blockEntry.showLabel = self:IsStatLabelVisible("block"); table.insert(statsList, blockEntry)
+    local blockEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Block, _G["STAT_BLOCK"], "Block"), block, blockRating, self.db.blockColor, _G["CR_BLOCK_TOOLTIP"])
+    blockEntry.statKey = "block"; blockEntry.showLabel = block ~= nil and self:IsStatLabelVisible("block"); table.insert(statsList, blockEntry)
+
+    -- RESISTANCES
+    -- Camelot exposes the classic five schools.  Keep this entirely
+    -- capability-driven: a missing enum/function or a secret return value
+    -- simply omits that row instead of breaking the complete panel.
+    local resistanceDefs = {
+        { token = "DAMAGE_SCHOOL7", enum = "Arcane" },
+        { token = "DAMAGE_SCHOOL3", enum = "Fire" },
+        { token = "DAMAGE_SCHOOL5", enum = "Frost" },
+        { token = "DAMAGE_SCHOOL4", enum = "Nature" },
+        { token = "DAMAGE_SCHOOL6", enum = "Shadow" },
+    }
+    local resistanceRows = {}
+    for _, definition in ipairs(resistanceDefs) do
+        local resistance = ArmoryDamageClass(definition.token, definition.enum)
+        if resistance and UnitResistance then
+            local baseResistance, realResistance, effectiveResistance = SafeArmoryNumberCall(UnitResistance, unit, resistance.damageClass)
+            local value = effectiveResistance or realResistance or baseResistance
+            if value ~= nil then
+                table.insert(resistanceRows, {
+                    statKey = "resistance_" .. definition.enum:lower(),
+                    label = resistance.name,
+                    value = FormatArmoryNumber(value),
+                    numericValue = FormatArmoryNumber(value),
+                    numericValueLabel = "Value",
+                    color = self.db.resistanceColor or self.db.defenseColor or ARMORY_DEFENSE_COLOR,
+                    tooltip = _G["RESISTANCE" .. tostring(resistance.damageClass) .. "_TOOLTIP"],
+                    showLabel = true,
+                })
+            end
+        end
+    end
+    if #resistanceRows > 0 then
+        table.insert(statsList, {
+            type = "header",
+            label = _G.STAT_CATEGORY_RESISTANCE or "Resistances",
+            color = self.db.resistanceHeaderColor or ARMORY_HEADER_DEFENSE,
+        })
+        for _, resistanceRow in ipairs(resistanceRows) do
+            table.insert(statsList, resistanceRow)
+        end
+    end
 
     -- GENERAL
     local genHeaderColor = ARMORY_HEADER_GENERAL
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_GENERAL or "General", color = genHeaderColor })
 
-    local leech = SafeArmoryNumberCall(GetLifesteal) or 0
+    local leech = SafeArmoryNumberCall(GetLifesteal)
     local leechRating = (CR_LIFESTEAL and SafeArmoryNumberCall(GetCombatRating, CR_LIFESTEAL)) or 0
-    local leechEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Leech .. _G["STAT_LIFESTEAL"], leech, leechRating, self.db.leechColor, _G["CR_LIFESTEAL_TOOLTIP"])
-    leechEntry.statKey = "leech"; leechEntry.showLabel = self:IsStatLabelVisible("leech"); table.insert(statsList, leechEntry)
-    
-    local avoidance = SafeArmoryNumberCall(GetAvoidance) or 0
+    local leechEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Leech, _G["STAT_LIFESTEAL"], "Lifesteal"), leech, leechRating, self.db.leechColor, _G["CR_LIFESTEAL_TOOLTIP"])
+    leechEntry.statKey = "leech"; leechEntry.showLabel = leech ~= nil and self:IsStatLabelVisible("leech"); table.insert(statsList, leechEntry)
+
+    local avoidance = SafeArmoryNumberCall(GetAvoidance)
     local avoidanceRating = (CR_AVOIDANCE and SafeArmoryNumberCall(GetCombatRating, CR_AVOIDANCE)) or 0
-    local avoidanceEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Avoidance .. _G["STAT_AVOIDANCE"], avoidance, avoidanceRating, self.db.avoidanceColor, _G["CR_AVOIDANCE_TOOLTIP"])
-    avoidanceEntry.statKey = "avoidance"; avoidanceEntry.showLabel = self:IsStatLabelVisible("avoidance"); table.insert(statsList, avoidanceEntry)
-    
+    local avoidanceEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Avoidance, _G["STAT_AVOIDANCE"], "Avoidance"), avoidance, avoidanceRating, self.db.avoidanceColor, _G["CR_AVOIDANCE_TOOLTIP"])
+    avoidanceEntry.statKey = "avoidance"; avoidanceEntry.showLabel = avoidance ~= nil and self:IsStatLabelVisible("avoidance"); table.insert(statsList, avoidanceEntry)
+
     local speed = GetArmorySpeedPercent()
     -- Speed is a total movement percentage, not a useful raw combat-rating
     -- number: CR_SPEED is normally 0 at base speed and makes the UI look broken.
-    local speedEntry = BuildSecondaryStatEntry(secondaryMode, ICONS.Speed .. _G["STAT_SPEED"], speed, speed, self.db.speedColor, _G["CR_SPEED_TOOLTIP"], speed)
-    speedEntry.statKey = "speed"; speedEntry.showLabel = self:IsStatLabelVisible("speed"); table.insert(statsList, speedEntry)
+    local speedEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Speed, _G["STAT_SPEED"], "Speed"), speed, speed, self.db.speedColor, _G["CR_SPEED_TOOLTIP"], speed)
+    speedEntry.statKey = "speed"; speedEntry.showLabel = speed ~= nil and self:IsStatLabelVisible("speed"); table.insert(statsList, speedEntry)
 
     local visibleStats = {}
     local pendingHeader
@@ -1717,7 +1941,7 @@ function AR:UpdateMyStats()
         end
     end
     statsList = visibleStats
-    
+
     local scrollChild = self.StatsFrame.ScrollChild
     local prevFrame = nil
     local spacing = self.db.statSpacing or 3
@@ -1725,7 +1949,7 @@ function AR:UpdateMyStats()
     local sectionSpacing = math.max(spacing + 6, math.floor((size or 12) * 0.66))
     local contentWidth = tonumber(scrollChild:GetWidth()) or 250
     if contentWidth <= 0 then contentWidth = 250 end
-    
+
     local startY = -14
     if self.db.showAvgIlvl then
         local ilvlSize = self.db.avgIlvlFontSize or 20
@@ -1737,42 +1961,42 @@ function AR:UpdateMyStats()
         end
         startY = -(34 + ilvlSize + pvpExtraHeight + sectionSpacing)
     end
-    
+
     local totalHeight = math.abs(startY)
-    
+
     for i, data in ipairs(statsList) do
         local row = self.StatsFrame.Stats[i]
         if not row then
             row = CreateFrame("Frame", nil, scrollChild)
             row:SetSize(contentWidth, 20)
-            
+
             row.Icon = row:CreateTexture(nil, "OVERLAY")
             row.Icon:SetSize(14, 14)
             row.Icon:SetPoint("LEFT", row, "LEFT", 10, -2)
             row.Icon:Hide()
-            
+
             row.Label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.Label:SetPoint("LEFT", row, "LEFT", 10, -2)
             row.Label:SetWordWrap(false)
             row.Label:SetNonSpaceWrap(false)
             row.Label:SetJustifyH("LEFT")
             row.Label:SetMaxLines(1)
-            
+
             row.Value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.Value:SetPoint("RIGHT", row, "RIGHT", -10, -2)
             row.Value:SetWordWrap(false)
             row.Value:SetJustifyH("RIGHT")
             row.Value:SetWordWrap(false)
             row.Value:SetNonSpaceWrap(false)
-            
+
             row.RightLine = row:CreateTexture(nil, "ARTWORK")
             row.RightLine:SetSize(1, 1)
             row.RightLine:Hide()
-            
+
             row.LeftLine = row:CreateTexture(nil, "ARTWORK")
             row.LeftLine:SetSize(1, 1)
             row.LeftLine:Hide()
-            
+
             row:EnableMouse(true)
             row:SetScript("OnEnter", function(self)
                 if not self.tooltip then return end
@@ -1791,13 +2015,13 @@ function AR:UpdateMyStats()
 
             self.StatsFrame.Stats[i] = row
         end
-        
+
         row:ClearAllPoints()
         row:SetWidth(contentWidth)
-        
+
         local rowHeight = 20
         if data.type == "header" then rowHeight = 22 end
-        
+
         local rowSpacing = spacing
         if i > 1 and data.type == "header" then
             rowSpacing = sectionSpacing
@@ -1810,10 +2034,10 @@ function AR:UpdateMyStats()
             row:SetPoint("TOPLEFT", prevFrame, "BOTTOMLEFT", 0, -rowSpacing)
             row:SetPoint("TOPRIGHT", prevFrame, "BOTTOMRIGHT", 0, -rowSpacing)
         end
-        
+
         row:SetHeight(rowHeight)
         totalHeight = totalHeight + rowHeight + rowSpacing
-        
+
         row.Label:Hide()
         row.Value:Hide()
         if row.RightLine then row.RightLine:Hide() end
@@ -1826,42 +2050,42 @@ function AR:UpdateMyStats()
         row:EnableMouse(false)
         row.Label:SetWidth(contentWidth - 20)
         row.Value:SetWidth(contentWidth - 20)
-        
+
         if data.type == "header" then
             row.Label:Show()
             row.Label:SetFont(headerFont, headerSize, headerOutline)
             row.Label:SetText(data.label)
             row.Label:SetWidth(0)
-            
+
             if data.color then
                 row.Label:SetTextColor(data.color.r, data.color.g, data.color.b)
             else
-                row.Label:SetTextColor(0.8, 0.8, 0.2) 
+                row.Label:SetTextColor(0.8, 0.8, 0.2)
             end
-            
+
             row.Label:ClearAllPoints()
             row.Label:SetPoint("CENTER", row, "CENTER", 0, -3)
             row.Label:SetWordWrap(false)
             row.Label:SetJustifyH("CENTER")
-            
+
             if not row.LeftLine then
                 row.LeftLine = row:CreateTexture(nil, "ARTWORK")
             end
-            
+
             row.LeftLine:Show()
             row.LeftLine:ClearAllPoints()
             row.LeftLine:SetPoint("RIGHT", row.Label, "LEFT", -5, 1)
             row.LeftLine:SetSize(80, 8)
             row.LeftLine:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
             row.LeftLine:SetTexCoord(1, 0, 0, 1)
-            
+
             row.RightLine:Show()
             row.RightLine:ClearAllPoints()
             row.RightLine:SetPoint("LEFT", row.Label, "RIGHT", 5, 1)
             row.RightLine:SetSize(80, 8)
             row.RightLine:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
             row.RightLine:SetTexCoord(0, 1, 0, 1)
-            
+
             if data.color then
                 row.LeftLine:SetVertexColor(data.color.r, data.color.g, data.color.b, 1)
                 row.RightLine:SetVertexColor(data.color.r, data.color.g, data.color.b, 1)
@@ -1869,12 +2093,12 @@ function AR:UpdateMyStats()
                 row.LeftLine:SetVertexColor(0.8, 0.8, 0.2, 1)
                 row.RightLine:SetVertexColor(0.8, 0.8, 0.2, 1)
             end
-            
+
         else
             local labelText = tostring(data.label or "")
             local valueText = ""
             local formatMode = self.db.statFormatMode or "BOTH"
-            
+
             if data.numericValue and data.percentValue then
                 if formatMode == "NUMERIC" then
                     valueText = data.numericValue
@@ -1894,10 +2118,10 @@ function AR:UpdateMyStats()
             row.numericValueLabel = data.numericValueLabel
             row.percentValueText = data.percentValue
             row:EnableMouse(data.tooltip ~= nil and data.tooltip ~= "")
-            
+
             row.Label:SetFont(font, tonumber(size) or 11, "OUTLINE")
             row.Value:SetFont(font, tonumber(size) or 11, "OUTLINE")
-            
+
             local prefixIcon, cleanLabel = string.match(labelText, "^(|T.-|t%s*)(.*)$")
             if not prefixIcon then
                 cleanLabel = labelText
@@ -1915,7 +2139,7 @@ function AR:UpdateMyStats()
                     row.Label:SetPoint("LEFT", row, "LEFT", 10, -2)
                 end
             end
-            
+
             row.Value:SetText(valueText)
             row.Value:ClearAllPoints()
             row.Value:SetPoint("RIGHT", row, "RIGHT", -10, -2)
@@ -1931,7 +2155,7 @@ function AR:UpdateMyStats()
             local columnGap = 6
             local iconOffset = row.Icon:IsShown() and 18 or 0
             local labelStart = inset + iconOffset
-            local labelWidth = math.max(1, contentWidth - inset - valueWidth - columnGap - labelStart)            
+            local labelWidth = math.max(1, contentWidth - inset - valueWidth - columnGap - labelStart)
             local function utf8_safe_truncate(str, limit)
                 local len = string.len(str)
                 local chars = 0
@@ -2009,13 +2233,13 @@ function AR:UpdateMyStats()
             -- localization produces a wider stat name.
             row.Label:SetPoint("RIGHT", row.Value, "LEFT", -columnGap, 0)
             row.Label:SetWidth(labelWidth)
-            
+
             if self.db.colorStats and data.color then
                 row.Label:SetTextColor(data.color.r, data.color.g, data.color.b)
             else
                 row.Label:SetTextColor(1, 1, 1)
             end
-            
+
             if self.db.colorStatValues ~= false and data.color then
                 row.Value:SetTextColor(data.color.r, data.color.g, data.color.b)
             elseif self.db.statValueColor then
@@ -2025,11 +2249,11 @@ function AR:UpdateMyStats()
                 row.Value:SetTextColor(1, 1, 1)
             end
         end
-        
+
         row:Show()
         prevFrame = row
     end
-    
+
     self.StatsFrame.ScrollChild:SetHeight(totalHeight)
 
     local scrollFrame = self.StatsFrame.ScrollFrame
@@ -2046,7 +2270,7 @@ function AR:UpdateMyStats()
     scrollFrame:ClearAllPoints()
     scrollFrame:SetPoint("TOPLEFT", 10, -4)
     scrollFrame:SetPoint("BOTTOMRIGHT", hasOverflow and -20 or -4, 10)
-    
+
     for i = #statsList + 1, #self.StatsFrame.Stats do
         self.StatsFrame.Stats[i]:Hide()
     end
@@ -2066,14 +2290,14 @@ function AR:CreateConfigButton()
         btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -30, -3)
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)
     end
-    
+
     btn:SetNormalTexture("Interface\\Icons\\Trade_Engineering")
     btn:GetNormalTexture():SetTexCoord(0.1, 0.9, 0.1, 0.9)
     btn:GetNormalTexture():ClearAllPoints()
     btn:GetNormalTexture():SetPoint("TOPLEFT", 4, -4)
     btn:GetNormalTexture():SetPoint("BOTTOMRIGHT", -4, 4)
     btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-    
+
     btn:SetScript("OnClick", function()
         AR:OpenOptionsPage()
     end)
@@ -2084,7 +2308,7 @@ function AR:Refresh()
     self.db = KT.db.profile.armory
     EnsureArmoryColorDefaults(self.db)
     if _G.CharacterFrame then _G.CharacterFrame:SetScale(self.db.scale) end
-    
+
     if _G.CharacterFramePortrait then
         if self.db.showPortrait then
             _G.CharacterFramePortrait:Show()
@@ -2093,10 +2317,10 @@ function AR:Refresh()
             _G.CharacterFramePortrait:Hide()
         end
     end
-    
+
     self:UpdateBackground()
     if self.Header then self:UpdateHeader() end
-    
+
     if _G.CharacterFrame:IsShown() then
         for slotName, _ in pairs(SLOT_IDS) do
              local button = _G["Character"..slotName]

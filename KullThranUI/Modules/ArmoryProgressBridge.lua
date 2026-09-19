@@ -1671,6 +1671,8 @@ function Bridge:Setup()
         return
     end
 
+    -- Armory owns the primary panel; this bridge owns which inset pane is visible.
+    armory._ktExternalPaneController = true
     EnsureArmoryConfig()
     self.currentSidebar = self.currentSidebar or 1
     self.activeInsetPane = (KT.db.profile.armory and KT.db.profile.armory.activeInsetPane) or "stats"

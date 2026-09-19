@@ -275,8 +275,24 @@ local function GetConfig()
         end
         db.damageMeter.layoutVersion = 7
     end
+    if layoutVersion < 8 then
+        -- Move only the old shipped default. A manually positioned meter must
+        -- remain untouched when the Forever layout is migrated.
+        local position = rawget(db.damageMeter, "position")
+        if type(position) == "table"
+            and (position.point == nil or position.point == "RIGHT")
+            and (position.relativePoint == nil or position.relativePoint == "RIGHT")
+            and tonumber(position.x) == -36
+            and tonumber(position.y) == 0 then
+            position.point = "RIGHT"
+            position.relativePoint = "RIGHT"
+            position.x = -80
+            position.y = -300
+        end
+        db.damageMeter.layoutVersion = 8
+    end
     db.damageMeter.position = db.damageMeter.position
-        or { point = "RIGHT", relativePoint = "RIGHT", x = -36, y = 0 }
+        or { point = "RIGHT", relativePoint = "RIGHT", x = -80, y = -300 }
     return db.damageMeter
 end
 

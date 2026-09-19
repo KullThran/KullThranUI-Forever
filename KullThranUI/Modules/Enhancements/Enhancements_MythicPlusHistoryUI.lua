@@ -1,7 +1,7 @@
 local _, ns = ...
 local KT = (ns and ns.KT) or _G.KT
 local Mod = KT and KT:GetModule("Enhancements", true)
-local H = Mod and Mod.MythicPlusHistory
+local H = Mod and (Mod.DungeonHistory or Mod.MythicPlusHistory)
 if not H then return end
 
 local LText = KT.LText or function(k) return k end
@@ -68,8 +68,12 @@ end
 local function when(timestamp)
     return timestamp and date("%d/%m %H:%M", timestamp) or "--"
 end
+local function isDungeon(run)
+    return run and (run.mode == "dungeon" or run.source == "dungeon")
+end
 local function runTitle(run)
-    return (run.dungeon or ("Dungeon " .. (run.mapID or "?"))) .. "  +" .. number(run.level)
+    local level = run.level and ("  +" .. number(run.level)) or ""
+    return (run.dungeon or ("Dungeon " .. (run.mapID or "?"))) .. level
 end
 local function result(run)
     if run.onTime == nil then return T("RESULT UNAVAILABLE", "RESULTADO SIN DATOS") end
@@ -196,7 +200,7 @@ function H:CreateWindow()
     end
     skin(f)
     f.title = label(f, 19, 22, -17, 820)
-    f.title:SetText(T("Mythic+ History", "Historial de miticas+"))
+    f.title:SetText(T("Dungeon History", "Historial de mazmorras"))
     local close = button(f, "X", 27)
     close:SetPoint("TOPRIGHT", -10, -10)
     close:SetScript("OnClick", function() f:Hide() end)
@@ -249,7 +253,7 @@ function H:CreateWindow()
     f.hero.affixes = label(f.hero, 11, 14, -88, 884)
 
     f.selected = label(f, 14, 22, -180, 745)
-    local latest = button(f, T("Latest key", "Ultima key"), 135)
+    local latest = button(f, T("Latest dungeon", "Ultima mazmorra"), 135)
     latest:SetPoint("TOPRIGHT", -22, -174)
     latest:SetScript("OnClick", function() H:Render() end)
     
@@ -349,12 +353,12 @@ function H:CreateWindow()
     f.missingParty = label(f,13,22,-375,906)
     f.missingParty:SetWordWrap(true)
     f.missingParty:SetText(T("Imported from Blizzard. Historical party, specs, equipment and individual ratings are not provided. New keys recorded by KUI include the data it can capture.",
-        "Importada de Blizzard. No proporciona el grupo, specs, equipo ni puntuaciones individuales de esta key. Las nuevas keys registradas por KUI incluyen los datos que pueda capturar."))
+        "Importada de Blizzard. No proporciona el grupo, specs, equipo ni puntuaciones individuales de esta mazmorra. Las nuevas mazmorras registradas por KUI incluyen los datos que pueda capturar."))
     f.missingParty:Hide()
     f.note = label(f,10,22,-410,906)
-    f.note:SetText(T("Blizzard: start > finish. RIO: addon snapshot. Map: best score before this key. -- = unavailable.",
-        "Blizzard: inicio > final. RIO: datos del addon. Mapa: mejor puntuacion anterior a esta key. -- = sin datos."))
-    label(f,12,22,-435,880):SetText(T("PREVIOUS KEYS  -  click to view the party", "KEYS ANTERIORES  -  pulsa para ver el grupo"))
+    f.note:SetText(T("Blizzard: start > finish. RIO: addon snapshot. Map: best score before this dungeon. -- = unavailable.",
+        "Blizzard: inicio > final. RIO: datos del addon. Mapa: mejor puntuacion anterior a esta mazmorra. -- = sin datos."))
+    label(f,12,22,-435,880):SetText(T("PREVIOUS DUNGEONS  -  click to view the party", "MAZMORRAS ANTERIORES  -  pulsa para ver el grupo"))
     local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT",22,-455)
     scroll:SetPoint("BOTTOMRIGHT",-42,36)
@@ -376,11 +380,11 @@ function H:Render(selectedID, demo)
     end
     local runs = demo or self.demoRuns or self:Runs()
     local latest = runs[1]
-    f.footer:SetText(T("Last 50 keys per character. Imports available Blizzard history; detailed party capture starts when enabled.",
-        "Ultimas 50 keys por personaje. Importa el historial disponible de Blizzard; grupo detallado desde que se activa."))
+    f.footer:SetText(T("Last 50 dungeons per character. Imports available Blizzard history; party capture starts when enabled.",
+        "Ultimas 50 mazmorras por personaje. Importa el historial disponible de Blizzard; grupo desde que se activa."))
     if not latest then
-        f.hero.kicker:SetText(T("NO RUNS YET", "AUN NO HAY KEYS"))
-        f.hero.name:SetText(T("Complete a Mythic+ to start", "Completa una mitica+ para empezar"))
+        f.hero.kicker:SetText(T("NO DUNGEONS YET", "AUN NO HAY MAZMORRAS"))
+        f.hero.name:SetText(T("Complete a dungeon to start", "Completa una mazmorra para empezar"))
         f.hero.status:SetText(""); f.hero.affixes:SetText("")
         f.hero.bg:SetTexture(nil)
         for _, key in ipairs({"factsTime", "factsMargin", "factsDeaths", "factsUpgrade", "factsScore"}) do f.hero[key]:SetText("") end
@@ -395,14 +399,19 @@ function H:Render(selectedID, demo)
     for _, run in ipairs(runs) do if run.id == selectedID then selected = run; break end end
     self.selectedID = selected.id
     latest = selected
-    f.hero.kicker:SetText((self.demoRuns and T("PREVIEW - NOT SAVED", "VISTA PREVIA - NO SE GUARDA") or (selected == runs[1] and T("LATEST KEY", "ULTIMA KEY") or T("SELECTED KEY", "KEY SELECCIONADA")))
+    f.hero.kicker:SetText((self.demoRuns and T("PREVIEW - NOT SAVED", "VISTA PREVIA - NO SE GUARDA") or (selected == runs[1] and T("LATEST DUNGEON", "ULTIMA MAZMORRA") or T("SELECTED DUNGEON", "MAZMORRA SELECCIONADA")))
         .. "  |  " .. when(latest.completedAt)
         .. (latest.source == "blizzard" and T("  |  IMPORTED FROM BLIZZARD", "  |  IMPORTADA DE BLIZZARD") or ""))
     
-    local heroTitleStr = "|cffF5F5DC" .. (latest.dungeon or ("Dungeon " .. (latest.mapID or "?"))) .. "|r  |cffFF9900+" .. number(latest.level) .. "|r"
+    local heroLevel = latest.level and ("  |cffFF9900+" .. number(latest.level) .. "|r") or ""
+    local heroTitleStr = "|cffF5F5DC" .. (latest.dungeon or ("Dungeon " .. (latest.mapID or "?"))) .. "|r" .. heroLevel
     f.hero.name:SetText(heroTitleStr)
     f.hero.status:SetText(result(latest))
-    f.hero.status:SetTextColor(latest.onTime and .35 or 1, latest.onTime and .95 or .4, .32)
+    if isDungeon(latest) then
+        f.hero.status:SetTextColor(.35, .95, .32)
+    else
+        f.hero.status:SetTextColor(latest.onTime and .35 or 1, latest.onTime and .95 or .4, .32)
+    end
     
     if latest.previewTexture then
         f.hero.bg:SetTexture(latest.previewTexture)
@@ -422,15 +431,17 @@ function H:Render(selectedID, demo)
     
     local delta = latest.newScore and latest.oldScore and latest.newScore-latest.oldScore
     local margin = latest.timeLimit and latest.durationMS and latest.timeLimit-latest.durationMS/1000
-    local timeColor = latest.onTime and "|cff00FF00" or (latest.onTime == false and "|cffFF3333" or "|cffFFFFFF")
-    local timeText = T("Time ", "Tiempo ") .. timeColor .. duration(latest.durationMS/1000) .. " / " .. duration(latest.timeLimit) .. "|r"
+    local timeColor = isDungeon(latest) and "|cffFFFFFF" or (latest.onTime and "|cff00FF00" or (latest.onTime == false and "|cffFF3333" or "|cffFFFFFF"))
+    local timeText = T("Time ", "Tiempo ") .. timeColor .. duration(latest.durationMS and latest.durationMS / 1000) .. (latest.timeLimit and (" / " .. duration(latest.timeLimit)) or "") .. "|r"
     local margin = latest.timeLimit and latest.durationMS and latest.timeLimit-latest.durationMS/1000
-    local marginText = margin and ((margin >= 0 and "|cff00FF00+|r" or "|cffFF0000-|r") .. "|cffFFFFFF" .. duration(math.abs(margin)) .. "|r") or "--"
+    local marginText = isDungeon(latest) and T("Dungeon", "Mazmorra") or (margin and ((margin >= 0 and "|cff00FF00+|r" or "|cffFF0000-|r") .. "|cffFFFFFF" .. duration(math.abs(margin)) .. "|r") or "--")
     local deathsText = T("Deaths ", "Muertes ") .. "|cffFF3333" .. number(latest.deaths) .. "|r"
-    local upgradeText = T("Upgrade ", "Mejora ") .. "|cff00FFCC+" .. number(latest.upgrades) .. "|r"
+    local upgradeText = isDungeon(latest) and (latest.difficultyName or T("Normal run", "Recorrido normal")) or (T("Upgrade ", "Mejora ") .. "|cff00FFCC+" .. number(latest.upgrades) .. "|r")
     
     local scoreText = ""
-    if latest.source == "blizzard" then
+    if isDungeon(latest) then
+        scoreText = latest.difficultyName or T("No keystone", "Sin piedra")
+    elseif latest.source == "blizzard" then
         scoreText = T("Key score ", "Puntos de la key ") .. "|cffFF9900" .. number(latest.runScore,1) .. "|r"
     else
         scoreText = T("Score ", "Puntos ") .. "|cffFF9900" .. number(latest.oldScore) .. " > " .. number(latest.newScore) .. "|r"
@@ -455,13 +466,16 @@ function H:Render(selectedID, demo)
     
     local affixes = {}
     for _, id in ipairs(latest.affixes or {}) do
-        local name = C_ChallengeMode.GetAffixInfo and C_ChallengeMode.GetAffixInfo(id)
+        local name = C_ChallengeMode and C_ChallengeMode.GetAffixInfo and C_ChallengeMode.GetAffixInfo(id)
         affixes[#affixes+1] = name or tostring(id)
     end
-    f.hero.affixes:SetText(T("Affixes: ", "Afijos: ") .. "|cffFFFFFF" .. (#affixes>0 and table.concat(affixes," / ") or "--") .. "|r")
+    local extraText = isDungeon(latest) and (latest.difficultyName or T("Dungeon", "Mazmorra"))
+        or (T("Affixes: ", "Afijos: ") .. "|cffFFFFFF" .. (#affixes>0 and table.concat(affixes," / ") or "--") .. "|r")
+    f.hero.affixes:SetText(extraText)
     
-    local selectedTitle = "|cffF5F5DC" .. (selected.dungeon or ("Dungeon " .. (selected.mapID or "?"))) .. "|r |cffFF9900+" .. number(selected.level) .. "|r"
-    local timeColor = selected.onTime and "|cff00FF00" or "|cffFF3333"
+    local selectedLevel = selected.level and (" |cffFF9900+" .. number(selected.level) .. "|r") or ""
+    local selectedTitle = "|cffF5F5DC" .. (selected.dungeon or ("Dungeon " .. (selected.mapID or "?"))) .. "|r" .. selectedLevel
+    local timeColor = isDungeon(selected) and "|cffFFFFFF" or (selected.onTime and "|cff00FF00" or "|cffFF3333")
     f.selected:SetText(selectedTitle .. "  |cff666666|||r  " .. timeColor .. duration(selected.durationMS/1000) .. "|r  |cff666666|||r  |cffAAAAAA" .. when(selected.completedAt) .. "|r")
     f.missingParty:SetShown(selected.source == "blizzard" and #(selected.members or {}) < 5)
     
@@ -620,18 +634,22 @@ function H:Render(selectedID, demo)
         local rowIdx = math.floor(i / 6)
         card:SetPoint("TOPLEFT", col * 148, -rowIdx * 148)
         
-        local name, _, _, texture, bgTexture = C_ChallengeMode.GetMapUIInfo(run.mapID or 0)
+        local name, _, _, texture, bgTexture
+        if run.mapID and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
+            name, _, _, texture, bgTexture = C_ChallengeMode.GetMapUIInfo(run.mapID)
+        end
         local tex = run.previewTexture or ((bgTexture and bgTexture > 0) and bgTexture or texture) or 134400
         card.bg:SetTexture(tex)
         
-        card.lvlText:SetText("+" .. (run.level or "?"))
+        card.lvlText:SetText(run.level and ("+" .. run.level) or T("DUNGEON", "MAZMORRA"))
         card.nameText:SetText(name or run.dungeon or "?")
         
-        local res = run.onTime and "|cff00FF00" .. T("IN TIME", "EN TIEMPO") .. "|r" or "|cffFF0000" .. T("OVER TIME", "FUERA DE TIEMPO") .. "|r"
-        if run.onTime == nil then res = "|cffAAAAAA" .. T("N/A", "N/A") .. "|r" end
+        local res = isDungeon(run) and ("|cff00FF00" .. T("COMPLETED", "COMPLETADA") .. "|r")
+            or (run.onTime and "|cff00FF00" .. T("IN TIME", "EN TIEMPO") .. "|r" or "|cffFF0000" .. T("OVER TIME", "FUERA DE TIEMPO") .. "|r")
+        if run.onTime == nil and not isDungeon(run) then res = "|cffAAAAAA" .. T("N/A", "N/A") .. "|r" end
         card.resText:SetText(res)
         
-        card.timeText:SetText(duration(run.durationMS/1000) .. " / " .. duration(run.timeLimit))
+        card.timeText:SetText(duration(run.durationMS and run.durationMS/1000) .. (run.timeLimit and (" / " .. duration(run.timeLimit)) or ""))
         card.dateText:SetText(when(run.completedAt) .. (run.source == "blizzard" and " [I]" or ""))
         
         card:SetBackdropColor(0,0,0,run.id==selected.id and .8 or .5)
@@ -742,8 +760,10 @@ function H:Preview()
     self:Render()
     self.window:Show()
 end
+function Mod:ShowDungeonHistory() H:Show() end
 function Mod:ShowMythicPlusHistory() H:Show() end
-SLASH_KULLTHRANKEYHISTORY1 = "/ktkeys"
-SlashCmdList.KULLTHRANKEYHISTORY = function(msg)
+SLASH_KULLTHRANDUNGEONHISTORY1 = "/ktdungeons"
+SLASH_KULLTHRANDUNGEONHISTORY2 = "/ktkeys"
+SlashCmdList.KULLTHRANDUNGEONHISTORY = function(msg)
     if msg and msg:lower():match("^test") then H:Preview() else H:Show() end
 end

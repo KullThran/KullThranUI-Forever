@@ -133,6 +133,33 @@ local ANCHOR_ORDER = {
     "LEFT", "CENTER", "RIGHT",
     "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
 }
+local INDICATOR_ANCHOR_VALUES = {
+    AUTO = "Automatic (frame side)",
+    TOPLEFT = "Top Left", TOP = "Top", TOPRIGHT = "Top Right",
+    LEFT = "Left", CENTER = "Center", RIGHT = "Right",
+    BOTTOMLEFT = "Bottom Left", BOTTOM = "Bottom", BOTTOMRIGHT = "Bottom Right",
+}
+local INDICATOR_ANCHOR_ORDER = { "AUTO", "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+
+local function ApplyPreviewCharacterLevelTextStyle(text, db)
+    if not (text and text.SetFont) then return end
+    db = db or {}
+    local outline = db.levelFontOutline
+    if outline == "NONE" then outline = "" end
+    if type(outline) ~= "string" then outline = "OUTLINE" end
+    local size = math.max(6, math.min(48, tonumber(db.levelFontSize) or 11))
+    text:SetFont(ResolvePreviewFont(db.levelFont or DEFAULT_FONT_NAME), size, outline)
+    local color = db.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
+    text:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
+    text:ClearAllPoints()
+    local anchor = db.levelAnchor
+    if anchor and anchor ~= "AUTO" then
+        text:SetPoint(anchor, text:GetParent(), anchor, tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+    else
+        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT", tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+    end
+end
+
 
 local HEALTH_TEXT_VALUES = {
     PERCENT = "Percent",
@@ -197,6 +224,7 @@ local PROFILE_ORDER = { "auto", "dps_tank", "heal" }
 local PREVIEW_FILL = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\Melli.tga"
 local PREVIEW_BG = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"
 local PREVIEW_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\UnitFramesIcons\\"
+local PREVIEW_PVP_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\"
 local PREVIEW_ROLE_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Modules\\Tooltip\\Icons\\"
 local PREVIEW_WHITE = "Interface\\Buttons\\WHITE8x8"
 local PARTY_VERTICAL_NAME_LEFT_INSET = 24
@@ -214,8 +242,28 @@ local PREVIEW_UNITS = {
     { name = "Xx", class = "ROGUE", role = "DAMAGER", health = 0.34, power = 0.55, maxHealth = 70000, absorb = 0.12, status = "Offline" },
 }
 
-local AURA_SAMPLE_BUFFS = { 136078, 135932, 132333, 4622448, 4630367 }
-local AURA_SAMPLE_BUFF_IDS = { 1126, 1459, 6673, 381748, 462854 }
+local function IsForeverClient()
+    local projectID = _G.WOW_PROJECT_ID
+    local betaID = _G.WOW_PROJECT_FOREVER_BETA or _G.WOW_PROJECT_WOW_FOREVER_BETA
+    local foreverID = _G.WOW_PROJECT_FOREVER or _G.WOW_PROJECT_WOW_FOREVER
+    if projectID ~= nil and (projectID == betaID or projectID == foreverID) then return true end
+    local buildInfo = _G.GetBuildInfo
+    if type(buildInfo) == "function" then
+        local _, _, _, version = buildInfo()
+        local numericVersion = tonumber(version)
+        return numericVersion ~= nil and numericVersion >= 16000 and numericVersion < 17000
+    end
+    return false
+end
+
+local IS_FOREVER_CLIENT = IsForeverClient()
+
+local AURA_SAMPLE_BUFFS = IS_FOREVER_CLIENT
+    and { 136078, 135987, 135932, 132333, 136114, 135906 }
+    or { 136078, 135932, 132333, 4622448, 4630367 }
+local AURA_SAMPLE_BUFF_IDS = IS_FOREVER_CLIENT
+    and { 1126, 1243, 1459, 6673, 8512, 20217 }
+    or { 1126, 1459, 6673, 381748, 462854 }
 local AURA_SAMPLE_DEBUFFS = {
     { icon = 136071, spellID = 118, color = { r = 0.20, g = 0.60, b = 1.00 } },
     { icon = 136139, spellID = 980, color = { r = 0.62, g = 0.08, b = 0.92 } },
@@ -235,8 +283,14 @@ local AURA_SAMPLE_DEBUFFS = {
     { icon = 463565, spellID = 25771, color = { r = 0.95, g = 0.60, b = 0.10 } },
 }
 
--- Almacenar colores randomizados por posición de party (excepto player)
-local MISSING_BUFF_PREVIEW_RULES = {
+local MISSING_BUFF_PREVIEW_RULES = IS_FOREVER_CLIENT and {
+    DRUID = { key = "missingBuffCheckMark", name = "Mark of the Wild", icon = 136078, spellID = 1126 },
+    PRIEST = { key = "missingBuffCheckStamina", name = "Power Word: Fortitude", icon = 135987, spellID = 1243 },
+    MAGE = { key = "missingBuffCheckIntellect", name = "Arcane Intellect", icon = 135932, spellID = 1459 },
+    WARRIOR = { key = "missingBuffCheckAttackPower", name = "Battle Shout", icon = 132333, spellID = 6673 },
+    SHAMAN = { key = "missingBuffCheckWindfury", name = "Windfury Totem", icon = 136114, spellID = 8512 },
+    PALADIN = { key = "missingBuffCheckKings", name = "Blessing of Kings", icon = 135906, spellID = 20217 },
+} or {
     DRUID = { key = "missingBuffCheckMark", name = "Mark of the Wild", icon = 136078, spellID = 1126 },
     PRIEST = { key = "missingBuffCheckStamina", name = "Power Word: Fortitude", icon = 135987, spellID = 21562 },
     MAGE = { key = "missingBuffCheckIntellect", name = "Arcane Intellect", icon = 135932, spellID = 1459 },
@@ -244,7 +298,6 @@ local MISSING_BUFF_PREVIEW_RULES = {
     SHAMAN = { key = "missingBuffCheckSkyfury", name = "Skyfury", icon = 4630367, spellID = 462854 },
     EVOKER = { key = "missingBuffCheckBronze", name = "Blessing of the Bronze", icon = 4622448, spellID = 381748 },
 }
-
 local memberColorOverrides = {}
 local previewDebuffSeed = 0
 -- Lista de clases disponibles para randomizar
@@ -340,6 +393,12 @@ local function ApplyRootValue(key, value)
         if not ok and reason == "combat" then
             PrintStatus("Party Frames profile change saved. It will be applied after combat.")
         end
+    end
+    if (key == "showCharacterLevel" or key == "levelAnchor" or key == "levelX" or key == "levelY" or key == "pvpAnchor" or key == "pvpX" or key == "pvpY") and mod and mod.ApplyLayout then
+        mod:ApplyLayout("party")
+    end
+    if key == "showPvPIcon" and mod and mod.RefreshAllIndicators then
+        mod:RefreshAllIndicators()
     end
     if livePreview and livePreview.Refresh then
         livePreview:Refresh()
@@ -828,6 +887,14 @@ local function EnsureUnit(preview, index)
     unit.value = unit.overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     unit.value:SetJustifyH("RIGHT")
     unit.value:SetWordWrap(false)
+
+    unit.levelText = unit:CreateFontString(nil, "OVERLAY")
+    unit.levelText:SetJustifyH("LEFT")
+    unit.levelText:SetWordWrap(false)
+    unit.levelText:SetWidth(34)
+    unit.levelText:SetHeight(14)
+    unit.levelText:Hide()
+    unit.pvpIcon = CreatePreviewOverlayIcon(unit, 14)
     unit.value:SetTextColor(1, 1, 1, 1)
     if unit.value.SetNonSpaceWrap then unit.value:SetNonSpaceWrap(false) end
 
@@ -906,6 +973,8 @@ local function RefreshLivePreview(preview)
     local db = mod and mod.GetModeDB and mod:GetModeDB(configMode) or nil
     cfg = cfg or db or {}
 
+    local rootShowLevel = GetRootValue("showCharacterLevel", true) ~= false and configMode == "party"
+    local rootShowPvP = GetRootValue("showPvPIcon", true) ~= false
     local includePlayer = configMode ~= "raid" and cfg.showPlayer ~= false
     local count = includePlayer and 5 or 4
     if preview.includePlayerOverride ~= nil then
@@ -1183,6 +1252,34 @@ local function RefreshLivePreview(preview)
             unit.statusIcon:SetAlpha(1)
             unit.name:SetAlpha(1)
         end
+        ApplyPreviewCharacterLevelTextStyle(unit.levelText, {
+            levelFont = GetRootValue("levelFont", DEFAULT_FONT_NAME),
+            levelFontSize = GetRootValue("levelFontSize", 11),
+            levelFontOutline = GetRootValue("levelFontOutline", "OUTLINE"),
+            levelColor = GetRootValue("levelColor", { r = 1, g = 0.82, b = 0.20, a = 1 }),
+            levelX = GetRootValue("levelX", 3),
+            levelY = GetRootValue("levelY", 1),
+        })
+        unit.levelText:SetText(sample.isPlayer and "80" or "70")
+        unit.levelText:SetShown(rootShowLevel and not sample.status)
+        unit.pvpIcon:ClearAllPoints()
+        unit.pvpIcon:SetSize(14, 14)
+        local pvpAnchor = GetRootValue("pvpAnchor", "AUTO")
+        if pvpAnchor ~= "AUTO" then
+            unit.pvpIcon:SetPoint(pvpAnchor, unit, pvpAnchor,
+                tonumber(GetRootValue("pvpX", -2)) or -2, tonumber(GetRootValue("pvpY", 0)) or 0)
+        else
+            unit.pvpIcon:SetPoint("RIGHT", unit, "LEFT",
+                tonumber(GetRootValue("pvpX", -2)) or -2, tonumber(GetRootValue("pvpY", 0)) or 0)
+        end
+        if rootShowPvP and not sample.status then
+            unit.pvpIcon.texture:SetTexture(PREVIEW_PVP_ICON_PATH .. (sample.isPlayer and "Alliance.png" or "Horde.png"))
+            unit.pvpIcon.texture:SetTexCoord(0, 1, 0, 1)
+            unit.pvpIcon:Show()
+        else
+            unit.pvpIcon:Hide()
+        end
+
         local maxName = isRaidMode and math.floor(h * 0.40) or nil
         local maxValue = isRaidMode and math.floor(h * 0.35) or nil
         ApplyPreviewFont(unit.name, cfg, "nameFontSize", isRaidMode and 11 or 15, maxName)
@@ -1580,6 +1677,12 @@ local function AddLayoutControls(container, W, mode)
         function(v) ApplyValue(configMode, "growDirection", v) end,
         DIRECTION_ORDER
     ); by = by + h
+    if configMode == "party" then
+        _, h = W:Toggle(container, "Show Character Level", -by,
+            function() return GetRootValue("showCharacterLevel", true) ~= false end,
+            function(v) ApplyRootValue("showCharacterLevel", v and true or false) end
+        ); by = by + h
+    end
     _, h = W:Toggle(container, "Show Aura Icons", -by,
         function() return GetValue(configMode, "showAuras", true) ~= false end,
         function(v) ApplyValue(configMode, "showAuras", v and true or false) end
@@ -2032,6 +2135,33 @@ local function AddAuraSpellVisibilityControls(container, W, mode, startY)
     return by
 end
 
+local MISSING_BUFF_OPTION_DEFS = IS_FOREVER_CLIENT and {
+    { label = "Track Mark of the Wild", key = "missingBuffCheckMark" },
+    { label = "Track Fortitude", key = "missingBuffCheckStamina" },
+    { label = "Track Intellect", key = "missingBuffCheckIntellect" },
+    { label = "Track Battle Shout", key = "missingBuffCheckAttackPower" },
+    { label = "Track Windfury Totem", key = "missingBuffCheckWindfury" },
+    { label = "Track Blessing of Kings", key = "missingBuffCheckKings" },
+} or {
+    { label = "Track Mark of the Wild", key = "missingBuffCheckMark" },
+    { label = "Track Fortitude", key = "missingBuffCheckStamina" },
+    { label = "Track Intellect", key = "missingBuffCheckIntellect" },
+    { label = "Track Battle Shout", key = "missingBuffCheckAttackPower" },
+    { label = "Track Skyfury", key = "missingBuffCheckSkyfury" },
+    { label = "Track Blessing of the Bronze", key = "missingBuffCheckBronze" },
+}
+
+local function AddMissingBuffTrackingControls(container, W, mode, by)
+    by = by or 0
+    for _, entry in ipairs(MISSING_BUFF_OPTION_DEFS) do
+        local _, h = W:Toggle(container, entry.label, -by,
+            function() return GetValue(mode, entry.key, true) ~= false end,
+            function(v) ApplyValue(mode, entry.key, v and true or false) end
+        )
+        by = by + h
+    end
+    return by
+end
 local function AddAuraControls(container, W, mode)
     local by = 0
     local _, h
@@ -2148,30 +2278,7 @@ local function AddAuraControls(container, W, mode)
         function(v) ApplyValue(mode, "missingBuffOffsetY", math.floor(v + 0.5)) end,
         -80, 80, 1, "%d"
     ); by = by + h
-    _, h = W:Toggle(container, "Track Mark of the Wild", -by,
-        function() return GetValue(mode, "missingBuffCheckMark", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckMark", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Fortitude", -by,
-        function() return GetValue(mode, "missingBuffCheckStamina", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckStamina", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Intellect", -by,
-        function() return GetValue(mode, "missingBuffCheckIntellect", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckIntellect", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Battle Shout", -by,
-        function() return GetValue(mode, "missingBuffCheckAttackPower", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckAttackPower", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Skyfury", -by,
-        function() return GetValue(mode, "missingBuffCheckSkyfury", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckSkyfury", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Blessing of the Bronze", -by,
-        function() return GetValue(mode, "missingBuffCheckBronze", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckBronze", v and true or false) end
-    ); by = by + h
+    by = AddMissingBuffTrackingControls(container, W, mode, by)
     by = by + 8
     _, h = W:Label(container, "Spell Visibility", -by, 12); by = by + h
     by = AddAuraSpellVisibilityControls(container, W, mode, by)
@@ -2597,35 +2704,6 @@ local function AddAuraPositionControls(container, W, mode)
     return by
 end
 
-local function AddMissingBuffTrackingControls(container, W, mode)
-    local by = 0
-    local _, h = W:Toggle(container, "Track Mark of the Wild", -by,
-        function() return GetValue(mode, "missingBuffCheckMark", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckMark", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Fortitude", -by,
-        function() return GetValue(mode, "missingBuffCheckStamina", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckStamina", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Intellect", -by,
-        function() return GetValue(mode, "missingBuffCheckIntellect", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckIntellect", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Battle Shout", -by,
-        function() return GetValue(mode, "missingBuffCheckAttackPower", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckAttackPower", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Skyfury", -by,
-        function() return GetValue(mode, "missingBuffCheckSkyfury", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckSkyfury", v and true or false) end
-    ); by = by + h
-    _, h = W:Toggle(container, "Track Blessing of the Bronze", -by,
-        function() return GetValue(mode, "missingBuffCheckBronze", true) ~= false end,
-        function(v) ApplyValue(mode, "missingBuffCheckBronze", v and true or false) end
-    ); by = by + h
-    return by
-end
-
 local function AddAuraSpellBlock(container, W, mode)
     return AddAuraSpellVisibilityControls(container, W, mode, 0)
 end
@@ -2994,9 +3072,52 @@ KT:RegisterPage("partyframes", "Party Frames", 11.1, function(sc, W)
         end,
         function(v)
             ApplyRootValue("enable", v and true or false)
+            local module = GetMod()
+            if module then
+                if v then module:Enable() else module:Disable() end
+            end
             RequestReload()
         end
     ); y = y + h
+
+    _, h = W:Toggle(sc, "Show PvP Faction Icon", -y,
+        function()
+            return GetRootValue("showPvPIcon", true) ~= false
+        end,
+        function(v)
+            ApplyRootValue("showPvPIcon", v and true or false)
+        end
+    ); y = y + h
+
+    _, h = W:Toggle(sc, "Show Character Level", -y,
+        function() return GetRootValue("showCharacterLevel", true) ~= false end,
+        function(v) ApplyRootValue("showCharacterLevel", v and true or false) end
+    ); y = y + h
+
+    _, h = W:Dropdown(sc, "Level Anchor", -y, INDICATOR_ANCHOR_VALUES,
+        function() return GetRootValue("levelAnchor", "AUTO") end,
+        function(v) ApplyRootValue("levelAnchor", v) end,
+        INDICATOR_ANCHOR_ORDER); y = y + h
+    _, h = W:Slider(sc, "Level X Offset", -y,
+        function() return GetRootValue("levelX", 3) end,
+        function(v) ApplyRootValue("levelX", v) end,
+        -200, 200, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "Level Y Offset", -y,
+        function() return GetRootValue("levelY", 1) end,
+        function(v) ApplyRootValue("levelY", v) end,
+        -200, 200, 1, "%d"); y = y + h
+    _, h = W:Dropdown(sc, "PvP Icon Anchor", -y, INDICATOR_ANCHOR_VALUES,
+        function() return GetRootValue("pvpAnchor", "AUTO") end,
+        function(v) ApplyRootValue("pvpAnchor", v) end,
+        INDICATOR_ANCHOR_ORDER); y = y + h
+    _, h = W:Slider(sc, "PvP Icon X Offset", -y,
+        function() return GetRootValue("pvpX", -2) end,
+        function(v) ApplyRootValue("pvpX", v) end,
+        -200, 200, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "PvP Icon Y Offset", -y,
+        function() return GetRootValue("pvpY", 0) end,
+        function(v) ApplyRootValue("pvpY", v) end,
+        -200, 200, 1, "%d"); y = y + h
 
     if KT.AddOptionsSubTabBar then
         _, h = KT.AddOptionsSubTabBar(sc, -y, MODE_TABS, activeMode, function(tabId)

@@ -6,6 +6,7 @@ local Skin = Mod:NewModule("Skin", "AceEvent-3.0", "AceHook-3.0")
 
 local _skinned = setmetatable({}, { __mode = "k" })
 local _hookedTrackers = setmetatable({}, { __mode = "k" })
+local _hookedTrackerCount = 0
 local _headerColorHooks = setmetatable({}, { __mode = "k" })
 
 local function GetFont()
@@ -30,19 +31,14 @@ local function GetAccent()
         return db.customColor.r, db.customColor.g, db.customColor.b
     end
 
-    local skin = KT.db and KT.db.profile and KT.db.profile.skin
-    if skin and skin.kullthranUIColorByClass then
-        local _, class = UnitClass("player")
-        if class then
-            local r, g, b = GetClassColor(class)
-            if type(r) == "table" and r.r then
-                return r.r, r.g, r.b
-            elseif r and g and b then
-                return r, g, b
-            end
-        end
+    -- Use the same resolved palette as the rest of KUI. This includes the
+    -- current style preset and class-color mode, which the old local fallback
+    -- could miss on Forever.
+    if KT and type(KT.GetStyleAccentRGB) == "function" then
+        return KT:GetStyleAccentRGB()
     end
 
+    local skin = KT.db and KT.db.profile and KT.db.profile.skin
     local color = (skin and skin.accentColor) or KT.BRAND_COLOR or { r = 0, g = 0.6, b = 1 }
     return color.r, color.g, color.b
 end
@@ -96,7 +92,10 @@ local function SkinHeader(header)
         if r and r.SetTexture then r:SetTexture("") end
     end
 
-    local text = header.Text
+    local text = header.Text or header.HeaderText or header.headerText or header.Title or header.title
+    if text and not text.SetTextColor and text.Text then
+        text = text.Text
+    end
     local r, g, b = GetAccent()
     if text then
         text:SetTextColor(r, g, b)
@@ -153,13 +152,41 @@ local function StyleObjectiveLine(line)
     end
 end
 
+local function AsObjectiveFontString(value)
+    if not value then return nil end
+    if value.SetTextColor then return value end
+    if value.Text and value.Text.SetTextColor then return value.Text end
+    return nil
+end
+
+local function FindFirstBlockFontString(frame, depth)
+    depth = depth or 0
+    if not frame or depth > 3 then return nil end
+    if frame.GetRegions then
+        for _, region in ipairs({ frame:GetRegions() }) do
+            local objectType = region.GetObjectType and region:GetObjectType()
+            if objectType == "FontString" then return region end
+        end
+    end
+    if frame.GetChildren then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            local found = FindFirstBlockFontString(child, depth + 1)
+            if found then return found end
+        end
+    end
+    return nil
+end
+
 local function SetBlockTitleAccent(block)
-    local title = block and block.HeaderText
+    local title
+    for _, key in ipairs({ "HeaderText", "headerText", "Title", "title", "QuestTitle", "questTitle" }) do
+        title = AsObjectiveFontString(block and block[key])
+        if title then break end
+    end
+    if not title then title = FindFirstBlockFontString(block, 0) end
     if not title then return end
     local r, g, b = GetQuestTitleColor()
-    if r then
-        title:SetTextColor(r, g, b)
-    end
+    if r then title:SetTextColor(r, g, b) end
 end
 
 local function EnsureBlockHoverColor(block)
@@ -181,9 +208,24 @@ local function StyleBlockText(block)
     if not block then return end
     EnsureBlockHoverColor(block)
 
-    local headerText = block.HeaderText
+    -- Forever can expose the title under a different field until the block
+    -- has been initialized. Prefer the known fields without assuming Retail
+    -- only uses HeaderText.
+    local headerText = block.HeaderText or block.headerText or block.Title or block.title
+    if headerText and not headerText.SetTextColor and headerText.Text then
+        headerText = headerText.Text
+    end
     local firstFontString
     local accentR, accentG, accentB = GetQuestTitleColor()
+
+    -- On Forever the title may be a direct child field rather than a region
+    -- returned by GetRegions().
+    if headerText then
+        StyleFontString(headerText, 13)
+        if accentR then
+            headerText:SetTextColor(accentR, accentG, accentB)
+        end
+    end
 
     if block.GetRegions then
         for _, region in ipairs({ block:GetRegions() }) do
@@ -208,6 +250,7 @@ local function StyleBlockText(block)
             StyleObjectiveLine(line)
         end
     end
+    SetBlockTitleAccent(block)
 end
 
 local function SkinBlock(block)
@@ -215,7 +258,9 @@ local function SkinBlock(block)
     -- Blizzard owns the quest POI button, its atlas, state, highlight and click behavior.
     -- KUI only skins the surrounding text and block chrome.
     if _skinned[block] then
-        EnsureBlockHoverColor(block)
+        -- Pooled Forever blocks may be styled before their lines/title exist.
+        -- Re-run the text pass on every update instead of returning early.
+        StyleBlockText(block)
         return
     end
 
@@ -230,9 +275,30 @@ local function SkinBlock(block)
     StyleBlockText(block)
     _skinned[block] = true
 end
+
+local function SkinUsedBlocks(value, depth)
+    depth = depth or 0
+    if depth > 4 or type(value) ~= "table" then return end
+
+    -- usedBlocks differs between client branches: it can be
+    -- [template][block] or contain blocks directly.
+    if value.HeaderText or value.headerText or value.usedLines or value.lines then
+        SkinBlock(value)
+        return
+    end
+
+    for _, child in pairs(value) do
+        if type(child) == "table" then
+            SkinUsedBlocks(child, depth + 1)
+        end
+    end
+end
+
 local function HookTracker(tracker)
     if not tracker or _hookedTrackers[tracker] then return end
     _hookedTrackers[tracker] = true
+    _hookedTrackerCount = _hookedTrackerCount + 1
+    Mod._ktHookedTrackerCount = _hookedTrackerCount
 
     -- Avoid block taint for scenario and widget trackers (widget pool)
     if tracker == _G.ScenarioObjectiveTracker or tracker == _G.UIWidgetObjectiveTracker then
@@ -257,32 +323,13 @@ local function HookTracker(tracker)
 
     if tracker.Update then
         hooksecurefunc(tracker, "Update", function()
-            if tracker.usedBlocks then
-                for _, byTemplate in pairs(tracker.usedBlocks) do
-                    if type(byTemplate) == "table" then
-                        for _, block in pairs(byTemplate) do
-                            if type(block) == "table" then
-                                SkinBlock(block)
-                            end
-                        end
-                    end
-                end
-            end
+            SkinUsedBlocks(tracker.usedBlocks)
         end)
     end
 
-    -- Skin existing blocks
-    if tracker.usedBlocks then
-        for _, byTemplate in pairs(tracker.usedBlocks) do
-            if type(byTemplate) == "table" then
-                for _, block in pairs(byTemplate) do
-                    if type(block) == "table" then
-                        SkinBlock(block)
-                    end
-                end
-            end
-        end
-    end
+    -- Skin existing blocks. Forever may expose modules by name rather than
+    -- as an ipairs array, and usedBlocks may be nested differently.
+    SkinUsedBlocks(tracker.usedBlocks)
 end
 
 local SUB_TRACKERS = {
@@ -324,28 +371,46 @@ local SUB_TRACKERS = {
 local function Skin11_0_Tracker()
     local otf = _G.ObjectiveTrackerFrame
     if not otf or not otf.ScrollBox then return end
-    
+
     local sb = otf.ScrollBox
+    local function SkinScrollFrame(frame)
+        if not frame then return end
+        if frame.Text and frame.SetCollapsed then
+            SkinHeader(frame)
+        else
+            SkinBlock(frame)
+        end
+    end
+
+    -- ScrollBox is virtualized on current clients. ForEachFrame catches the
+    -- visible pooled blocks; GetScrollTarget remains the Forever fallback.
+    if sb.ForEachFrame then
+        pcall(sb.ForEachFrame, sb, SkinScrollFrame)
+    elseif sb.EnumerateFrames then
+        for frame in sb:EnumerateFrames() do
+            SkinScrollFrame(frame)
+        end
+    end
+
     if sb.GetScrollTarget then
         local target = sb:GetScrollTarget()
-        if target then
+        if target and target.GetChildren then
             for _, child in ipairs({target:GetChildren()}) do
-                -- Typically Headers have .Text and .IsHeader (or similar),
-                -- but checking for .Text is usually safe to just apply block styling
-                -- and SkinBlock has an internal safeguard `if _skinned[block] then return end`
-                if child.Text and child.SetCollapsed then
-                    SkinHeader(child)
-                else
-                    SkinBlock(child)
-                end
+                SkinScrollFrame(child)
             end
         end
     end
 end
-
 local function InitTracker()
     local otf = _G.ObjectiveTrackerFrame
     if otf then
+        if otf.Update and not otf._ktObjectiveTrackerUpdateHook then
+            otf._ktObjectiveTrackerUpdateHook = true
+            hooksecurefunc(otf, "Update", function()
+                Skin11_0_Tracker()
+            end)
+        end
+
         local headerMenu = otf.HeaderMenu
         if headerMenu then
             headerMenu:Hide()
@@ -361,16 +426,28 @@ local function InitTracker()
     end
     
     local modules = otf and (otf.modules or otf.MODULES)
-    
+
     if modules then
-        for _, t in ipairs(modules) do
-            HookTracker(t)
+        for _, t in pairs(modules) do
+            if type(t) == "table" then
+                HookTracker(t)
+            end
         end
     end
     
     for _, name in ipairs(SUB_TRACKERS) do
         if _G[name] then
             HookTracker(_G[name])
+        end
+    end
+
+    -- Forever can omit both Retail module tables and the standard global names.
+    -- Inspect direct children as a final legacy compatibility path.
+    if otf and otf.GetChildren then
+        for _, child in ipairs({ otf:GetChildren() }) do
+            if (type(child) == "table" or type(child) == "userdata") and (child.usedBlocks or type(child.Update) == "function" or child.Header) then
+                HookTracker(child)
+            end
         end
     end
 
@@ -601,24 +678,72 @@ end
 
 local function CheckAndInit()
     local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker or {}
-    if db.enable == false then return end
-    InitTracker()
-    SetupBackgroundAndFading()
+    if db.enable == false then return true end
+    if not _G.ObjectiveTrackerFrame then return false end
+    local ok, err = pcall(function()
+        InitTracker()
+        SetupBackgroundAndFading()
+    end)
+    if not ok then
+        KT._objectiveTrackerInitError = tostring(err)
+        return false
+    end
+    KT._objectiveTrackerInitError = nil
+    return true
 end
 
+function Mod:KUIDebugCheck()
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    local otf = _G.ObjectiveTrackerFrame
+    local legacyModules = otf and (otf.modules or otf.MODULES)
+    local legacyModuleCount = 0
+    if type(legacyModules) == "table" then for _ in pairs(legacyModules) do legacyModuleCount = legacyModuleCount + 1 end end
+    local namedLegacyTrackers = 0
+    for i = 1, #SUB_TRACKERS do if _G[SUB_TRACKERS[i]] then namedLegacyTrackers = namedLegacyTrackers + 1 end end
+    return {
+        dbEnable = db and db.enable,
+        addonLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_ObjectiveTracker")) or (IsAddOnLoaded and IsAddOnLoaded("Blizzard_ObjectiveTracker")),
+        frame = otf ~= nil,
+        scrollBox = otf and otf.ScrollBox ~= nil,
+        legacyModules = legacyModules ~= nil,
+        legacyModuleCount = legacyModuleCount,
+        namedLegacyTrackers = namedLegacyTrackers,
+        hookedTrackers = _hookedTrackerCount,
+        childCount = (otf and otf.GetChildren and select("#", otf:GetChildren())) or 0,
+        skinModule = self.GetModule and self:GetModule("Skin", true) ~= nil,
+        initError = KT._objectiveTrackerInitError,
+    }
+end
 local _sawOT, _loggedIn = false, false
+local _retryElapsed, _retryCount = 0, 0
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "Blizzard_ObjectiveTracker" then
+    if event == "ADDON_LOADED" and (arg1 == "Blizzard_ObjectiveTracker" or _G.ObjectiveTrackerFrame) then
         _sawOT = true
     elseif event == "PLAYER_LOGIN" then
         _loggedIn = true
     end
-    if _sawOT and _loggedIn then
+    if _sawOT and _loggedIn and CheckAndInit() then
         f:UnregisterAllEvents()
-        CheckAndInit()
+        f:SetScript("OnUpdate", nil)
+    end
+end)
+
+
+f:SetScript("OnUpdate", function(_, elapsed)
+    if not _loggedIn then return end
+    _retryElapsed = _retryElapsed + (elapsed or 0)
+    if _retryElapsed < 1 then return end
+    _retryElapsed = 0
+    if not _sawOT and _G.ObjectiveTrackerFrame then _sawOT = true end
+    if _sawOT then
+        _retryCount = _retryCount + 1
+        if CheckAndInit() or _retryCount >= 30 then
+            f:SetScript("OnUpdate", nil)
+            f:UnregisterAllEvents()
+        end
     end
 end)
 
@@ -629,7 +754,7 @@ end
 if IsLoggedIn() then
     _loggedIn = true
 end
-if _sawOT and _loggedIn then
+if _sawOT and _loggedIn and CheckAndInit() then
     f:UnregisterAllEvents()
-    CheckAndInit()
+    f:SetScript("OnUpdate", nil)
 end
