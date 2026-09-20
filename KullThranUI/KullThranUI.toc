@@ -1,11 +1,12 @@
-## Interface: 160001
+## Interface: 16001
+## AllowLoadGameType: camelot
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.0.2
+## Version: 0.0.3
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
-## SavedVariables: KullThranDB, KullThranUINameplatesDB, KUIAuraRemindersDB, KUISpellDurationDB
+## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## OptionalDeps: Blizzard_DamageMeter, Masque, Grid2, Grid2Options, UnhaltedUnitFrames, Chattynator, Baganator
 

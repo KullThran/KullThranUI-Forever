@@ -340,11 +340,27 @@ local function GetPixelScale()
 end
 S.mult = GetPixelScale()
 
+-- WoW Forever uses the Camelot game type but keeps the modern interface
+-- version range. Keep this check local to Skins so optional Retail-only
+-- panels can be omitted from the options page without removing their source
+-- files (they remain useful if Blizzard enables the panels in another build).
+function S:IsForeverProject()
+    local projectID = _G.WOW_PROJECT_ID
+    local betaID = _G.WOW_PROJECT_FOREVER_BETA or _G.WOW_PROJECT_WOW_FOREVER_BETA
+    local foreverID = _G.WOW_PROJECT_FOREVER or _G.WOW_PROJECT_WOW_FOREVER
+    if projectID ~= nil and (projectID == betaID or projectID == foreverID) then
+        return true
+    end
+
+    local _, _, _, interfaceVersion = _G.GetBuildInfo and _G.GetBuildInfo()
+    interfaceVersion = tonumber(interfaceVersion)
+    return interfaceVersion == 16001
+end
+
 local resize = CreateFrame("Frame")
 resize:RegisterEvent("UI_SCALE_CHANGED")
 resize:RegisterEvent("DISPLAY_SIZE_CHANGED")
 resize:SetScript("OnEvent", function() S.mult = GetPixelScale() end)
-
 function S:GetBorderColor()
     local palette = (KT and KT.GetStylePalette and KT:GetStylePalette()) or KT.STYLE_PALETTE or nil
     local border = palette and palette.border or nil

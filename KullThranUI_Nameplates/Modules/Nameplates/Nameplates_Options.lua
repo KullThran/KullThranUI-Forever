@@ -10796,7 +10796,9 @@ initFrame:SetScript("OnEvent", function(self)
                 if ns.ResetNameplatesDB then
                     ns.ResetNameplatesDB()
                 else
-                    KullThranUINameplatesDB = nil
+                    KullThranUINameplatesDB_Forever = nil
+                    KullThranUINameplatesDB_Forever = nil
+                KullThranUINameplatesDB = nil
                 end
                 ReloadUI()
             end,
@@ -10821,6 +10823,7 @@ initFrame:SetScript("OnEvent", function(self)
             if ns.ResetNameplatesDB then
                 ns.ResetNameplatesDB()
             else
+                KullThranUINameplatesDB_Forever = nil
                 KullThranUINameplatesDB = nil
             end
             ReloadUI()

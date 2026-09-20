@@ -12,6 +12,12 @@ if not BlizzMove then return; end
 
 KT.BlizzMoveAPI = KT.BlizzMoveAPI or {};
 _G.KT_BlizzMoveAPI = KT.BlizzMoveAPI;
+_G.KUI_MoveAPI = KT.BlizzMoveAPI;
+if BlizzMove.isForever then
+    _G.KUI_ForeverMoveAPI = KT.BlizzMoveAPI;
+else
+    _G.KUI_ForeverMoveAPI = nil;
+end
 ---@class BlizzMoveAPI
 local BlizzMoveAPI = KT.BlizzMoveAPI;
 

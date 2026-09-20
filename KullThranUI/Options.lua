@@ -954,10 +954,24 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.2"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.3"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.0.3"] = {
+        version = "0.0.3",
+        published = "2026-09-20",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Reworked KUI Move as KUI Move Forever with a curated Forever frame catalogue, frame toggles, position and scale controls, and safe Settings fallback handling.",
+            "Corrected Forever default layout handling for Unlock Mode, KUI Tracker, Armory, Cast Bar, Resource Bars, and pet mana presentation.",
+            "Removed Retail-only assumptions from Enhancements, Damage Meter, profile selection, and Skins paths.",
+            "Limited External Addons quick access to addons installed and enabled in the current Forever client and exposed their configuration commands.",
+            "Updated the Installer with the blue Forever branding and an explicit Retail-to-Forever adaptation description.",
+            "Validated the beta package against Interface 16001 and refreshed the Forever beta publication workflow.",
+        },
+    },
     ["0.0.2"] = {
         version = "0.0.2",
         published = "2026-09-19",
@@ -1166,12 +1180,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.0.2"
+        or "0.0.3"
     -- When loaded from the source tree without the BigWigs packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "0.0.2"
+        ver = "0.0.3"
     end
     return ver
 end
@@ -2226,7 +2240,10 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.2")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.3")))
+    end
+    if menu._foreverLogo then
+        menu._foreverLogo:SetVertexColor(accent.r or 1, accent.g or 0, accent.b or 0.333, 1)
     end
 
     for _, btn in ipairs(menu._sizePresetButtons or {}) do
@@ -3881,12 +3898,22 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.2") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.3") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.0.2"
+	f._versionValue = KT.VERSION or "0.0.3"
+
+    local foreverLogo = f:CreateTexture(nil, "OVERLAY")
+    -- Match the visible height of the 13px version label while preserving
+    -- Forever.png's wide wordmark proportions.
+    foreverLogo:SetSize(58, 14)
+    foreverLogo:SetPoint("TOPLEFT", f, "TOPLEFT", 134, -65)
+    foreverLogo:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\Forever.png")
+    foreverLogo:SetTexCoord(0, 1, 0, 1)
+    foreverLogo:SetVertexColor(accentR, accentG, accentB, 1)
+    f._foreverLogo = foreverLogo
 
     -- Corrupted generated comment removed.
     local nav = CreateFrame("Frame", nil, f)
@@ -4845,6 +4872,7 @@ local PAGE_BUTTON_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextu
 
 local GENERAL_SUBTABS = {
     { id = "general", label = "General" },
+    { id = "kuimove", label = "KUI Move" },
     { id = "disablemodules", label = "Disable Modules" },
     { id = "compatibility", label = "Compatibility" },
     { id = "profiles", label = "Profiles" },
@@ -7047,6 +7075,118 @@ local function BuildDisableModulesTab(sc, W, y)
     return y
 end
 
+local function BuildKUIMoveTab(sc, W, y)
+    local h = 0
+    local move = KT:GetModule("BlizzMove", true)
+    local api = KT.BlizzMoveAPI
+    local displayName = move and move.displayName or "KUI Move"
+
+    _, h = W:SectionHeader(sc, displayName, -y); y = y + h
+    _, h = W:Label(sc,
+        "Move and scale the Blizzard windows supported by KUI. Forever uses its own curated frame catalogue; Retail-only panels are not shown here.",
+        -y, 11
+    ); y = y + h + 8
+
+    if not (move and move.DB and api) then
+        _, h = W:Label(sc,
+            "KUI Move is not loaded. Enable KullThranUI Enhancements and reload the UI.",
+            -y, 11, { r = 1, g = 0.35, b = 0.35 }
+        )
+        return y + h
+    end
+
+    move.DB.requireMoveModifier = move.DB.requireMoveModifier == true and true or false
+    move.DB.savePosStrategy = move.DB.savePosStrategy or "session"
+    move.DB.saveScaleStrategy = move.DB.saveScaleStrategy or "session"
+
+    _, h = W:SectionHeader(sc, "Movement & Storage", -y); y = y + h
+    _, h = W:Toggle(sc, "Require SHIFT to move windows", -y,
+        function() return move.DB.requireMoveModifier == true end,
+        function(value) move.DB.requireMoveModifier = value and true or false end
+    ); y = y + h
+
+    _, h = W:Dropdown(sc, "Remember window positions",
+        -y,
+        {
+            off = "Do not remember",
+            session = "Until UI reload",
+            permanent = "Remember permanently",
+        },
+        function() return move.DB.savePosStrategy end,
+        function(value)
+            if move.Config and move.Config.SetConfig then
+                move.Config:SetConfig("savePosStrategy", value)
+            else
+                move.DB.savePosStrategy = value
+            end
+        end
+    ); y = y + h
+
+    _, h = W:Dropdown(sc, "Remember window scales",
+        -y,
+        {
+            session = "Until UI reload",
+            permanent = "Remember permanently",
+        },
+        function() return move.DB.saveScaleStrategy end,
+        function(value)
+            if move.Config and move.Config.SetConfig then
+                move.Config:SetConfig("saveScaleStrategy", value)
+            else
+                move.DB.saveScaleStrategy = value
+            end
+        end
+    ); y = y + h
+
+    _, h = W:Button(sc, "Reset Permanent Positions", -y, function()
+        move:ResetPointStorage()
+        Reload()
+    end); y = y + h
+
+    _, h = W:Button(sc, "Reset Permanent Scales", -y, function()
+        move:ResetScaleStorage()
+        Reload()
+    end); y = y + h + 8
+
+    _, h = W:SectionHeader(sc, "Forever Windows", -y); y = y + h
+    _, h = W:Label(sc,
+        "Enable or disable the windows that KUI Move can handle. The list is built from the Forever registry at runtime.",
+        -y, 11
+    ); y = y + h + 6
+
+    local addOnNames = {}
+    for addOnName in pairs(api:GetRegisteredAddOns()) do
+        addOnNames[#addOnNames + 1] = addOnName
+    end
+    table.sort(addOnNames)
+
+    for _, addOnName in ipairs(addOnNames) do
+        local frameNames = {}
+        for frameName in pairs(api:GetRegisteredFrames(addOnName)) do
+            frameNames[#frameNames + 1] = frameName
+        end
+        table.sort(frameNames)
+
+        if #frameNames > 0 then
+            local groupLabel = addOnName == "KullThranUI" and "KUI / Blizzard Frames" or addOnName
+            _, h = W:SectionHeader(sc, groupLabel, -y); y = y + h
+            for _, frameName in ipairs(frameNames) do
+                _, h = W:Toggle(sc, frameName, -y,
+                    function()
+                        return not api:IsFrameDisabled(addOnName, frameName)
+                    end,
+                    function(enabled)
+                        api:SetFrameDisabled(addOnName, frameName, not enabled)
+                    end
+                )
+                y = y + h
+            end
+        end
+    end
+
+    return y
+end
+
 RegisterPage("general", "General", 10, function(sc, W)
     local y, h = 0, 0
 
@@ -7055,6 +7195,8 @@ RegisterPage("general", "General", 10, function(sc, W)
 
     if generalSubTab == "general" then
         y = BuildGeneralCore(sc, W, y)
+    elseif generalSubTab == "kuimove" then
+        y = BuildKUIMoveTab(sc, W, y)
     elseif generalSubTab == "compatibility" then
         y = BuildCompatibilityTab(sc, W, y)
     elseif generalSubTab == "profiles" then

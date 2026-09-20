@@ -2,6 +2,9 @@ local _, ns = ...
 local KT = (ns and ns.KT) or _G.KT
 local Mod = KT and KT:GetModule("Enhancements", true)
 if not Mod then return end
+if Mod.IsForeverFeatureAvailable and not Mod:IsForeverFeatureAvailable("dungeonHistory") then
+    return
+end
 
 local H = {}
 Mod.DungeonHistory = H

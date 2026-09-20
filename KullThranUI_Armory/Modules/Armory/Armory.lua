@@ -96,6 +96,8 @@ local ARMORY_HEADER_SECONDARY = { r = 0.50, g = 0.78, b = 0.50, a = 1 }
 local ARMORY_HEADER_DEFENSE = { r = 0.41, g = 0.80, b = 0.94, a = 1 }
 local ARMORY_HEADER_GENERAL = { r = 0.75, g = 0.75, b = 0.75, a = 1 }
 local STATS_TABS_RESERVED_HEIGHT = 36
+local ARMORY_STATS_PANEL_WIDTH = 245
+local ARMORY_STATS_PANEL_DEFAULT_RIGHT_OFFSET = 6
 
 local ENCHANT_QUALITY_ICON_PATTERN = "(|A.-|a)"
 
@@ -844,7 +846,9 @@ end
 
 function AR:RefreshMovementStats(_, unit)
     if unit and unit ~= 'player' then return end
-    if _G.CharacterFrame and not _G.CharacterFrame:IsShown() then return end
+    local characterShown = _G.CharacterFrame and _G.CharacterFrame.IsShown and _G.CharacterFrame:IsShown()
+    local paperDollShown = _G.PaperDollFrame and _G.PaperDollFrame.IsShown and _G.PaperDollFrame:IsShown()
+    if not (characterShown or paperDollShown) then return end
     if self._movementRefreshQueued then return end
 
     self._movementRefreshQueued = true
@@ -871,6 +875,7 @@ function AR:InstallVisibilityWatcher()
         if characterFrame then
             if not self.Header then self:CreateHeader() end
             if not self.StatsFrame then self:CreateStatsPanel() end
+            if self.StatsFrame then self:LayoutStatsPanel() end
             if not self.configBtn then self:CreateConfigButton() end
             if not self._backgroundSelectorReady and _G.CharacterModelScene then
                 self:CreateBackgroundSelector()
@@ -1187,7 +1192,9 @@ end
 function AR:UpdateSlot(button)
     -- Skip hidden character-frame refreshes. The enchant tooltip scan is
     -- expensive and the overlays are refreshed again when the panel opens.
-    if (_G.CharacterFrame and not _G.CharacterFrame:IsShown()) then return end
+    local characterShown = _G.CharacterFrame and _G.CharacterFrame.IsShown and _G.CharacterFrame:IsShown()
+    local paperDollShown = _G.PaperDollFrame and _G.PaperDollFrame.IsShown and _G.PaperDollFrame:IsShown()
+    if not (characterShown or paperDollShown) then return end
 
     local slotID = button:GetID()
     local isEquipSlot = false
@@ -1318,65 +1325,58 @@ end
 -- STATS PANEL
 -- ============================================================================
 
-local function GetIcon(spellID)
-    local icon
-    local success, result = pcall(function()
-        if C_Spell and C_Spell.GetSpellTexture then
-            return C_Spell.GetSpellTexture(spellID)
-        elseif C_Spell and C_Spell.GetSpellInfo then
-            local info = C_Spell.GetSpellInfo(spellID)
-            return info and info.iconID
-        elseif GetSpellTexture then
-            return GetSpellTexture(spellID)
-        elseif GetSpellInfo then
-            local _, _, tex = GetSpellInfo(spellID)
-            return tex
-        end
-    end)
-    if success and result then
-        icon = result
-    end
+local STAT_ICON_PATH = "Interface" .. string.char(92) .. "Icons" .. string.char(92)
 
-    if icon then
-        return string.format("|T%s:14:14:0:0:64:64:5:59:5:59|t ", icon)
-    end
-    -- Fallback to default icons if API fails
-    return ""
+local function StaticIcon(texture)
+    if not texture then return "" end
+    return string.format("|T%s:14:14:0:0:64:64:5:59:5:59|t ", texture)
 end
 
+-- Use stable texture paths instead of spell lookups. Several Forever stat
+-- spell IDs are unavailable or map to unrelated icons, which caused missing
+-- and repeated icons in the custom panel.
 local ICONS = {
     -- Secondary
-    Crit = GetIcon(143610),
-    Haste = GetIcon(143618),
-    Mastery = "|TInterface\\Icons\\spell_arcane_prismaticcloak:14:14:0:0:64:64:5:59:5:59|t ",
-    Versatility = GetIcon(143622),
+    Crit = StaticIcon(STAT_ICON_PATH .. "ability_hunter_mongoosebite"),
+    Haste = StaticIcon(STAT_ICON_PATH .. "spell_nature_giftofthewild"),
+    Mastery = StaticIcon(STAT_ICON_PATH .. "spell_arcane_prismaticcloak"),
+    Versatility = StaticIcon(STAT_ICON_PATH .. "spell_holy_powerinfusion"),
 
     -- Attributes
-    Strength = "|T132401:14:14:0:0:64:64:5:59:5:59|t ",
-    Agility = "|T135133:14:14:0:0:64:64:5:59:5:59|t ",
-    Intellect = "|TInterface\\Icons\\spell_holy_magicalsentry:14:14:0:0:64:64:5:59:5:59|t ",
-    Stamina = "|T1386545:14:14:0:0:64:64:5:59:5:59|t ",
-    Health = GetIcon(6940),
-    Mana = GetIcon(158338),
-    GCD = "|TInterface\\Icons\\inv_misc_pocketwatch_01:14:14:0:0:64:64:5:59:5:59|t ",
+    Strength = StaticIcon(STAT_ICON_PATH .. "inv_sword_07"),
+    Agility = StaticIcon(STAT_ICON_PATH .. "ability_hunter_aspectofthemonkey"),
+    Intellect = StaticIcon(STAT_ICON_PATH .. "spell_holy_magicalsentry"),
+    Stamina = StaticIcon(STAT_ICON_PATH .. "inv_misc_coin_01"),
+    Health = StaticIcon(STAT_ICON_PATH .. "spell_holy_wordfortitude"),
+    Mana = StaticIcon(STAT_ICON_PATH .. "spell_shadow_manaburn"),
+    GCD = StaticIcon(STAT_ICON_PATH .. "inv_misc_pocketwatch_01"),
 
     -- Attack
-    AttackPower = GetIcon(100),
-    AttackSpeed = "|T1717022:14:14:0:0:64:64:5:59:5:59|t ",
-    SpellPower = GetIcon(384452),
+    MainHand = StaticIcon(STAT_ICON_PATH .. "inv_sword_04"),
+    OffHand = StaticIcon(STAT_ICON_PATH .. "inv_shield_04"),
+    Ranged = StaticIcon(STAT_ICON_PATH .. "inv_weapon_bow_07"),
+    AttackPower = StaticIcon(STAT_ICON_PATH .. "ability_warrior_bloodbath"),
+    AttackSpeed = StaticIcon(STAT_ICON_PATH .. "ability_rogue_sprint"),
+    SpellPower = StaticIcon(STAT_ICON_PATH .. "spell_fire_fireball"),
 
     -- Defense
-    Armor = GetIcon(74001),
-    Dodge = GetIcon(34481),
-    Parry = GetIcon(3127),
-    Block = "|TInterface\\Icons\\inv_shield_1h_alliance_d_02:14:14:0:0:64:64:5:59:5:59|t ",
+    Armor = StaticIcon(STAT_ICON_PATH .. "inv_chest_plate06"),
+    Dodge = StaticIcon(STAT_ICON_PATH .. "ability_rogue_quickrecovery"),
+    Parry = StaticIcon(STAT_ICON_PATH .. "ability_parry"),
+    Block = StaticIcon(STAT_ICON_PATH .. "inv_shield_1h_alliance_d_02"),
+
+    -- Resistances
+    Arcane = StaticIcon(STAT_ICON_PATH .. "spell_arcane_arcane01"),
+    Fire = StaticIcon(STAT_ICON_PATH .. "spell_fire_fire"),
+    Frost = StaticIcon(STAT_ICON_PATH .. "spell_frost_frostshock"),
+    Nature = StaticIcon(STAT_ICON_PATH .. "spell_nature_natureguardian"),
+    Shadow = StaticIcon(STAT_ICON_PATH .. "spell_shadow_shadowbolt"),
 
     -- General
-    Leech = "|T136211:14:14:0:0:64:64:5:59:5:59|t ",
-    Avoidance = "|T458725:14:14:0:0:64:64:5:59:5:59|t ",
-    Speed = "|TInterface\\Icons\\ability_rogue_sprint:14:14:0:0:64:64:5:59:5:59|t ",
+    Leech = StaticIcon(STAT_ICON_PATH .. "ability_hunter_mendpet"),
+    Avoidance = StaticIcon(STAT_ICON_PATH .. "spell_nature_stoneskin"),
+    Speed = StaticIcon(STAT_ICON_PATH .. "ability_rogue_sprint"),
 }
-
 local function BuildSecondaryStatEntry(displayMode, label, percentValue, ratingValue, color, tooltip, numericValueOverride)
     local safePercent = SafeArmoryNumber(percentValue) or 0
     local safeRating = SafeArmoryNumber(ratingValue)
@@ -1411,18 +1411,63 @@ local function BuildSecondaryStatEntry(displayMode, label, percentValue, ratingV
 end
 
 HideNativeArmoryStats = function()
-    local pane = _G.CharacterStatsPane
-    if not pane or pane == AR.StatsFrame then return end
-    if not pane._ktNativeStatsSuppressed then
-        pane._ktNativeStatsSuppressed = true
-        if pane.HookScript then
-            pane:HookScript("OnShow", function(self) self:Hide() end)
+    -- Forever renders the player stats in CharacterStatsPaneScrollBox. The
+    -- CharacterStatsPane frame is only the data/layout container, so hiding
+    -- that frame alone leaves the native values visible beside our panel.
+    local panes = {
+        _G.CharacterStatsPaneScrollBox,
+        _G.CharacterStatsPane,
+        _G.CharacterStatsPanePetScrollBox,
+    }
+
+    if _G.CharacterFrame and _G.CharacterFrame.GetStatsPane then
+        local ok, pane = pcall(_G.CharacterFrame.GetStatsPane, _G.CharacterFrame)
+        if ok then panes[#panes + 1] = pane end
+    end
+
+    local seen = {}
+    for _, pane in ipairs(panes) do
+        if pane and pane ~= AR.StatsFrame and not seen[pane] then
+            seen[pane] = true
+            if not pane._ktNativeStatsSuppressed then
+                pane._ktNativeStatsSuppressed = true
+                if pane.HookScript then
+                    pane:HookScript("OnShow", function(self) self:Hide() end)
+                end
+            end
+            pane:Hide()
         end
     end
-    pane:Hide()
-    if _G.UIFrameHider and pane.GetParent and pane:GetParent() ~= _G.UIFrameHider then
-        pcall(pane.SetParent, pane, _G.UIFrameHider)
+end
+
+function AR:LayoutStatsPanel()
+    local f = self.StatsFrame
+    local anchor = _G.CharacterFrame or _G.PaperDollFrame
+    if not f or not anchor then return end
+
+    local statsWidth = tonumber(self.db and self.db.statsPanelWidth) or ARMORY_STATS_PANEL_WIDTH
+    statsWidth = math.max(240, math.min(320, statsWidth))
+    local configuredGap = tonumber(self.db and self.db.statsPanelRightGap)
+    local rightOffset = configuredGap and -configuredGap or ARMORY_STATS_PANEL_DEFAULT_RIGHT_OFFSET
+    -- The right equipment column is the visual boundary for this panel. Keep
+    -- a small overlap so the native item buttons are not left floating in a
+    -- second statistics column.
+    local slot = _G.CharacterHandsSlot or _G.CharacterHeadSlot
+    if slot and anchor.GetRight and slot.GetLeft then
+        local frameRight = anchor:GetRight()
+        local slotLeft = slot:GetLeft()
+        if frameRight and slotLeft then
+            local detectedOffset = slotLeft + 6 - frameRight
+            if detectedOffset >= -120 and detectedOffset <= 120 then
+                rightOffset = detectedOffset
+            end
+        end
     end
+
+    f:SetWidth(statsWidth)
+    f:ClearAllPoints()
+    f:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", rightOffset, -6)
+    f:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", rightOffset, 6)
 end
 
 function AR:CreateStatsPanel()
@@ -1447,10 +1492,13 @@ function AR:CreateStatsPanel()
         end
     end
 
-    local f = CreateFrame("Frame", "KT_ArmoryStats", parent)
-    f:SetAllPoints()
+    local frameParent = _G.PaperDollFrame or parent
+    local f = CreateFrame("Frame", "KT_ArmoryStats", frameParent)
+    -- Forever places CharacterFrameInsetRight across the paper-doll area.
+    -- SetAllPoints() therefore covered the model and equipment slots. Keep
+    -- stats in a dedicated right column and leave the paper-doll area visible.
     f:SetFrameStrata("DIALOG")
-    f:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 30)
+    f:SetFrameLevel((frameParent.GetFrameLevel and frameParent:GetFrameLevel() or 0) + 30)
 
     f.BackgroundBase = f:CreateTexture(nil, "BACKGROUND")
     f.BackgroundBase:SetAllPoints()
@@ -1563,6 +1611,7 @@ function AR:CreateStatsPanel()
 
     f.Stats = {}
     self.StatsFrame = f
+    self:LayoutStatsPanel()
     f:Hide()
 
     f:EnableMouseWheel(true)
@@ -1770,11 +1819,11 @@ function AR:UpdateMyStats()
     -- power.  Add only the hands that return a safe value.
     local mainHandWeaponAP, offHandWeaponAP, rangedWeaponAP = SafeArmoryNumberCall(UnitWeaponAttackPower, unit)
     if mainHandWeaponAP ~= nil or offHandWeaponAP ~= nil or rangedWeaponAP ~= nil then
-        local function AddWeaponPowerRow(statKey, label, value)
+        local function AddWeaponPowerRow(statKey, label, value, icon)
             if value == nil then return end
             table.insert(statsList, {
                 statKey = statKey,
-                label = ArmoryLabel(ICONS.AttackPower, label, "Weapon Attack Power"),
+                label = ArmoryLabel(icon, label, "Weapon Attack Power"),
                 value = FormatArmoryNumber(value),
                 numericValue = FormatArmoryNumber(value),
                 numericValueLabel = "Value",
@@ -1783,9 +1832,9 @@ function AR:UpdateMyStats()
                 showLabel = true,
             })
         end
-        AddWeaponPowerRow("mainhand_weapon_attack_power", _G["MAINHANDSLOT"] or "Main-hand Weapon AP", mainHandWeaponAP)
-        AddWeaponPowerRow("offhand_weapon_attack_power", _G["OFFHANDSLOT"] or "Off-hand Weapon AP", offHandWeaponAP)
-        AddWeaponPowerRow("ranged_weapon_attack_power", _G["RANGEDSLOT"] or "Ranged Weapon AP", rangedWeaponAP)
+        AddWeaponPowerRow("mainhand_weapon_attack_power", _G["MAINHANDSLOT"] or "Main-hand Weapon AP", mainHandWeaponAP, ICONS.MainHand)
+        AddWeaponPowerRow("offhand_weapon_attack_power", _G["OFFHANDSLOT"] or "Off-hand Weapon AP", offHandWeaponAP, ICONS.OffHand)
+        AddWeaponPowerRow("ranged_weapon_attack_power", _G["RANGEDSLOT"] or "Ranged Weapon AP", rangedWeaponAP, ICONS.Ranged)
     end
 
     -- UnitAttackPower can return secret numbers during combat.  Never perform
@@ -1885,7 +1934,7 @@ function AR:UpdateMyStats()
             if value ~= nil then
                 table.insert(resistanceRows, {
                     statKey = "resistance_" .. definition.enum:lower(),
-                    label = resistance.name,
+                    label = ArmoryLabel(ICONS[definition.enum], resistance.name, definition.enum),
                     value = FormatArmoryNumber(value),
                     numericValue = FormatArmoryNumber(value),
                     numericValueLabel = "Value",
@@ -2321,7 +2370,11 @@ function AR:Refresh()
     self:UpdateBackground()
     if self.Header then self:UpdateHeader() end
 
-    if _G.CharacterFrame:IsShown() then
+    -- Forever can keep PaperDollFrame visible while CharacterFrame itself
+    -- reports hidden. Use either frame so the stats rows are populated.
+    local characterShown = _G.CharacterFrame and _G.CharacterFrame.IsShown and _G.CharacterFrame:IsShown()
+    local paperDollShown = _G.PaperDollFrame and _G.PaperDollFrame.IsShown and _G.PaperDollFrame:IsShown()
+    if characterShown or paperDollShown then
         for slotName, _ in pairs(SLOT_IDS) do
              local button = _G["Character"..slotName]
              if button then self:UpdateSlot(button) end

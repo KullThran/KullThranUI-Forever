@@ -2185,7 +2185,7 @@ end
 -- 1. ON INITIALIZE
 -- ============================================================================
 function KT:PrintStartupMessages()
-    local version = KT.VERSION or "0.0.2"
+    local version = KT.VERSION or "0.0.3"
     local updateAvailable = false
     local latestVersion = KT.GetLatestArchivedChangelogVersion and KT:GetLatestArchivedChangelogVersion()
     if latestVersion and KT.CompareVersions then
@@ -2599,6 +2599,38 @@ function KT:InitializeCore()
     local dbSource = type(savedVariablesAtStart) == "table" and savedVariablesAtStart or {}
     self._persistUsingPlaceholder = savedVariablesAtStart ~= dbSource
     self.db = LibStub("AceDB-3.0"):New(dbSource, defaults)
+
+    -- Retail and Forever must never share the same AceDB profile. Forever
+    -- reports the mainline project identity, so an unscoped "Default" entry
+    -- is not enough to distinguish the two clients.
+    local function profileBelongsToFlavor(profileName)
+        return self.IsProfileNameForCurrentFlavor
+            and self:IsProfileNameForCurrentFlavor(profileName)
+    end
+
+    local function ensureFlavorProfile(profileName)
+        local sv = rawget(self.db, "sv")
+        if not (sv and type(sv.profiles) == "table" and self.ScopeProfileName) then
+            return profileName
+        end
+
+        local scoped = self:ScopeProfileName(profileName or "Default")
+        if type(sv.profiles[scoped]) ~= "table" then
+            sv.profiles[scoped] = {}
+        end
+        if self.db.keys then
+            self.db.keys.profile = scoped
+        end
+        return scoped
+    end
+
+    self._profileFlavor = self.PROFILE_FLAVOR
+    self._profileFlavorPrefix = self.PROFILE_NAMESPACE_PREFIX
+    local initialFlavorProfile = ensureFlavorProfile(self.db.keys and self.db.keys.profile or "Default")
+    local initialSV = rawget(self.db, "sv")
+    if initialSV and initialSV.profileKeys and self.db.keys and self.db.keys.char then
+        initialSV.profileKeys[self.db.keys.char] = initialFlavorProfile
+    end
     InstallKTErrorCapture()
     self:PersistDebug("INIT AceDB db=%s sv=%s profile=%s char=%s placeholder=%s", tostring(self.db), tostring(rawget(self.db, "sv")), tostring(self.db.keys and self.db.keys.profile), tostring(self.db.keys and self.db.keys.char), tostring(self._persistUsingPlaceholder))
 
@@ -2607,16 +2639,20 @@ function KT:InitializeCore()
         local sv = rawget(self.db, "sv")
         if not (sv and sv.profileKeys and sv.profiles and self.db.keys) then return end
         local charKey = self.db.keys.char
-        if charKey and type(sv.profileKeys[charKey]) == "string" and sv.profiles[sv.profileKeys[charKey]] then
-            self.db.keys.profile = sv.profileKeys[charKey]
-        else
-            local onlyName
-            for name in pairs(sv.profiles) do
-                if onlyName then return end
-                onlyName = name
-            end
-            if onlyName then self.db.keys.profile = onlyName end
+        local storedName = charKey and sv.profileKeys[charKey] or nil
+        if profileBelongsToFlavor(storedName) and sv.profiles[storedName] then
+            self.db.keys.profile = storedName
+            return
         end
+
+        -- Existing Retail/legacy names are deliberately not migrated into
+        -- Forever. They remain available in the SavedVariables file, but the
+        -- Forever client gets a clean namespaced profile.
+        local scoped = ensureFlavorProfile(storedName or "Default")
+        if charKey then
+            sv.profileKeys[charKey] = scoped
+        end
+        self.db.keys.profile = scoped
     end
 
     local function mergeAndPin(raw)
@@ -2706,6 +2742,34 @@ function KT:InitializeCore()
     local function afterMerge()
         self:PersistDebug("READY afterMerge raw=%s sv=%s profile=%s", tostring(_G.KullThranDB), tostring(rawget(self.db, "sv")), tostring(self.db.keys and self.db.keys.profile))
         self._ktPersistenceReady = true
+
+        if self.SanitizeProfileForFlavor and self.db and self.db.profile then
+            self:SanitizeProfileForFlavor(self.db.profile)
+        end
+
+        -- Forever testing uses the addon defaults, regardless of stale retail
+        -- scale values that may be present in the broken SavedVariables.
+        if self.db and self.db.profile then
+            self.db.profile.autoResolutionScale = true
+            self.db.profile.useBlizzardUIScale = false
+            local _, height = GetPhysicalScreenSize()
+            local defaultScale = (height and height >= 2160) and 0.35
+                or (height and height >= 1440) and 0.53
+                or 0.71
+            self.db.profile.uiScale = defaultScale
+        end
+
+        -- The Forever client can deliver KullThranDB after module startup.
+        -- Reapply the effective profile scale immediately after the real DB is
+        -- connected; otherwise the provisional AceDB profile remains visible
+        -- until the Options panel calls its scale guard.
+        pcall(self.ApplyUIScale, self)
+        C_Timer.After(0, function()
+            if KT and KT.ApplyUIScale then
+                pcall(KT.ApplyUIScale, KT)
+            end
+        end)
+
         pcall(self.RestoreFromBootSnapshot, self, true)
         pcall(self.RestoreInstallerSuppressionShadow, self)
         pcall(self.RestoreLanguageShadow, self)
@@ -3040,7 +3104,7 @@ function KT:InitializeCore()
         self._installerReopenWatcher = watcher
     end
 
-    local version = KT.VERSION or "0.0.2"
+    local version = KT.VERSION or "0.0.3"
     local accentR, accentG, accentB = self:GetStyleAccentRGB()
     self:Print("Welcome to |cff" .. string.format("%02x%02x%02x", accentR * 255, accentG * 255, accentB * 255) .. "KullThranUI|r " .. version)
 end
@@ -3089,8 +3153,11 @@ function KT:GetInstallerCharacterKey()
 
     local name = UnitName and UnitName("player")
     local realm = GetRealmName and GetRealmName()
-    if name and name ~= "" and realm and realm ~= "" then
-        return name .. " - " .. realm
+    if name and name ~= "" then
+        if realm and realm ~= "" and not name:find("-", 1, true) then
+            return name .. " - " .. realm
+        end
+        return name
     end
 
     return UnitGUID and UnitGUID("player") or nil
@@ -3125,7 +3192,7 @@ function KT:MaybeAutoOpenInstaller()
         installerDb.isOpen = false
     end
 
-    local currentVersion = KT.VERSION or "0.0.2"
+    local currentVersion = KT.VERSION or "0.0.3"
     local characterKey = self:GetInstallerCharacterKey()
     local legacyCharacterGUID = UnitGUID and UnitGUID("player")
 

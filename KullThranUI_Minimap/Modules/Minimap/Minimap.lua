@@ -916,6 +916,25 @@ function Mod:OnInitialize()
 
     self.hiddenFrame = CreateFrame("Frame")
     self.hiddenFrame:Hide()
+
+    if Minimap and hooksecurefunc and not self._ktMaskSetterHooked then
+        self._ktMaskSetterHooked = true
+        hooksecurefunc(Minimap, "SetMaskTexture", function()
+            if Mod._ktApplyingMask or not Mod.db or Mod.db.enable == false then
+                return
+            end
+            if Mod._ktMaskCorrectionQueued then
+                return
+            end
+            Mod._ktMaskCorrectionQueued = true
+            C_Timer.After(0, function()
+                Mod._ktMaskCorrectionQueued = nil
+                if Mod and Mod.ApplyMask and Mod.db and Mod.db.enable ~= false then
+                    Mod:ApplyMask()
+                end
+            end)
+        end)
+    end
 end
 
 function Mod:OnEnable()
@@ -2578,22 +2597,32 @@ function Mod:UpdateIcons()
 end
 
 function Mod:ApplyMask()
-    Minimap:Hide()
-    Minimap:Show()
-
-    if isSquare then
-        Minimap:SetMaskTexture("Interface\\Buttons\\WHITE8X8")
-    else
-        Minimap:SetMaskTexture(186178)
+    if not Minimap or not Minimap.SetMaskTexture then
+        return
     end
 
-    C_Timer.After(0.1, function()
-        if isSquare then
-            Minimap:SetMaskTexture("Interface\\Buttons\\WHITE8X8")
-        else
-            Minimap:SetMaskTexture(186178)
+    local square = isSquare == true
+    local mask = square and "Interface\\Buttons\\WHITE8X8" or 186178
+    self._ktMaskApplyToken = (self._ktMaskApplyToken or 0) + 1
+    local token = self._ktMaskApplyToken
+
+    local function ApplyCurrentMask()
+        if not Mod or not Minimap or token ~= Mod._ktMaskApplyToken then
+            return
         end
-    end)
+        Mod._ktApplyingMask = true
+        pcall(Minimap.SetMaskTexture, Minimap, mask)
+        Mod._ktApplyingMask = nil
+    end
+
+    Minimap:Hide()
+    ApplyCurrentMask()
+    Minimap:Show()
+    ApplyCurrentMask()
+
+    for _, delay in ipairs({ 0, 0.05, 0.20, 0.50 }) do
+        C_Timer.After(delay, ApplyCurrentMask)
+    end
 end
 
 function Mod:HandleBorders()

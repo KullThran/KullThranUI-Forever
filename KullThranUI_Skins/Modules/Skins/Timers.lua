@@ -146,6 +146,7 @@ local function ScanTimers()
     if not SkinEnabled() then return end
     SkinContainer(_G.TimerTracker)
     SkinContainer(_G.MirrorTimerContainer)
+    SkinContainer(_G.QuestTimerFrame)
 
     for index = 1, 5 do
         SkinTimer(_G["TimerTrackerTimer" .. index])
@@ -164,6 +165,7 @@ local watcher = CreateFrame("Frame")
 pcall(watcher.RegisterEvent, watcher, "PLAYER_ENTERING_WORLD")
 pcall(watcher.RegisterEvent, watcher, "START_TIMER")
 pcall(watcher.RegisterEvent, watcher, "MIRROR_TIMER_START")
+pcall(watcher.RegisterEvent, watcher, "QUEST_TIMER_UPDATE")
 pcall(watcher.RegisterEvent, watcher, "ADDON_LOADED")
 watcher:SetScript("OnEvent", QueueTimerScan)
 

@@ -251,7 +251,7 @@ local function IsForeverClient()
     if type(buildInfo) == "function" then
         local _, _, _, version = buildInfo()
         local numericVersion = tonumber(version)
-        return numericVersion ~= nil and numericVersion >= 16000 and numericVersion < 17000
+        return numericVersion == 16001
     end
     return false
 end

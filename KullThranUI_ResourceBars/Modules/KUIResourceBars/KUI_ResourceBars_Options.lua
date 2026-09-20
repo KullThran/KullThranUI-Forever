@@ -717,7 +717,7 @@ KT:RegisterPage("resourcebars", LText("Resource Bars"), 13, function(sc, W)
 
     -- Base Ancla (Representando la barra de Cooldowns que sirve de ancla)
     local fakeAnchor = CreateFrame("StatusBar", nil, previewContainer)
-    local castW = 250
+    local castW = 135
     fakeAnchor:SetSize(castW, 30)
     fakeAnchor:SetPoint("BOTTOM", previewContainer, "BOTTOM", 0, 15)
     fakeAnchor:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
@@ -789,7 +789,7 @@ KT:RegisterPage("resourcebars", LText("Resource Bars"), 13, function(sc, W)
 
     local function UpdatePreview()
         local matchW = db.general.matchCooldownWidth
-        local w = matchW and castW or (db.general.manualWidth or 250)
+        local w = matchW and castW or (db.general.manualWidth or 135)
         local texHealth = LSM and LSM:Fetch("statusbar", db.health and db.health.texture) or "Interface\\Buttons\\WHITE8x8"
         local texPrimary = LSM and LSM:Fetch("statusbar", db.primary and db.primary.texture) or "Interface\\Buttons\\WHITE8x8"
         local texSecondary = LSM and LSM:Fetch("statusbar", db.secondary and db.secondary.texture) or "Interface\\Buttons\\WHITE8x8"

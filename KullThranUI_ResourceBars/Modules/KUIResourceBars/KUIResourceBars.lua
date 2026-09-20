@@ -1033,7 +1033,7 @@ local function GetSafeDB()
     if not KT.db.profile.resourceBars then
         KT.db.profile.resourceBars = {
             enabled    = true,
-            general   = { anchorGap = 4, matchCooldownWidth = true, manualWidth = 250, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION },
+            general   = { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION },
             powerColors = {},
             health    = { enabled = false, height = 25, borderSize = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, textFormat = "both", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE },
             primary   = { enabled = true,  height = 25, borderSize = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00, fillA = 1, textFormat = "curpp", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE, classColor = true, colorMode = "power", specColors = {}, hideManaBySpec = {}, markers = { enabled = false, values = "", width = 2, colorR = 1, colorG = 1, colorB = 1, colorA = 0.95 } },
@@ -1043,15 +1043,24 @@ local function GetSafeDB()
 
     local db = KT.db.profile.resourceBars
     if db.enabled == nil then db.enabled = true end
-    db.general   = db.general   or { anchorGap = 4, matchCooldownWidth = true, manualWidth = 250, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION }
+    db.general   = db.general   or { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION }
     if db.general.anchorGap == nil         then db.general.anchorGap          = 4    end
-    if db.general.matchCooldownWidth == nil then db.general.matchCooldownWidth = true end
-    if db.general.manualWidth == nil        then db.general.manualWidth        = 250  end
+    if db.general.matchCooldownWidth == nil then db.general.matchCooldownWidth = false end
+    if db.general.manualWidth == nil        then db.general.manualWidth        = 135  end
     if db.general.strata == nil             then db.general.strata             = "MEDIUM" end
     if db.general.hideOOC == nil            then db.general.hideOOC            = false end
     if db.general.xOffset == nil            then db.general.xOffset            = 0 end
     if db.general.bgA == nil                then db.general.bgA                = 0.8 end
     if db.general.previewMode == nil        then db.general.previewMode        = "stack" end
+
+    -- Match the castbar's new fixed default width without overriding custom resource widths.
+    if not db.general._ktResourceBarsDefaultMigrated_v2 then
+        if db.general.matchCooldownWidth == true and tonumber(db.general.manualWidth) == 250 then
+            db.general.matchCooldownWidth = false
+            db.general.manualWidth = 135
+        end
+        db.general._ktResourceBarsDefaultMigrated_v2 = true
+    end
 
     db.health    = db.health    or { enabled = false, height = 25, borderSize = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, textFormat = "both", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE }
     db.primary   = db.primary   or { enabled = true,  height = 25, borderSize = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00, fillA = 1, textFormat = "curpp", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE, classColor = true, colorMode = "power", specColors = {}, hideManaBySpec = {}, markers = { enabled = false, values = "", width = 2, colorR = 1, colorG = 1, colorB = 1, colorA = 0.95 } }
@@ -1186,7 +1195,7 @@ local function GetReferenceWidth()
             return db.general.manualWidth
         end
     end
-    return 250
+    return 135
 end
 
 -- Monitor activo de Ancho
@@ -1364,7 +1373,7 @@ local KT_RB_UNLOCK_KEY = "resource_bars"
 
 local function GetResourceBarsUnlockFallbackSize()
     local db = GetSafeDB()
-    local width = (db and db.general and db.general.manualWidth) or 250
+    local width = (db and db.general and db.general.manualWidth) or 135
     local gap = (db and db.general and db.general.anchorGap) or 4
     local height = 0
     local visibleCount = 0
@@ -1637,7 +1646,7 @@ function KRB:BuildBars()
 
         local secW = refWidth
         if db.general.matchCooldownWidth then secW = refWidth
-        else secW = db.general.manualWidth or 250 end
+        else secW = db.general.manualWidth or 135 end
 
         secondaryFrame:SetSize(secW, db.secondary.pipHeight)
         StackAbove(secondaryFrame)

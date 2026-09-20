@@ -423,6 +423,19 @@ local defaults = {
             healthBarTexture = "Melli Reforged",
             healthBarOpacity = 90,
             healthClassColored = true,
+            powerHeight = 6,
+            powerPosition = "below",
+            powerWidth = 0,
+            powerX = 0,
+            powerY = -4,
+            powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
+            powerPercentSize = 11,
+            powerPercentX = 0,
+            powerPercentY = 0,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
             textSize = 14,
             leftTextContent = "name",
             rightTextContent = "none",
@@ -430,7 +443,6 @@ local defaults = {
             borderSize = 1,
             borderColor = { r = 0, g = 0, b = 0 },
             highlightColor = { r = 1, g = 1, b = 1 },
-            powerPosition = "none",
         },
         focus = {
             frameWidth = 160,
@@ -2438,7 +2450,7 @@ local function UpdateBordersForScale(frame, unit)
     local ppIsDet = (ppPos == "detached_top" or ppPos == "detached_bottom")
     local ph = settings.powerHeight or 6
     -- Simple frames (pet/tot/focustarget) have no power bar ? skip power height
-    local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget")
+    local isMini = (unit == "targettarget" or unit == "focustarget")
     local powerH = (ppIsAtt and not isMini) and ph or 0
 
     local btbPos = settings.btbPosition or "bottom"
@@ -5123,6 +5135,7 @@ local function StylePetFrame(frame, unit)
     ApplyDarkTheme(health)
 
     frame.Health = health
+    frame.Power = CreatePowerBar(frame, unit, settings)
 
     -- Always create portrait; hide backdrop when disabled
     frame.Portrait = CreatePortrait(frame, "left", settings.healthHeight, unit)
@@ -8435,6 +8448,17 @@ local function ApplyUpdatedDefaultPreset()
         profile.pet.healthClassColored = true
     end
 
+    -- Existing Forever profiles used "none"; apply mana as the new default once.
+    if profile.pet and not profile._petManaDefault20260920 then
+        if profile.pet.powerPosition == nil or profile.pet.powerPosition == "none" then
+            profile.pet.powerPosition = "below"
+        end
+        if profile.pet.powerHeight == nil then
+            profile.pet.powerHeight = 6
+        end
+        profile._petManaDefault20260920 = true
+    end
+
     if profile.focus and (profile.focus.portraitSide == nil or profile.focus.portraitSide == "right") then
         profile.focus.portraitSide = "left"
     end
@@ -8586,6 +8610,173 @@ local function ApplyDebuffDefaultsMigration()
     profile._debuffDefaults20260815 = true
 end
 
+local FOREVER_UNIT_FRAME_LAYOUT_VERSION = 20260921
+
+local FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS = {
+    focus = { point = "CENTER", x = -315, y = -257 },
+    pet = { point = "CENTER", x = -372.5, y = -36.5 },
+    targettarget = { point = "CENTER", x = 378, y = -42.5 },
+    focustarget = { point = "CENTER", x = -364.5, y = -306.5 },
+}
+
+local function ClearForeverUnitFrameLayoutCopies()
+    local frameKeys = {
+        "unitframes_focus",
+        "unitframes_pet",
+        "unitframes_targettarget",
+        "unitframes_focustarget",
+    }
+    local function clearFrames(frames)
+        if type(frames) ~= "table" then return end
+        for _, key in ipairs(frameKeys) do
+            frames[key] = nil
+        end
+    end
+
+    local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
+        or (KT.db.keys and KT.db.keys.profile)
+    clearFrames(KT.db.profile.editMode and KT.db.profile.editMode.frames)
+
+    local rawProfile = profileName and KT.db.sv and KT.db.sv.profiles
+        and KT.db.sv.profiles[profileName]
+    if type(rawProfile) == "table" then
+        clearFrames(rawProfile.editMode and rawProfile.editMode.frames)
+    end
+
+    clearFrames(KT.svPersistedUnlockFrames)
+
+    local globals = { KT.db.global, KT.db.sv and KT.db.sv.global }
+    for _, global in ipairs(globals) do
+        local byProfile = global and global.kuiUnlockPositions
+        clearFrames(profileName and byProfile and byProfile[profileName])
+    end
+
+    local snapshot = _G.KUI_BOOT_SNAPSHOT
+    if type(snapshot) == "table" then
+        local snapProfile = profileName and snapshot.profiles and snapshot.profiles[profileName]
+        clearFrames(snapProfile and snapProfile.editMode and snapProfile.editMode.frames)
+        local snapShadow = profileName and snapshot.global
+            and snapshot.global.kuiUnlockPositions
+            and snapshot.global.kuiUnlockPositions[profileName]
+        clearFrames(snapShadow)
+    end
+end
+
+local function WriteForeverUnitFrameLayoutCopies()
+    local function writeFrames(frames)
+        if type(frames) ~= "table" then return end
+        for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
+            frames["unitframes_" .. key] = {
+                point = pos.point,
+                relativePoint = pos.point,
+                x = pos.x,
+                y = pos.y,
+            }
+        end
+    end
+
+    local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
+        or (KT.db.keys and KT.db.keys.profile)
+
+    local activeEditMode = KT.db.profile.editMode
+    if type(activeEditMode) ~= "table" then
+        activeEditMode = {}
+        KT.db.profile.editMode = activeEditMode
+    end
+    activeEditMode.frames = activeEditMode.frames or {}
+    writeFrames(activeEditMode.frames)
+
+    local function writeProfile(profile)
+        if type(profile) ~= "table" then return end
+        profile.editMode = profile.editMode or {}
+        profile.editMode.frames = profile.editMode.frames or {}
+        writeFrames(profile.editMode.frames)
+        profile.unitFrames = profile.unitFrames or {}
+        profile.unitFrames.positions = profile.unitFrames.positions or {}
+        for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
+            profile.unitFrames.positions[key] = {
+                point = pos.point,
+                x = pos.x,
+                y = pos.y,
+            }
+        end
+    end
+
+    local stores = { KT.db.sv, _G.KullThranDB }
+    for _, store in ipairs(stores) do
+        if type(store) == "table" and profileName and type(store.profiles) == "table" then
+            writeProfile(store.profiles[profileName])
+        end
+    end
+
+    local function writeShadow(global)
+        if type(global) ~= "table" or not profileName then return end
+        global.kuiUnlockPositions = global.kuiUnlockPositions or {}
+        local shadow = global.kuiUnlockPositions[profileName]
+        if type(shadow) ~= "table" then
+            shadow = {}
+            global.kuiUnlockPositions[profileName] = shadow
+        end
+        writeFrames(shadow)
+    end
+
+    writeShadow(KT.db.global)
+    writeShadow(KT.db.sv and KT.db.sv.global)
+    writeShadow(_G.KullThranDB and _G.KullThranDB.global)
+    writeFrames(KT.svPersistedUnlockFrames)
+
+    local snapshot = _G.KUI_BOOT_SNAPSHOT
+    if type(snapshot) == "table" and profileName then
+        local snapProfile = snapshot.profiles and snapshot.profiles[profileName]
+        if type(snapProfile) == "table" then
+            snapProfile.editMode = snapProfile.editMode or {}
+            snapProfile.editMode.frames = snapProfile.editMode.frames or {}
+            writeFrames(snapProfile.editMode.frames)
+        end
+        snapshot.global = snapshot.global or {}
+        writeShadow(snapshot.global)
+    end
+end
+local function ApplyForeverUnitFrameLayoutDefaults()
+    if not (db and db.profile and KT and KT.db and KT.db.profile) then return end
+    local profile = db.profile
+
+    profile.positions = profile.positions or {}
+    for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
+        profile.positions[key] = {
+            point = pos.point,
+            x = pos.x,
+            y = pos.y,
+        }
+    end
+
+    ClearForeverUnitFrameLayoutCopies()
+    WriteForeverUnitFrameLayoutCopies()
+
+    -- Testing mode: apply the defaults to the live frames as well. This is
+    -- intentionally repeated after delayed Blizzard/Unlock Mode restores.
+    if not (InCombatLockdown and InCombatLockdown()) then
+        local targetFrames = {
+            focus = frames.focus,
+            pet = frames.pet,
+            targettarget = frames.targettarget,
+            focustarget = frames.focustarget,
+        }
+        for key, frame in pairs(targetFrames) do
+            if frame then
+                ApplyFramePosition(frame, key)
+            end
+        end
+    end
+
+    local unlockMode = KT.GetModule and KT:GetModule("UnlockMode", true)
+    if unlockMode and unlockMode.isOpen then
+        unlockMode:UpdateRegistry()
+        unlockMode:RefreshMovers()
+    end
+
+    profile._foreverUnitFrameLayoutVersion = FOREVER_UNIT_FRAME_LAYOUT_VERSION
+end
 function Mod:BindDatabase()
     if not (KT and KT.db and KT.db.profile) then return end
     KT.db.profile.unitFrames = KT.db.profile.unitFrames or {}
@@ -8606,6 +8797,7 @@ function Mod:OnInitialize()
     ApplyTargetCastbarYellowDefault()
     ApplyReferenceLayoutDefaults()
     ApplyDebuffDefaultsMigration()
+    ApplyForeverUnitFrameLayoutDefaults()
     if RegisterUFHPDebugSlash then
         C_Timer.After(0, RegisterUFHPDebugSlash)
     end
@@ -8784,6 +8976,15 @@ function Mod:OnEnable()
         return
     end
     InitializeFrames()
+
+    -- SavedVariables/EditMode are currently unreliable in the Forever test
+    -- profile. Reapply the hard defaults now and after the delayed Blizzard
+    -- restore passes, so old coordinates cannot win after /reload.
+    ApplyForeverUnitFrameLayoutDefaults()
+    C_Timer.After(0.25, ApplyForeverUnitFrameLayoutDefaults)
+    C_Timer.After(2.5, ApplyForeverUnitFrameLayoutDefaults)
+    C_Timer.After(5.0, ApplyForeverUnitFrameLayoutDefaults)
+
     SetupOptionsPanel()
     Compat.ApplyColorsToOUF()
 
@@ -8793,8 +8994,32 @@ function Mod:OnEnable()
         KT.db.RegisterCallback(self, "OnProfileReset", "Refresh")
         self._dbCallbacksRegistered = true
     end
+
+    if not self._persistenceEventsRegistered then
+        self:RegisterEvent("VARIABLES_LOADED", "RefreshAfterPersistenceReady")
+        self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshAfterPersistenceReady")
+        self._persistenceEventsRegistered = true
+    end
 end
 
+function Mod:ApplyForeverRuntimeDefaults()
+    self:BindDatabase()
+    if not (self.db and self.db.enable ~= false) then return end
+    ApplyForeverUnitFrameLayoutDefaults()
+    if ns.ReloadFrames then
+        ns.ReloadFrames()
+    end
+end
+
+function Mod:RefreshAfterPersistenceReady()
+    local function RebindAndApply()
+        self:ApplyForeverRuntimeDefaults()
+    end
+
+    RebindAndApply()
+    C_Timer.After(0.5, RebindAndApply)
+    C_Timer.After(2.0, RebindAndApply)
+end
 function Mod:OnDisable()
     local function HideFrameTree(value)
         if not value then return end

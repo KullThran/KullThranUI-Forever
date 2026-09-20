@@ -898,8 +898,227 @@ function UM:EnsureDB()
     self:ArmFrameWipeTraps()
 end
 
+local FOREVER_DEFAULT_LAYOUT_VERSION = 20260921
+
+local FOREVER_UNIT_FRAME_DEFAULTS = {
+    focus = { point = "CENTER", x = -315, y = -257 },
+    pet = { point = "CENTER", x = -372.5, y = -36.5 },
+    targettarget = { point = "CENTER", x = 378, y = -42.5 },
+    focustarget = { point = "CENTER", x = -364.5, y = -306.5 },
+}
+
+local FOREVER_LAYOUT_FRAME_KEYS = {
+    "unitframes_focus",
+    "unitframes_pet",
+    "unitframes_targettarget",
+    "unitframes_focustarget",
+    "durability_frame",
+    "CDM_Tracker_interrupt",
+    "CDM_Tracker_defensive",
+    "CDM_Tracker_trinket",
+    "CDM_Tracker_potion",
+    "CDM_kui_interrupt",
+    "CDM_kui_defensive",
+    "CDM_kui_trinket",
+    "CDM_kui_potion",
+}
+
+local FOREVER_LAYOUT_UNIT_KEYS = {
+    "focus",
+    "pet",
+    "targettarget",
+    "focustarget",
+}
+
+local FOREVER_LAYOUT_TRACKER_KEYS = {
+    interrupt = { x = 0, y = 6, side = "TOPRIGHT_OUT" },
+    defensive = { x = 0, y = 4, side = "TOPRIGHT_OUT" },
+    trinket = { x = 0, y = -4, side = "BOTTOMRIGHT_OUT" },
+    potion = { x = 1, y = -4, side = "BOTTOMLEFT_OUT" },
+}
+
+local function ClearForeverLayoutFrameKeys(frames)
+    if type(frames) ~= "table" then return end
+    for _, key in ipairs(FOREVER_LAYOUT_FRAME_KEYS) do
+        frames[key] = nil
+    end
+end
+
+local function ClearForeverLayoutShadow(shadow)
+    if type(shadow) ~= "table" then return end
+    ClearForeverLayoutFrameKeys(shadow)
+end
+
+local FOREVER_DURABILITY_DEFAULT = {
+    point = "TOPLEFT",
+    relativePoint = "TOPLEFT",
+    x = 745,
+    y = -1138,
+}
+
+local function WriteForeverDurabilityCopies()
+    local function writeFrame(frames)
+        if type(frames) ~= "table" then return end
+        frames["durability_frame"] = {
+            point = FOREVER_DURABILITY_DEFAULT.point,
+            relativePoint = FOREVER_DURABILITY_DEFAULT.relativePoint,
+            x = FOREVER_DURABILITY_DEFAULT.x,
+            y = FOREVER_DURABILITY_DEFAULT.y,
+        }
+    end
+
+    local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
+        or (KT.db.keys and KT.db.keys.profile)
+    writeFrame(KT.db.profile.editMode and KT.db.profile.editMode.frames)
+    writeFrame(KT.svPersistedUnlockFrames)
+
+    local function writeProfile(profile)
+        if type(profile) ~= "table" then return end
+        profile.editMode = profile.editMode or {}
+        profile.editMode.frames = profile.editMode.frames or {}
+        writeFrame(profile.editMode.frames)
+    end
+    local stores = { KT.db.sv, _G.KullThranDB }
+    for _, store in ipairs(stores) do
+        if type(store) == "table" and profileName and type(store.profiles) == "table" then
+            writeProfile(store.profiles[profileName])
+        end
+    end
+
+    local function writeShadow(global)
+        if type(global) ~= "table" or not profileName then return end
+        global.kuiUnlockPositions = global.kuiUnlockPositions or {}
+        local shadow = global.kuiUnlockPositions[profileName]
+        if type(shadow) ~= "table" then
+            shadow = {}
+            global.kuiUnlockPositions[profileName] = shadow
+        end
+        writeFrame(shadow)
+    end
+    writeShadow(KT.db.global)
+    writeShadow(KT.db.sv and KT.db.sv.global)
+    writeShadow(_G.KullThranDB and _G.KullThranDB.global)
+
+    local snapshot = _G.KUI_BOOT_SNAPSHOT
+    if type(snapshot) == "table" and profileName then
+        local snapProfile = snapshot.profiles and snapshot.profiles[profileName]
+        if type(snapProfile) == "table" then
+            snapProfile.editMode = snapProfile.editMode or {}
+            snapProfile.editMode.frames = snapProfile.editMode.frames or {}
+            writeFrame(snapProfile.editMode.frames)
+        end
+        snapshot.global = snapshot.global or {}
+        writeShadow(snapshot.global)
+    end
+end
+function UM:ApplyForeverDefaultLayoutReset()
+    if not (KT.db and KT.db.profile) then return end
+
+    local profile = KT.db.profile
+    if profile._foreverDefaultLayoutVersion == FOREVER_DEFAULT_LAYOUT_VERSION then
+        return
+    end
+
+    -- The active profile, raw AceDB profile and the boot-time stash can all
+    -- contain a copy of a moved frame. Clear every copy before Unlock Mode's
+    -- delayed restore runs, otherwise an old retail position wins again.
+    profile.editMode = profile.editMode or {}
+    profile.editMode.frames = profile.editMode.frames or {}
+    ClearForeverLayoutFrameKeys(profile.editMode.frames)
+
+    local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
+        or (KT.db.keys and KT.db.keys.profile)
+    local rawProfiles = KT.db.sv and KT.db.sv.profiles
+    local rawProfile = profileName and rawProfiles and rawProfiles[profileName]
+    if type(rawProfile) == "table" then
+        rawProfile.editMode = rawProfile.editMode or {}
+        rawProfile.editMode.frames = rawProfile.editMode.frames or {}
+        ClearForeverLayoutFrameKeys(rawProfile.editMode.frames)
+    end
+
+    ClearForeverLayoutFrameKeys(KT.svPersistedUnlockFrames)
+
+    local globalStores = { KT.db.global, KT.db.sv and KT.db.sv.global }
+    for _, global in ipairs(globalStores) do
+        local byProfile = global and global.kuiUnlockPositions
+        local shadow = profileName and byProfile and byProfile[profileName]
+        ClearForeverLayoutShadow(shadow)
+    end
+
+    local snapshot = _G.KUI_BOOT_SNAPSHOT
+    if type(snapshot) == "table" then
+        local snapProfile = profileName and snapshot.profiles and snapshot.profiles[profileName]
+        local snapFrames = snapProfile and snapProfile.editMode and snapProfile.editMode.frames
+        ClearForeverLayoutFrameKeys(snapFrames)
+        local snapShadow = profileName and snapshot.global
+            and snapshot.global.kuiUnlockPositions
+            and snapshot.global.kuiUnlockPositions[profileName]
+        ClearForeverLayoutShadow(snapShadow)
+    end
+
+    -- UnitFrames has a second native position store. Write the requested
+    -- Forever defaults explicitly instead of relying on AceDB's old values.
+    local unitFrames = profile.unitFrames
+    if type(unitFrames) == "table" then
+        unitFrames.positions = unitFrames.positions or {}
+        for key, pos in pairs(FOREVER_UNIT_FRAME_DEFAULTS) do
+            unitFrames.positions[key] = {
+                point = pos.point,
+                x = pos.x,
+                y = pos.y,
+            }
+        end
+    end
+    if type(rawProfile) == "table" and type(rawProfile.unitFrames) == "table" then
+        rawProfile.unitFrames.positions = rawProfile.unitFrames.positions or {}
+        for key, pos in pairs(FOREVER_UNIT_FRAME_DEFAULTS) do
+            rawProfile.unitFrames.positions[key] = {
+                point = pos.point,
+                x = pos.x,
+                y = pos.y,
+            }
+        end
+    end
+
+    -- KUI Tracker also had a free-position store introduced during the
+    -- retail-to-Forever transition. Remove it so its current Forever anchors
+    -- are rebuilt instead of restoring a retail/free layout.
+    local cdm = profile.cooldownManager
+    if type(cdm) == "table" then
+        cdm.cdmBarPositions = cdm.cdmBarPositions or {}
+        for key, pos in pairs(FOREVER_LAYOUT_TRACKER_KEYS) do
+            cdm.cdmBarPositions["kui_" .. key] = nil
+            local tracker = cdm.customTracker and cdm.customTracker[key]
+            if type(tracker) == "table" then
+                tracker.positionMode = nil
+                tracker.x = pos.x
+                tracker.y = pos.y
+                tracker.side = pos.side
+            end
+        end
+    end
+    if type(rawProfile) == "table" and type(rawProfile.cooldownManager) == "table" then
+        local cdmRaw = rawProfile.cooldownManager
+        cdmRaw.cdmBarPositions = cdmRaw.cdmBarPositions or {}
+        for key, pos in pairs(FOREVER_LAYOUT_TRACKER_KEYS) do
+            cdmRaw.cdmBarPositions["kui_" .. key] = nil
+            local tracker = cdmRaw.customTracker and cdmRaw.customTracker[key]
+            if type(tracker) == "table" then
+                tracker.positionMode = nil
+                tracker.x = pos.x
+                tracker.y = pos.y
+                tracker.side = pos.side
+            end
+        end
+    end
+
+    WriteForeverDurabilityCopies()
+    profile._foreverDefaultLayoutVersion = FOREVER_DEFAULT_LAYOUT_VERSION
+end
+
 function UM:OnInitialize()
     self:EnsureDB()
+    self:ApplyForeverDefaultLayoutReset()
     self:ArmFrameWipeTraps()
 
     self.registry = KT.UnlockElements
@@ -979,6 +1198,17 @@ function UM:OnEnteringWorld()
             end
         end
         self:ApplyAllStoredPositions()
+
+        local unitFrames = KT and KT.GetModule and KT:GetModule("UnitFrames", true)
+        if unitFrames and unitFrames.ApplyForeverRuntimeDefaults then
+            unitFrames:ApplyForeverRuntimeDefaults()
+            C_Timer.After(0.5, function()
+                if unitFrames.ApplyForeverRuntimeDefaults then
+                    unitFrames:ApplyForeverRuntimeDefaults()
+                end
+            end)
+        end
+
         C_Timer.After(1, function()
             local em = KT.db and KT.db.profile and KT.db.profile.editMode
             local live = em and rawget(em, "frames")
@@ -3603,6 +3833,9 @@ function UM:CloseUnlockMode(saveChanges, force)
     self.isOpen = false
     self.isSuspended = false
     KT._unlockActive = false
+    if type(_G.KUI_CDM_OnUnlockModeChanged) == "function" then
+        pcall(_G.KUI_CDM_OnUnlockModeChanged, false)
+    end
     -- Drop keyboard capture immediately so the fade-out window (and any
     -- interrupted close) never leaves bindings/ESC dead.
     self:SetUnlockKeyboardCapture(false)

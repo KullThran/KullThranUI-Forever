@@ -3,6 +3,9 @@ local KT = (ns and ns.KT) or _G.KT
 local Mod = KT and KT:GetModule("Enhancements", true)
 local H = Mod and (Mod.DungeonHistory or Mod.MythicPlusHistory)
 if not H then return end
+if Mod.IsForeverFeatureAvailable and not Mod:IsForeverFeatureAvailable("dungeonHistory") then
+    return
+end
 
 local LText = KT.LText or function(k) return k end
 local function T(en, spanish) return LText(en) end

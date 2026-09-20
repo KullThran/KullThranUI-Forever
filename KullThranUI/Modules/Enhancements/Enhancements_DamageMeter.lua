@@ -155,19 +155,25 @@ if CreateAbbreviateConfig then
     }
 end
 
+-- WoW Forever starts with the nine original classes. Keep the fallback
+-- preview restricted to that roster so no Retail hero class appears when the
+-- native Damage Meter has not produced live combat data yet.
 local PREVIEW_DATA = {
-    { name = "Mew", classFilename = "DEMONHUNTER", specIconID = 1247264, totalAmount = 3842000, amountPerSecond = 182300 },
-    { name = "Ulkrad", classFilename = "WARRIOR", specIconID = 132355, totalAmount = 2746000, amountPerSecond = 130200 },
-    { name = "Kullthran", classFilename = "MAGE", specIconID = 135932, totalAmount = 2194000, amountPerSecond = 104100 },
-    { name = "Rogue", classFilename = "ROGUE", specIconID = 136189, totalAmount = 1987000, amountPerSecond = 94400 },
-    { name = "Hunter", classFilename = "HUNTER", specIconID = 132164, totalAmount = 1712000, amountPerSecond = 81300 },
+    { name = "Baine", classFilename = "WARRIOR", specIconID = 132355, totalAmount = 3842000, amountPerSecond = 182300 },
+    { name = "Aurelia", classFilename = "PALADIN", specIconID = 135920, totalAmount = 3168000, amountPerSecond = 150400 },
+    { name = "Rexxar", classFilename = "HUNTER", specIconID = 132164, totalAmount = 2746000, amountPerSecond = 130200 },
+    { name = "Valeera", classFilename = "ROGUE", specIconID = 136189, totalAmount = 2417000, amountPerSecond = 114900 },
+    { name = "Velen", classFilename = "PRIEST", specIconID = 135940, totalAmount = 2194000, amountPerSecond = 104100 },
+    { name = "Thrall", classFilename = "SHAMAN", specIconID = 136048, totalAmount = 1987000, amountPerSecond = 94400 },
+    { name = "Jaina", classFilename = "MAGE", specIconID = 135810, totalAmount = 1812000, amountPerSecond = 85900 },
+    { name = "Guldan", classFilename = "WARLOCK", specIconID = 136186, totalAmount = 1648000, amountPerSecond = 78200 },
+    { name = "Malfurion", classFilename = "DRUID", specIconID = 136041, totalAmount = 1496000, amountPerSecond = 71000 },
 }
 local PREVIEW_HEALING_DATA = {
-    { name = "Vhii", classFilename = "PRIEST", specIconID = 135940, totalAmount = 3842000, amountPerSecond = 182300 },
+    { name = "Aurelia", classFilename = "PALADIN", specIconID = 135920, totalAmount = 3842000, amountPerSecond = 182300 },
     { name = "Shammy", classFilename = "SHAMAN", specIconID = 136048, totalAmount = 3168000, amountPerSecond = 150400 },
     { name = "Lunara", classFilename = "DRUID", specIconID = 136041, totalAmount = 2746000, amountPerSecond = 130200 },
-    { name = "Aurelia", classFilename = "PALADIN", specIconID = 135920, totalAmount = 2194000, amountPerSecond = 104100 },
-    { name = "Mewra", classFilename = "MONK", specIconID = 608951, totalAmount = 1812000, amountPerSecond = 85900 },
+    { name = "Vhii", classFilename = "PRIEST", specIconID = 135940, totalAmount = 2194000, amountPerSecond = 104100 },
 }
 local HEALING_PREVIEW_MODES = { healingDone = true, hps = true, absorbs = true }
 local function GetPreviewData(mode)

@@ -23,6 +23,105 @@ _G.KT = KT
 _G.KullThranUI = KT
 _G.KT_NS = ns
 _G.KullThranUI_NS = ns
+-- WoW Forever deliberately reports itself as the mainline project. Its
+-- interface number is the reliable discriminator for this branch.
+local _, _, _, kuiInterface = _G.GetBuildInfo and _G.GetBuildInfo()
+local kuiForeverProject = _G.WOW_PROJECT_FOREVER
+    or _G.WOW_PROJECT_WOW_FOREVER
+    or _G.WOW_PROJECT_FOREVER_BETA
+    or _G.WOW_PROJECT_WOW_FOREVER_BETA
+KT.FOREVER_INTERFACE = 16001
+KT.IS_FOREVER = tonumber(kuiInterface) == KT.FOREVER_INTERFACE
+    or (_G.WOW_PROJECT_ID ~= nil and kuiForeverProject ~= nil
+        and _G.WOW_PROJECT_ID == kuiForeverProject)
+function KT:IsForever()
+    return self.IS_FOREVER == true
+end
+
+-- Profile data is not portable between Retail and WoW Forever. Forever keeps
+-- the mainline project identity, so the interface number/client flavor must
+-- be part of the profile namespace and transfer format.
+KT.PROFILE_FLAVOR = KT.IS_FOREVER and "forever" or "retail"
+KT.PROFILE_FLAVOR_LABEL = KT.IS_FOREVER and "Forever" or "Retail"
+KT.PROFILE_INTERFACE = tonumber(kuiInterface) or (KT.IS_FOREVER and 16001 or 0)
+KT.PROFILE_NAMESPACE_PREFIX = "KullThranUI " .. KT.PROFILE_FLAVOR_LABEL .. " - "
+KT.PROFILE_FORMAT_VERSION = 2
+
+function KT:GetProfileFlavor()
+    return self.PROFILE_FLAVOR
+end
+
+function KT:GetProfileFlavorLabel()
+    return self.PROFILE_FLAVOR_LABEL
+end
+
+function KT:GetProfileNamespacePrefix()
+    return self.PROFILE_NAMESPACE_PREFIX
+end
+
+function KT:IsProfileNameForCurrentFlavor(name)
+    return type(name) == "string"
+        and name:sub(1, #self.PROFILE_NAMESPACE_PREFIX) == self.PROFILE_NAMESPACE_PREFIX
+end
+
+function KT:ScopeProfileName(name)
+    name = type(name) == "string" and name or "Default"
+    name = strtrim and strtrim(name) or name
+    if name == "" then
+        name = "Default"
+    end
+
+    if self:IsProfileNameForCurrentFlavor(name) then
+        return name
+    end
+
+    local retailPrefix = "KullThranUI Retail - "
+    local foreverPrefix = "KullThranUI Forever - "
+    if name:sub(1, #retailPrefix) == retailPrefix then
+        name = name:sub(#retailPrefix + 1)
+    elseif name:sub(1, #foreverPrefix) == foreverPrefix then
+        name = name:sub(#foreverPrefix + 1)
+    end
+
+    return self.PROFILE_NAMESPACE_PREFIX .. name
+end
+
+function KT:GetProfileEnvelope()
+    return {
+        client = "KullThranUI",
+        flavor = self.PROFILE_FLAVOR,
+        interface = self.PROFILE_INTERFACE,
+        version = self.PROFILE_FORMAT_VERSION,
+    }
+end
+
+function KT:SanitizeProfileForFlavor(profile)
+    if type(profile) ~= "table" or not self:IsForever() then
+        return profile
+    end
+
+    -- These settings are Retail-only in the current Forever client. Keep the
+    -- tables available for module code/options, but force the feature off so
+    -- a copied Retail profile cannot activate it.
+    profile.dragonRiding = profile.dragonRiding or {}
+    profile.dragonRiding.enable = false
+
+    local enhancements = profile.enhancements
+    if type(enhancements) == "table" then
+        if type(enhancements.mplusTracker) == "table" then
+            enhancements.mplusTracker.enabled = false
+        end
+        if type(enhancements.dungeonHistory) == "table" then
+            enhancements.dungeonHistory.enabled = false
+            enhancements.dungeonHistory.autoShow = false
+        end
+        if type(enhancements.combatRez) == "table" then
+            enhancements.combatRez.enabled = false
+        end
+    end
+
+    return profile
+end
 
 -- Register these aliases during the core addon load, before the optional
 -- Installer module is loaded. The handler itself loads the module on demand.
@@ -47,12 +146,12 @@ local hooksecurefunc = _G.hooksecurefunc
 
 KT.VERSION = KT.VERSION
     or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
-		or "0.0.2"
+		or "0.0.3"
 -- When loaded directly from the source tree (without the BigWigs packager),
 -- GetAddOnMetadata returns the literal "@project-version@" token.  Strip it
 -- so the in-game UI never displays the raw packager placeholder.
 if KT.VERSION and KT.VERSION:find("@", 1, true) then
-    KT.VERSION = "0.0.2"
+    KT.VERSION = "0.0.3"
 end
 
 function KT:IsBlizzardEditModeActive()

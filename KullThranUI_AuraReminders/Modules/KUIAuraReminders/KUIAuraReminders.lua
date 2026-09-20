@@ -3186,7 +3186,8 @@ mainFrame:SetScript("OnEvent", function(_, e, arg1, arg2)
         if not AceDB then
             return
         end
-        db = AceDB:New("KUIAuraRemindersDB", defaults, true)
+        local savedVariableName = (KT.IsForever and KT:IsForever()) and "KUIAuraRemindersDB_Forever" or "KUIAuraRemindersDB"
+        db = AceDB:New(savedVariableName, defaults, true)
 
         -- Migration: Source of Magic moved from raidBuffs to auras
         if db.profile.raidBuffs and db.profile.raidBuffs.enabled and db.profile.raidBuffs.enabled.som ~= nil then

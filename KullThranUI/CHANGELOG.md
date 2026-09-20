@@ -5,6 +5,21 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.3 (2026-09-20)
+
+Forever beta follow-up focused on the Forever-native layout, options, installer, and release flow.
+
+- Reworked KUI Move as KUI Move Forever with a curated Forever frame catalogue, Forever-specific naming, aliases, frame toggles, position and scale controls, and safe Settings fallback handling.
+- Fixed the General > KUI Move page so it exposes real configuration controls instead of only a dead external button.
+- Corrected Forever default layout handling for Unlock Mode elements, including Equipment Durability, Focus, Focus Target, Pet, and Target of Target while accommodating Forever SavedVariables limitations.
+- Improved KUI Tracker and Aura handling so Forever icons and positions are rebuilt reliably after Unlock Mode edits instead of retaining Retail-only or stale copies.
+- Adjusted Armory layout and stat presentation to keep the character, equipment slots, original Blizzard stats, and KUI stats visible without panel overlap.
+- Made Cast Bar and Resource Bars use the intended Forever defaults, including fixed width behavior, matching resource-bar dimensions, and mana on the pet bar.
+- Removed or filtered Retail-only Enhancements, Damage Meter class data, profile choices, and Skins paths that do not apply to Forever.
+- Limited External Addons quick access to addons installed and enabled in the current Forever client, showing their available configuration commands and resolving registered command aliases.
+- Updated the Forever installer branding with the blue square KUI logo, the Forever logo, a blue Feral Shape, and an explicit Retail-to-Forever adaptation description.
+- Validated the beta package against Interface 16001 and refreshed the GitHub, CurseForge, Wago, and Discord release workflow for Forever beta publication.
+
 ## 0.0.2 (2026-09-19)
 
 Cumulative WoW Forever beta release notes from the 0.0.1 baseline. This branch is versioned independently from Retail 5.0.7.

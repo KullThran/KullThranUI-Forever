@@ -1317,7 +1317,7 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
         AddBlock('right', 'Pet', function(container)
             local by = 0
             by = AddCommonUnitControls(container, 'pet', 'Pet', by, {
-                hasPower = false,
+                hasPower = true,
                 hasCastbar = false,
                 showDispelOverlayKey = 'dispelOverlay',
                 hasVisibility = false,

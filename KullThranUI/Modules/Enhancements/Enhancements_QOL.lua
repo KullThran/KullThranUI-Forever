@@ -9,6 +9,10 @@ if not Mod then
     return
 end
 
+local function IsForeverFeatureAvailable(feature)
+    return not Mod.IsForeverFeatureAvailable or Mod:IsForeverFeatureAvailable(feature)
+end
+
 local C_AddOnProfiler = _G.C_AddOnProfiler
 local C_ChallengeMode = _G.C_ChallengeMode
 local C_Container = _G.C_Container
@@ -647,6 +651,14 @@ local function ShouldShowCombatRez()
 end
 
 function Mod:RefreshCombatRezDisplay()
+    if not IsForeverFeatureAvailable("combatRez") then
+        if runtime.combatRezFrame then
+            runtime.combatRezFrame:SetScript("OnUpdate", nil)
+            runtime.combatRezFrame:Hide()
+        end
+        return
+    end
+
     local db = self:GetDB()
     local frame = EnsureCombatRezFrame()
     local size = db.combatRez.iconSize or 40
@@ -1502,6 +1514,9 @@ local function TrySlotKeystone()
 end
 
 local function EnsureKeystoneHook()
+    if not IsForeverFeatureAvailable("mythicPlus") then
+        return
+    end
     if runtime.keystoneHookInstalled or not _G.ChallengesKeystoneFrame then
         return
     end
@@ -1519,6 +1534,9 @@ local function EnsureKeystoneHook()
 end
 
 local function ApplyAuctionHouseCurrentExpansion()
+    if not IsForeverFeatureAvailable("auctionHouseExpansion") then
+        return
+    end
     local db = Mod:GetDB()
     if not db.gameOptions.ahCurrentExpansion then
         return
@@ -1538,6 +1556,9 @@ local function ApplyAuctionHouseCurrentExpansion()
 end
 
 local function HandleSkipQueueRoleCheck()
+    if not IsForeverFeatureAvailable("lfg") then
+        return
+    end
     local db = Mod:GetDB()
     if not IsModuleEnabled or not IsModuleEnabled() or not (db.automation and db.automation.skipLFGRoleCheck) or IsControlKeyDown() then
         return
@@ -1607,6 +1628,9 @@ local function HandleSkipQueueRoleCheck()
     end
 end
 local function EnsureQueueConfirmationHook()
+    if not IsForeverFeatureAvailable("lfg") then
+        return
+    end
     if runtime.lfgDialogHookInstalled or not _G.LFGListApplicationDialog then
         return
     end
