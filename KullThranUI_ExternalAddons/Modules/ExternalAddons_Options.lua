@@ -16,14 +16,43 @@ local EXTERNAL_ADDON_ICONS = {
     MiniCC = "KUI.tga",
 }
 
-local function HasAddonInfo(addonName)
-    if not addonName then
-        return false
+local function GetAddonInfo(addonName)
+    if type(addonName) ~= "string" or addonName == "" then
+        return nil
     end
-    if C_AddOns and C_AddOns.GetAddOnInfo then
-        return C_AddOns.GetAddOnInfo(addonName) ~= nil
+
+    local getter = C_AddOns and C_AddOns.GetAddOnInfo or GetAddOnInfo
+    if not getter then
+        return nil
     end
-    return GetAddOnInfo and GetAddOnInfo(addonName) ~= nil
+
+    local ok, info = pcall(getter, addonName)
+    if not ok or type(info) ~= "string" or info == "" then
+        return nil
+    end
+    return info
+end
+
+local function IsAddonEnabledForCurrentCharacter(addonName)
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(addonName) then
+        return true
+    end
+
+    if C_AddOns and C_AddOns.GetAddOnEnableState and UnitName then
+        local playerName = UnitName("player")
+        if playerName then
+            local ok, state = pcall(C_AddOns.GetAddOnEnableState, playerName, addonName)
+            if ok and (tonumber(state) or 0) > 0 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function IsAddonAvailable(addonName)
+    return GetAddonInfo(addonName) ~= nil and IsAddonEnabledForCurrentCharacter(addonName)
 end
 
 local function CreateExternalAddonButton(parent, yOffset, addonDef)
@@ -54,9 +83,14 @@ local function CreateExternalAddonButton(parent, yOffset, addonDef)
     label:SetPoint("LEFT", icon, "RIGHT", 10, 0)
 
     local hintText = addonDef.hint
-    if not hintText and type(addonDef.slash) == "table" and addonDef.slash[1] then
-        hintText = "/" .. addonDef.slash[1]
+    if not hintText and type(addonDef.slash) == "table" then
+        local commands = {}
+        for _, command in ipairs(addonDef.slash) do
+            commands[#commands + 1] = "/" .. command:gsub("^/", "")
+        end
+        hintText = table.concat(commands, "  ")
     end
+    hintText = hintText or ""
 
     local hint = btn:CreateFontString(nil, "OVERLAY")
     hint:SetFont(FONT, 10)
@@ -129,17 +163,27 @@ KT:RegisterPage("external", "External Addons", 90, function(sc, W)
     _, h = W:SectionHeader(sc, "Open Addon Config", -y); y = y + h
     _, h = W:Label(sc, "Quick access buttons to supported external addons (only installed addons are shown).", -y, 11); y = y + h
 
+    -- This is only a catalogue of integrations. It must never be treated as
+    -- proof that the addon exists in the current client. Forever can expose
+    -- the same addon API surface as Retail, so the final list is filtered by
+    -- the current character's enabled addons below.
     local externalList = {
-        {name="Auctionator",          label="Auctionator",             slash={"atr"},           ace=nil},
-        {name="OPie",                 label="OPie",                    slash={"opie"},          ace=nil},
-        {name="MiniCC",               label="MiniCC",                  slash={"minicc"},        ace=nil},
+        {name="Auctionator", label="Auctionator", slash={"atr"}, ace={"Auctionator"}},
+        {name="OPie",        label="OPie",        slash={"opie"}, ace={"OPie"}},
+        {name="MiniCC",      label="MiniCC",      slash={"minicc"}, ace={"MiniCC"}},
     }
+
+    local shown = 0
     for _, addon in ipairs(externalList) do
-        local ok = HasAddonInfo(addon.name) or HasAddonInfo(addon.alt)
-        if ok then
-            local a = addon
-            _, h = CreateExternalAddonButton(sc, -y, a); y = y + h
+        if IsAddonAvailable(addon.name) then
+            _, h = CreateExternalAddonButton(sc, -y, addon); y = y + h
+            shown = shown + 1
         end
+    end
+
+    if shown == 0 then
+        _, h = W:Label(sc, "No supported external addons are installed and enabled for this Forever client.", -y, 11)
+        y = y + h
     end
 
     return y

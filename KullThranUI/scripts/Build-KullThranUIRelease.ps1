@@ -149,7 +149,7 @@ $excludedExtensions = New-Object 'System.Collections.Generic.HashSet[string]' ([
 @(".py", ".ps1", ".cmd", ".js", ".json", ".out") |
     ForEach-Object { [void]$excludedExtensions.Add($_) }
 $excludedFileNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-@("original_view.txt", "KT_UnlockMode_Restored.lua", "Popups_restored.lua") |
+@("original_view.txt", "scratch.txt", "extracted_buttons.lua", "KT_UnlockMode_Restored.lua", "Popups_restored.lua") |
     ForEach-Object { [void]$excludedFileNames.Add($_) }
 
 function Copy-CleanDirectory {

@@ -343,6 +343,30 @@ local function SkinSendMail()
             _G.SendMailMailButton:ClearAllPoints()
             _G.SendMailMailButton:SetPoint("RIGHT", _G.SendMailCancelButton, "LEFT", -2, 0)
         end
+
+        -- Keep money/COD checkboxes on the money row, above the action buttons.
+        local moneyAnchor = _G.SendMailMoney or _G.SendMailMoneyCopper
+            or _G.SendMailMoneySilver or _G.SendMailMoneyGold
+        local sendMoneyButton = _G.SendMailSendMoneyButton
+        local codButton = _G.SendMailCODButton
+        if sendMoneyButton then
+            sendMoneyButton:ClearAllPoints()
+            if moneyAnchor then
+                sendMoneyButton:SetPoint("LEFT", moneyAnchor, "RIGHT", 8, 0)
+            else
+                sendMoneyButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 34)
+            end
+        end
+        if codButton then
+            codButton:ClearAllPoints()
+            if sendMoneyButton then
+                codButton:SetPoint("LEFT", sendMoneyButton, "RIGHT", 8, 0)
+            elseif moneyAnchor then
+                codButton:SetPoint("LEFT", moneyAnchor, "RIGHT", 8, 0)
+            else
+                codButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 34)
+            end
+        end
         SetPanelShown(panel, SendMailFrame.IsShown and SendMailFrame:IsShown())
     end
 end

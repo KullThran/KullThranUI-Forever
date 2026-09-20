@@ -154,7 +154,7 @@ KT:RegisterPage("castbar", "Cast Bar", 12, function(sc, W)
     local iconMask = nil
 
     local function UpdatePreview()
-        local barW = tonumber(db.width) or 250
+        local barW = tonumber(db.width) or 135
         local barH = tonumber(db.height) or 20
         local barScale = tonumber(db.scale) or 1.0
 
@@ -279,7 +279,7 @@ KT:RegisterPage("castbar", "Cast Bar", 12, function(sc, W)
 
         _, h = W:Label(container, "Tune the overall footprint of the cast bar. These values are reflected immediately in the live preview.", -by, 11); by = by + h
         _, h = W:Slider(container, "Width", -by,
-            function() return db.width or 250 end,
+            function() return db.width or 135 end,
             function(v) db.width = v; RefreshAndPreview() end, 120, 800, 1); by = by + h
         _, h = W:Slider(container, "Height", -by,
             function() return db.height or 20 end,

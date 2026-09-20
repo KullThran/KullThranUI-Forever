@@ -11,7 +11,7 @@ end
 
 local EXPORT_PREFIX = "!KTUI_"
 local CDM_EXPORT_PREFIX = "!KTCDM_"
-local PROFILE_BRIDGE_VERSION = 1
+local PROFILE_BRIDGE_VERSION = 2
 
 local MODULE_DEFS = {
     {
@@ -37,14 +37,20 @@ local MODULE_DEFS = {
     { id = "tooltip", label = "Tooltip", keys = { "tooltip" } },
     { id = "enhancements", label = "Enhancements", keys = { "enhancements", "friendListTypography" }, omit = { enhancements = { damageMeter = true, mplusTracker = true } } },
     { id = "damagemeter", label = "Damage Meter", keys = {}, nested = { enhancements = { "damageMeter" } } },
-    { id = "mythicplustimer", label = "Mythic+ Timer", keys = {}, nested = { enhancements = { "mplusTracker" } } },
+    {
+        id = "mythicplustimer",
+        label = "Mythic+ Timer",
+        keys = {},
+        nested = { enhancements = { "mplusTracker" } },
+        forever = false,
+    },
     { id = "objectivetracker", label = "Objective Tracker", keys = { "objectiveTracker" } },
     { id = "blizzmove", label = "BlizzMove", keys = { "blizzMove" }, importKeys = { "BlizzMove" } },
     { id = "cursor", label = "Cursor", keys = { "cursor" } },
     { id = "teleportmenu", label = "Teleport Menu", keys = { "teleportMenu" } },
     { id = "armory", label = "Armory", keys = { "armory" }, importKeys = { "inspectArmory" } },
     { id = "inspectarmory", label = "Inspect Armory", keys = { "inspectArmory" } },
-    { id = "dragonriding", label = "Dragon Riding", keys = { "dragonRiding" } },
+    { id = "dragonriding", label = "Dragon Riding", keys = { "dragonRiding" }, forever = false },
     { id = "expbar", label = "Experience Bar", keys = { "experienceBar" } },
     { id = "progressbars", label = "Progress Bars", keys = { "progressBars" }, external = { "spellDurations" } },
     { id = "external", label = "External Addons", keys = { "externalAddons", "uufIntegration" } },
@@ -85,6 +91,55 @@ local PAGE_PROFILE_SCOPES = {
     nameplates = { "nameplates" },
     aurareminders = { "aurareminders" },
 }
+
+local function IsForeverProfileFlavor()
+    return KT and KT.IsForever and KT:IsForever()
+end
+
+local function IsDefinitionAvailable(definition)
+    return type(definition) == "table"
+        and (not IsForeverProfileFlavor() or definition.forever ~= false)
+end
+
+local function GetProfileFlavorName(name)
+    if KT and KT.ScopeProfileName then
+        return KT:ScopeProfileName(name)
+    end
+    return name
+end
+
+local function GetProfileFlavor()
+    if KT and KT.GetProfileFlavor then
+        return KT:GetProfileFlavor()
+    end
+    return "unknown"
+end
+
+local function GetProfileFlavorLabel()
+    if KT and KT.GetProfileFlavorLabel then
+        return KT:GetProfileFlavorLabel()
+    end
+    return GetProfileFlavor()
+end
+
+local function ValidatePayloadFlavor(payload)
+    if type(payload) ~= "table" then
+        return false, "Perfil invalido."
+    end
+
+    local expectedFlavor = GetProfileFlavor()
+    if payload.client ~= "KullThranUI" or payload.flavor ~= expectedFlavor then
+        return false, "Este perfil pertenece a otra variante de KullThranUI (" ..
+            tostring(payload.flavor or "desconocida") .. "). No se puede importar en " ..
+            tostring(GetProfileFlavorLabel()) .. "."
+    end
+
+    if payload.version ~= (KT and KT.PROFILE_FORMAT_VERSION or 2) then
+        return false, "Version de perfil no soportada. Exporta el perfil de nuevo desde esta variante."
+    end
+
+    return true
+end
 
 local MODULE_BY_ID = {}
 for _, def in ipairs(MODULE_DEFS) do
@@ -349,7 +404,7 @@ local function GetCurrentCharacterKey()
     if not name or name == "" then
         return nil
     end
-    if not realm or realm == "" then
+    if not realm or realm == "" or name:find("-", 1, true) then
         return name
     end
     return name .. " - " .. realm
@@ -379,15 +434,15 @@ end
 local EXTERNAL_PROFILE_SOURCES = {
     nameplates = {
         kind = "global",
-        globalName = "KullThranUINameplatesDB",
+        globalName = "KullThranUINameplatesDB_Forever",
     },
     spellDurations = {
         kind = "global",
-        globalName = "KUISpellDurationDB",
+        globalName = "KUISpellDurationDB_Forever",
     },
     auraReminders = {
         kind = "aceProfile",
-        globalName = "KUIAuraRemindersDB",
+        globalName = "KUIAuraRemindersDB_Forever",
         aceGlobalName = "_KUIAR_AceDB",
     },
 }
@@ -1230,7 +1285,8 @@ function Mod:GetModuleDefinitions()
     local definitions = {}
     local root = GetRootProfile()
     for _, definition in ipairs(MODULE_DEFS) do
-        local hasData = false
+        if IsDefinitionAvailable(definition) then
+            local hasData = false
         for _, key in ipairs(definition.keys) do
             if root and root[key] ~= nil then
                 hasData = true
@@ -1259,8 +1315,9 @@ function Mod:GetModuleDefinitions()
                 end
             end
         end
-        if hasData then
-            definitions[#definitions + 1] = definition
+            if hasData then
+                definitions[#definitions + 1] = definition
+            end
         end
     end
     return definitions
@@ -1274,7 +1331,7 @@ function Mod:GetPageProfileInfo(pageID)
 
     local moduleIDs = {}
     for _, moduleID in ipairs(scope) do
-        if MODULE_BY_ID[moduleID] and not LEGACY_MODULE_DEFS[moduleID] then
+        if MODULE_BY_ID[moduleID] and not LEGACY_MODULE_DEFS[moduleID] and IsDefinitionAvailable(MODULE_BY_ID[moduleID]) then
             moduleIDs[#moduleIDs + 1] = moduleID
         end
     end
@@ -1296,7 +1353,7 @@ function Mod:SnapshotModule(moduleID)
     end
     local definition = MODULE_BY_ID[moduleID]
     local root = GetRootProfile()
-    if not definition or not root then
+    if not definition or not IsDefinitionAvailable(definition) or not root then
         return nil
     end
 
@@ -1347,7 +1404,7 @@ function Mod:ApplyModulesFromProfile(profileName, moduleIDs)
     local meta = GetMetaDB()
     for _, moduleID in ipairs(moduleIDs) do
         local definition = MODULE_BY_ID[moduleID]
-        if definition and not LEGACY_MODULE_DEFS[moduleID] then
+        if definition and not LEGACY_MODULE_DEFS[moduleID] and IsDefinitionAvailable(definition) then
             local snapshot = {}
             local hasData = false
             for _, key in ipairs(definition.keys or {}) do
@@ -1429,12 +1486,10 @@ function Mod:ExportCurrentProfileString()
 
     local profileSnapshot = BuildTransferProfile(root)
 
-    local payload = {
-        version = 1,
-        type = "full",
-        data = profileSnapshot,
-        savedVariables = CaptureAllExternalProfileSources(),
-    }
+    local payload = KT:GetProfileEnvelope()
+    payload.type = "full"
+    payload.data = profileSnapshot
+    payload.savedVariables = CaptureAllExternalProfileSources()
     return EncodePayload(EXPORT_PREFIX, payload)
 end
 
@@ -1455,12 +1510,10 @@ function Mod:ExportModulesString(moduleIDs)
         return nil, "No se pudo capturar ningun modulo."
     end
 
-    local payload = {
-        version = 1,
-        type = "modules",
-        data = {
-            modules = exported,
-        },
+    local payload = KT:GetProfileEnvelope()
+    payload.type = "modules"
+    payload.data = {
+        modules = exported,
     }
     return EncodePayload(EXPORT_PREFIX, payload)
 end
@@ -1497,6 +1550,9 @@ function Mod:ApplyFullProfile(profileData)
     for key, value in pairs(transferProfile) do
         root[key] = DeepCopy(value)
     end
+    if KT.SanitizeProfileForFlavor then
+        KT:SanitizeProfileForFlavor(root)
+    end
     return true
 end
 
@@ -1508,7 +1564,7 @@ function Mod:ApplyModules(moduleData)
 
     for moduleID, snapshot in pairs(moduleData) do
         local definition = MODULE_BY_ID[moduleID]
-        if definition and type(snapshot) == "table" then
+        if definition and IsDefinitionAvailable(definition) and type(snapshot) == "table" then
             for _, key in ipairs(definition.keys) do
                 if snapshot[key] ~= nil then
                     if key == "interruptsGlow" then
@@ -1554,6 +1610,9 @@ function Mod:ApplyModules(moduleData)
         end
     end
 
+    if KT.SanitizeProfileForFlavor then
+        KT:SanitizeProfileForFlavor(root)
+    end
     return true
 end
 
@@ -1568,8 +1627,9 @@ function Mod:ImportProfileString(importString)
         return false, err
     end
 
-    if payload.version ~= 1 then
-        return false, "Version de perfil no soportada."
+    local flavorOK, flavorError = ValidatePayloadFlavor(payload)
+    if not flavorOK then
+        return false, flavorError
     end
 
     if payload.type == "full" then
@@ -1613,8 +1673,9 @@ function Mod:ImportPageProfileString(pageID, importString)
     if not payload then
         return false, err
     end
-    if payload.version ~= 1 then
-        return false, "Version de perfil no soportada."
+    local flavorOK, flavorError = ValidatePayloadFlavor(payload)
+    if not flavorOK then
+        return false, flavorError
     end
     if payload.type ~= "modules" then
         return false, "Este importador solo acepta perfiles de modulos, no perfiles completos."
@@ -1662,9 +1723,14 @@ function Mod:GetProfileValues()
     end)
 
     local values = {}
+    local filtered = {}
     for _, name in ipairs(list) do
-        values[name] = name
+        if not KT.IsProfileNameForCurrentFlavor or KT:IsProfileNameForCurrentFlavor(name) then
+            values[name] = name
+            filtered[#filtered + 1] = name
+        end
     end
+    list = filtered
     return values, list
 end
 
@@ -1678,6 +1744,7 @@ function Mod:SaveCurrentAsProfile(name)
         return false, "Escribe un nombre de perfil."
     end
 
+    name = GetProfileFlavorName(name)
     local currentName = KT.db:GetCurrentProfile()
     if name == currentName then
         return true
@@ -1732,6 +1799,11 @@ function Mod:SwitchProfile(name)
         return false, "Perfil invalido."
     end
 
+    name = GetProfileFlavorName(name)
+    if not KT:IsProfileNameForCurrentFlavor(name) then
+        return false, "Perfil de otra variante."
+    end
+
     if KT.db:GetCurrentProfile() == name then
         return true
     end
@@ -1752,6 +1824,11 @@ function Mod:DeleteProfile(name)
 
     if not name or name == "" then
         return false, "Perfil invalido."
+    end
+
+    name = GetProfileFlavorName(name)
+    if not KT:IsProfileNameForCurrentFlavor(name) then
+        return false, "Perfil de otra variante."
     end
 
     if KT.db:GetCurrentProfile() == name then
@@ -1796,6 +1873,10 @@ function Mod:AssignCurrentSpec(profileName)
         return false, "No se pudo detectar la especializacion actual."
     end
 
+    profileName = GetProfileFlavorName(profileName)
+    if not KT:IsProfileNameForCurrentFlavor(profileName) then
+        return false, "Perfil de otra variante."
+    end
     characterAssignments[tostring(specID)] = profileName
     return true
 end
@@ -1824,6 +1905,7 @@ function Mod:HandleSpecChange()
     end
 
     local targetProfile = self:GetCurrentSpecAssignment()
+    targetProfile = targetProfile and GetProfileFlavorName(targetProfile) or nil
     if not targetProfile or targetProfile == "" then
         return
     end
@@ -1898,11 +1980,9 @@ function Mod:ExportCDMSpellsString(specKeys)
         return nil, "No hay datos CDM para las especializaciones seleccionadas."
     end
 
-    local payload = {
-        version = 1,
-        type = "cdm_spells",
-        data = exported,
-    }
+    local payload = KT:GetProfileEnvelope()
+    payload.type = "cdm_spells"
+    payload.data = exported
     return EncodePayload(CDM_EXPORT_PREFIX, payload)
 end
 
@@ -1917,8 +1997,9 @@ function Mod:ImportCDMSpellsString(importString)
         return false, err
     end
 
-    if payload.version ~= 1 or payload.type ~= "cdm_spells" then
-        return false, "Cadena CDM no valida."
+    local flavorOK, flavorError = ValidatePayloadFlavor(payload)
+    if not flavorOK or payload.type ~= "cdm_spells" then
+        return false, flavorError or "Cadena CDM no valida."
     end
 
     local cdmProfile = GetCDMProfile()

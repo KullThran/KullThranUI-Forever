@@ -70,6 +70,44 @@ local debugprofilestop             = _G.debugprofilestop
 local InCombatLockdown              = InCombatLockdown
 local GetSpecialization             = GetSpecialization
 
+ns.KUI_INTERFACE = tonumber(GetBuildInfo and select(4, GetBuildInfo())) or 0
+ns.KUI_IS_FOREVER = ns.KUI_INTERFACE == 16001
+    or (KT and KT.IS_FOREVER == true)
+
+-- Forever puede exponer la API clasica de hechizos aunque no exista la
+-- estructura de retorno moderna de Retail.
+ns.CDMSafeGetSpellInfo = function(spellID)
+    if not spellID or spellID <= 0 then return nil end
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellID)
+        if ok and type(info) == "table" then return info end
+    end
+    if GetSpellInfo then
+        local ok, name, rank, icon, castTime, minRange, maxRange, resolvedID = pcall(GetSpellInfo, spellID)
+        if ok and (name or icon) then
+            return { name = name, iconID = icon, spellID = resolvedID or spellID }
+        end
+    end
+    return nil
+end
+
+ns.CDMSafeGetSpellName = function(spellID)
+    local info = ns.CDMSafeGetSpellInfo(spellID)
+    return info and info.name or nil
+end
+
+ns.CDMSafeGetItemTexture = function(itemID)
+    if not itemID or itemID <= 0 then return nil end
+    if C_Item and C_Item.GetItemIconByID then
+        local ok, texture = pcall(C_Item.GetItemIconByID, itemID)
+        if ok and texture then return texture end
+    end
+    if GetItemIcon then
+        local ok, texture = pcall(GetItemIcon, itemID)
+        if ok and texture then return texture end
+    end
+    return nil
+end
 local DEFAULT_MAPPING_NAME          = "Buff Name (eg: Divine Purpose)"
 local barDataByKey
 
@@ -2516,8 +2554,51 @@ local function RegisterCDMUnlockElements()
                         getFrame = function() return frame end,
                         getScale = function() return frame:GetScale() end,
                         savePosition = function(_, point, relativeTo, xOff, yOff, uiScale)
-                            trackerData.x = xOff
-                            trackerData.y = yOff
+                            local p = KUI_CDM.db and KUI_CDM.db.profile
+                            if not p then return end
+                            local trackerBarKey = "kui_" .. trackerType
+                            p.cdmBarPositions = p.cdmBarPositions or {}
+                            p.cdmBarPositions[trackerBarKey] = {
+                                point = point or "CENTER",
+                                relPoint = relativeTo or point or "CENTER",
+                                relativePoint = relativeTo or point or "CENTER",
+                                x = xOff or 0,
+                                y = yOff or 0,
+                                scale = uiScale,
+                            }
+                            trackerData.positionMode = "free"
+                            local trackerBar = barDataByKey and barDataByKey[trackerBarKey]
+                            if trackerBar then
+                                trackerBar.anchorTo = "none"
+                                trackerBar._kuiTrackerFreePosition = true
+                            end
+                            if uiScale then pcall(frame.SetScale, frame, uiScale) end
+                            frame:ClearAllPoints()
+                            frame:SetPoint(point or "CENTER", UIParent,
+                                relativeTo or point or "CENTER", xOff or 0, yOff or 0)
+                        end,
+                        loadPosition = function()
+                            local p = KUI_CDM.db and KUI_CDM.db.profile
+                            local trackerBarKey = "kui_" .. trackerType
+                            local pos = p and p.cdmBarPositions and p.cdmBarPositions[trackerBarKey]
+                            if trackerData.positionMode == "free" and pos and pos.point then
+                                return pos
+                            end
+                            return nil
+                        end,
+                        clearPosition = function()
+                            local p = KUI_CDM.db and KUI_CDM.db.profile
+                            local trackerBarKey = "kui_" .. trackerType
+                            if p and p.cdmBarPositions then p.cdmBarPositions[trackerBarKey] = nil end
+                            trackerData.positionMode = nil
+                            local trackerBar = barDataByKey and barDataByKey[trackerBarKey]
+                            if trackerBar then
+                                trackerBar.anchorTo = nil
+                                trackerBar._kuiTrackerFreePosition = nil
+                            end
+                        end,
+                        applyPosition = function()
+                            if BuildAllCDMBars then BuildAllCDMBars() end
                         end,
                         getSize = function()
                             return frame:GetSize()
@@ -6350,6 +6431,32 @@ local DEFENSIVE_EXCLUDES = {
     [50769] = true, -- Revive
 }
 
+-- Forever catalog: only spells from the Classic/Forever spellbook are offered
+-- to the automatic tracker. Retail-only talent variants stay out of this path.
+ns.CDM_FOREVER_INTERRUPTS = {
+    DEATHKNIGHT = { 47528 },
+    MAGE = { 2139 },
+    PALADIN = { 96231 },
+    PRIEST = { 15487 },
+    ROGUE = { 1766 },
+    SHAMAN = { 57994 },
+    WARLOCK = { 19647 },
+    WARRIOR = { 6552 },
+}
+
+ns.CDM_FOREVER_DEFENSIVES = {
+    DEATHKNIGHT = { 48792, 48707 },
+    DRUID = { 22812, 22842, 61336 },
+    HUNTER = { 19263, 5384 },
+    MAGE = { 45438, 11426 },
+    PALADIN = { 642, 498 },
+    PRIEST = { 19236, 586 },
+    ROGUE = { 5277, 31224, 1966 },
+    SHAMAN = { 108271 },
+    WARLOCK = { 104773, 108416 },
+    WARRIOR = { 871, 12975, 118038 },
+}
+
 -- KUI Custom Tracker -> backing CDM bars
 local KUI_TRACKER_DEFS = {
     interrupt = { key = "kui_interrupt", name = "KUI Interrupt", side = "TOPRIGHT_OUT", defX = 0, defY = 6, kuiSide = "TOPRIGHT_OUT", kuiDefX = 0, kuiDefY = 6, defaultSpacing = 2 },
@@ -6474,7 +6581,8 @@ local function BuildAutoTrackerSpells(trackerKey)
     end
 
     if trackerKey == "interrupt" then
-        local list = class and INTERRUPTS_BY_CLASS[class]
+        local interruptCatalog = ns.KUI_IS_FOREVER and ns.CDM_FOREVER_INTERRUPTS or INTERRUPTS_BY_CLASS
+        local list = class and interruptCatalog[class]
         if list then
             for _, sid in ipairs(list) do
                 if IsSpellKnownSafe(sid) then
@@ -6484,7 +6592,8 @@ local function BuildAutoTrackerSpells(trackerKey)
         end
     elseif trackerKey == "defensive" then
         local defList, racialList = {}, {}
-        local classList = class and DEFENSIVE_BY_CLASS[class]
+        local defensiveCatalog = ns.KUI_IS_FOREVER and ns.CDM_FOREVER_DEFENSIVES or DEFENSIVE_BY_CLASS
+        local classList = class and defensiveCatalog[class]
         if classList then
             for _, sid in ipairs(classList) do
                 if IsSpellKnownSafe(sid) then
@@ -6665,11 +6774,11 @@ end
 local function SyncKUITrackerBars(syncMode)
     if not KUI_CDM.db or not KUI_CDM.db.profile then return end
     local p = KUI_CDM.db.profile
-    local hasUUF = C_AddOns.IsAddOnLoaded("UnhaltedUnitFrames")
+    -- Forever only: KUI Tracker must use KullThranUI's own player frame.
     local hasKUIUF = _G["KullThranUI_UF_Player"] or (KT and KT.db and KT.db.profile and KT.db.profile.unitFrames
         and KT.db.profile.unitFrames.enable ~= false
         and KT.db.profile.unitFrames.enabledFrames and KT.db.profile.unitFrames.enabledFrames.player ~= false)
-    local hasIntegratedUF = hasUUF or hasKUIUF
+    local hasIntegratedUF = hasKUIUF
     EnsureCustomTrackerDefaults(p)
     if not p.cdmBars or not p.cdmBars.bars then return end
 
@@ -6689,6 +6798,9 @@ local function SyncKUITrackerBars(syncMode)
             local ct = p.customTracker[tKey]
             local barKey = def.key
             local bd = byKey[barKey]
+            local savedTrackerPosition = p.cdmBarPositions and p.cdmBarPositions[barKey]
+            local freePosition = ct.positionMode == "free"
+                and savedTrackerPosition and savedTrackerPosition.point ~= nil
 
             local needsAuto = (ct.auto ~= false)
             -- SPELLS_CHANGED only affects spell-backed trackers.  Re-scanning
@@ -6795,7 +6907,7 @@ local function SyncKUITrackerBars(syncMode)
             bd.barScale = bd.barScale or 1.0
             local offX = ct.x or defX
             local offY = ct.y or defY
-            if not hasIntegratedUF then
+            if not hasIntegratedUF and not freePosition then
                 side = defSide
                 offX = defX
                 offY = defY
@@ -6806,8 +6918,10 @@ local function SyncKUITrackerBars(syncMode)
             bd.playerFrameSide = side
             bd.playerFrameOffsetX = offX
             bd.playerFrameOffsetY = offY
-
-            if tKey == "interrupt" then
+            bd._kuiTrackerFreePosition = freePosition == true
+            if freePosition then
+                bd.anchorTo = "none"
+            elseif tKey == "interrupt" then
                 local defBd = byKey[KUI_TRACKER_DEFS.defensive.key]
                 if hasIntegratedUF and defBd and defBd.enabled ~= false then
                     bd.anchorTo = KUI_TRACKER_DEFS.defensive.key
@@ -7334,7 +7448,8 @@ BuildCDMBar = function(barIndex)
 
     -- KUI Tracker should only default to playerframe when it does not already
     -- have an explicit anchor (e.g. interrupt -> defensive, potion -> trinket).
-    if barData.isKUITracker and (not anchorKey or anchorKey == "none") then
+    local trackerFreePosition = barData.isKUITracker and barData._kuiTrackerFreePosition == true
+    if barData.isKUITracker and not trackerFreePosition and (not anchorKey or anchorKey == "none") then
         local activePF = FindPlayerUnitFrame()
         if not activePF then
             activePF = (ns.CDMGetBlizzardPlayerFrameCandidate and ns.CDMGetBlizzardPlayerFrameCandidate()) or _G["PlayerFrame"]
@@ -8480,7 +8595,7 @@ local function UpdateCustomBarIcons(barKey)
                             or GetTrackerOwnedItemCount(displayItemID) > 0
                     end
                     if canShowItem then
-                        local tex = C_Item.GetItemIconByID(displayItemID)
+                        local tex = ns.CDMSafeGetItemTexture(displayItemID)
                         if tex and tex ~= ourIcon._lastTex then
                             ourIcon._tex:SetTexture(tex)
                             ourIcon._lastTex = tex
@@ -8537,7 +8652,7 @@ local function UpdateCustomBarIcons(barKey)
                     -- IsUsableItem() is false during that cooldown, which used to
                     -- make the tracker hide the icon immediately after the first use.
                     if invItemID then
-                        local tex = C_Item.GetItemIconByID(invItemID)
+                        local tex = ns.CDMSafeGetItemTexture(invItemID)
                         if not tex and GetInventoryItemTexture then
                             tex = GetInventoryItemTexture("player", slot)
                         end
@@ -8662,7 +8777,7 @@ local function UpdateCustomBarIcons(barKey)
                 -- Cache spell icon texture to avoid C_Spell.GetSpellInfo per tick
                 local texID = _spellIconCache[resolvedID]
                 if not texID then
-                    local spellInfo = C_Spell.GetSpellInfo(resolvedID)
+                    local spellInfo = ns.CDMSafeGetSpellInfo(resolvedID)
                     if spellInfo then
                         texID = spellInfo.iconID
                         _spellIconCache[resolvedID] = texID
@@ -10493,6 +10608,18 @@ BuildAllCDMBars = function()
 end
 
 ns.BuildAllCDMBars = BuildAllCDMBars
+
+-- Closing Unlock Mode must rebuild the real tracker state, otherwise its
+-- temporary question-mark slots can remain visible until another event.
+ns.OnUnlockModeChanged = function()
+    local function Refresh()
+        if InCombatLockdown and InCombatLockdown() then return end
+        if ns.SyncKUITrackerBars then ns.SyncKUITrackerBars("unlock") end
+        if BuildAllCDMBars then BuildAllCDMBars() end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
+end
+_G.KUI_CDM_OnUnlockModeChanged = ns.OnUnlockModeChanged
 ns.cdmBarFrames = cdmBarFrames
 _G.KUI_CDM_BAR_FRAMES = cdmBarFrames
 ns.cdmBarIcons = cdmBarIcons

@@ -1,6 +1,7 @@
 ## Title: |cFF8080FFMinimap|rStats
-## Interface: 160001
-## Version: 0.0.2
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Version: 0.0.3
 ## Author: UnhaltedGB
 ## SavedVariables: MinimapStatsDB
 ## IconTexture: Interface\AddOns\MinimapStats\Media\MinimapStats.png

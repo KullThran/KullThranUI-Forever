@@ -192,7 +192,7 @@ local function SkinProfessionEntry(prof)
     if not prof.backdrop then
         prof.backdrop = CreateFrame("Frame", nil, prof, "BackdropTemplate")
         prof.backdrop:SetFrameLevel(prof:GetFrameLevel() - 1 < 1 and 1 or prof:GetFrameLevel() - 1)
-        prof.backdrop:SetBackdrop({ bgFile = "Interface\Buttons\WHITE8x8", edgeFile = "Interface\Buttons\WHITE8x8", edgeSize = 1 })
+        prof.backdrop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         prof.backdrop:SetBackdropColor(0, 0, 0, 0.6)
         prof.backdrop:SetBackdropBorderColor(0, 0, 0, 1)
         prof.backdrop:SetPoint("TOPLEFT", prof, "TOPLEFT", 0, 0)

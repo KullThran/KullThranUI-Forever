@@ -3,6 +3,113 @@ local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 local BlizzMoveAPI = KT and KT.BlizzMoveAPI
 if not BlizzMoveAPI then return; end
 
+-- Forever has the mainline client shape, but it does not ship the Retail
+-- frame catalogue. Keep this list deliberately small and classic-first:
+-- registering Retail-only globals here makes the move options misleading and
+-- can make a frame appear to be movable when it is not present at all.
+local BlizzMove = KT:GetModule("BlizzMove", true)
+if BlizzMove and BlizzMove.isForever then
+    BlizzMoveAPI:RegisterFrames({
+        ["AddonList"] = {},
+        ["BankFrame"] = {},
+        ["BattlefieldFrame"] = {},
+        ["CharacterFrame"] = {
+            SubFrames = {
+                ["PaperDollFrame"] = {},
+                ["PetPaperDollFrame"] = {},
+                ["ReputationFrame"] = {},
+                ["SkillFrame"] = {},
+                ["TokenFrame"] = {},
+            },
+        },
+        ["ChatConfigFrame"] = {},
+        ["ContainerFrame1"] = {},
+        ["DressUpFrame"] = {},
+        ["FriendsFrame"] = {},
+        ["GameMenuFrame"] = {},
+        ["GossipFrame"] = {},
+        ["GuildInviteFrame"] = {},
+        ["GuildRegistrarFrame"] = {},
+        ["HelpFrame"] = {},
+        ["InterfaceOptionsFrame"] = {},
+        ["ItemTextFrame"] = {},
+        ["LootFrame"] = {},
+        ["MailFrame"] = {
+            SubFrames = {
+                ["SendMailFrame"] = {},
+                ["OpenMailFrame"] = {},
+            },
+        },
+        ["MerchantFrame"] = {},
+        ["ModelPreviewFrame"] = {},
+        ["PetitionFrame"] = {},
+        ["PetStableFrame"] = {},
+        ["PVPFrame"] = {},
+        ["PVPParentFrame"] = {},
+        ["QuestFrame"] = {},
+        ["QuestLogDetailFrame"] = {},
+        ["QuestLogFrame"] = {},
+        ["SpellBookFrame"] = {},
+        ["TabardFrame"] = {},
+        ["TaxiFrame"] = {},
+        ["TradeFrame"] = {},
+        ["TutorialFrame"] = {},
+        ["WorldMapFrame"] = {},
+        ["WorldStateScoreFrame"] = {},
+    })
+
+    BlizzMoveAPI:RegisterAddOnFrames({
+        ["Blizzard_AuctionUI"] = {
+            ["AuctionFrame"] = {},
+            ["AuctionFrameBrowse"] = {},
+            ["AuctionFrameAuctions"] = {},
+            ["AuctionFramePost"] = {},
+        },
+        ["Blizzard_BindingUI"] = {
+            ["KeyBindingFrame"] = {},
+        },
+        ["Blizzard_Calendar"] = {
+            ["CalendarFrame"] = {},
+        },
+        ["Blizzard_Channels"] = {
+            ["ChannelFrame"] = {},
+        },
+        ["Blizzard_GuildBankUI"] = {
+            ["GuildBankFrame"] = {},
+            ["GuildControlUI"] = {},
+        },
+        ["Blizzard_GuildUI"] = {
+            ["GuildFrame"] = {},
+        },
+        ["Blizzard_InspectUI"] = {
+            ["InspectFrame"] = {},
+        },
+        ["Blizzard_LookingForGroupUI"] = {
+            ["LFGParentFrame"] = {},
+        },
+        ["Blizzard_MacroUI"] = {
+            ["MacroFrame"] = {},
+        },
+        ["Blizzard_PVPUI"] = {
+            ["PVPQueueFrame"] = {},
+        },
+        ["Blizzard_StableUI"] = {
+            ["StableFrame"] = {},
+        },
+        ["Blizzard_TimeManager"] = {
+            ["TimeManagerFrame"] = {},
+        },
+        ["Blizzard_TradeSkillUI"] = {
+            ["TradeSkillFrame"] = {},
+        },
+        ["Blizzard_TrainerUI"] = {
+            ["ClassTrainerFrame"] = {},
+        },
+    })
+
+    return
+end
+
 BlizzMoveAPI:RegisterFrames({
     ["AddonList"] =
     {

@@ -1,5 +1,15 @@
 local addon, ns = ...
 
+-- Nameplates used a flat global before the Forever port. Keep the runtime
+-- symbol for the existing module code, but persist it in a Forever-only
+-- SavedVariable so Retail data can never be reused here.
+local foreverNameplateDB = _G.KullThranUINameplatesDB_Forever
+if type(foreverNameplateDB) ~= "table" then
+    foreverNameplateDB = {}
+    _G.KullThranUINameplatesDB_Forever = foreverNameplateDB
+end
+_G.KullThranUINameplatesDB = foreverNameplateDB
+
 local PP = KullThranUI.PP
 -- KUI localization helper (resolved at call time; falls back to the raw text)
 local function LText(text)

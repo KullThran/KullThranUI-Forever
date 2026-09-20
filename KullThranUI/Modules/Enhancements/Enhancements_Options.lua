@@ -41,6 +41,10 @@ local function DB()
     return Mod:GetDB()
 end
 
+local function IsForeverFeatureAvailable(feature)
+    return not Mod.IsForeverFeatureAvailable or Mod:IsForeverFeatureAvailable(feature)
+end
+
 local function CopyValue(value)
     if type(value) ~= "table" then
         return value
@@ -439,6 +443,9 @@ local function CreateSidebar(parent, W)
 end
 
 local function BuildCombatRezBlock(container, W, db)
+    if not IsForeverFeatureAvailable("combatRez") then
+        return 0
+    end
     return AddToggleList(container, W, {
         { label = LText("Enable Combat Res Timer"), get = function() return db.combatRez.enabled end, set = function(v) db.combatRez.enabled = v end, refreshOpts = { rebuild = true } },
         { label = LText("Death as Warning"), get = function() return db.combatRez.deathWarning end, set = function(v) db.combatRez.deathWarning = v end },
@@ -1405,16 +1412,18 @@ local function CreateDamageMeterLivePreview(container, config, startY)
     sessionText:SetJustifyH("RIGHT")
     -- A real class/spec roster keeps the preview meaningful and uses the same
     -- class colours as the live meter instead of invented names and colours.
-    local damageNames = { "Arms Warrior", "Fire Mage", "Assassination Rogue", "Marksmanship Hunter", "Havoc Demon Hunter", "Frost Death Knight", "Enhancement Shaman", "Retribution Paladin", "Windwalker Monk", "Devastation Evoker" }
-    local damageIcons = { 132355, 135810, 136189, 132164, 1247264, 135771, 136048, 135920, 608951, 462245 }
-    local damageClasses = { "WARRIOR", "MAGE", "ROGUE", "HUNTER", "DEMONHUNTER", "DEATHKNIGHT", "SHAMAN", "PALADIN", "MONK", "EVOKER" }
-    local damageClassIDs = { 1, 8, 4, 3, 12, 6, 7, 2, 10, 13 }
-    local damageSpecIndices = { 1, 2, 1, 2, 1, 2, 2, 3, 3, 1 }
-    local healingNames = { "Holy Priest", "Restoration Shaman", "Restoration Druid", "Holy Paladin", "Mistweaver Monk", "Preservation Evoker" }
-    local healingIcons = { 135940, 136048, 136041, 135920, 608951, 462245 }
-    local healingClasses = { "PRIEST", "SHAMAN", "DRUID", "PALADIN", "MONK", "EVOKER" }
-    local healingClassIDs = { 5, 7, 11, 2, 10, 13 }
-    local healingSpecIndices = { 2, 3, 4, 1, 2, 2 }
+    -- WoW Forever has the nine original classes and three trees per class.
+    -- Keep the preview independent from Retail-only hero classes.
+    local damageNames = { "Arms Warrior", "Retribution Paladin", "Marksmanship Hunter", "Combat Rogue", "Shadow Priest", "Enhancement Shaman", "Fire Mage", "Destruction Warlock", "Balance Druid" }
+    local damageIcons = { 132355, 135920, 132164, 136189, 135940, 136048, 135810, 136186, 136041 }
+    local damageClasses = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+    local damageClassIDs = { 1, 2, 3, 4, 5, 7, 8, 9, 11 }
+    local damageSpecIndices = { 1, 3, 2, 2, 3, 2, 2, 3, 1 }
+    local healingNames = { "Holy Paladin", "Restoration Shaman", "Restoration Druid", "Holy Priest" }
+    local healingIcons = { 135920, 136048, 136041, 135940 }
+    local healingClasses = { "PALADIN", "SHAMAN", "DRUID", "PRIEST" }
+    local healingClassIDs = { 2, 7, 11, 5 }
+    local healingSpecIndices = { 1, 3, 3, 2 }
     local rows = {}
     for index = 1, 40 do
         local row = CreateFrame("Frame", nil, meter)
@@ -1491,7 +1500,7 @@ local function CreateDamageMeterLivePreview(container, config, startY)
                 local previewIcon = previewIcons[rosterIndex]
                 local getSpecInfo = _G.GetSpecializationInfoForClassID
                 local classID, specIndex = previewClassIDs[rosterIndex], previewSpecIndices[rosterIndex]
-                if getSpecInfo and classID and specIndex then
+                if not (KT and KT.IS_FOREVER) and getSpecInfo and classID and specIndex then
                     local ok, _, localizedName, _, icon = _G.pcall(getSpecInfo, classID, specIndex)
                     if ok then
                         previewName = type(localizedName) == "string" and localizedName or previewName
@@ -1851,13 +1860,19 @@ local function BuildEquipmentReminderBlock(container, W, db)
 end
 
 local function BuildItemsLootBlock(container, W, db)
-    local y, h = AddToggleList(container, W, {
+    local items = {
         { label = LText("Faster Auto Loot"), get = function() return db.gameOptions.fasterAutoLoot end, set = function(v) db.gameOptions.fasterAutoLoot = v end },
         { label = LText("Suppress Loot Warnings"), get = function() return db.gameOptions.disableLootWarnings end, set = function(v) db.gameOptions.disableLootWarnings = v end },
         { label = LText("Easy Item Destroy"), get = function() return db.gameOptions.easyItemDestroy end, set = function(v) db.gameOptions.easyItemDestroy = v end },
-        { label = LText("Auto Insert Keystone"), get = function() return db.gameOptions.autoInsertKeystone end, set = function(v) db.gameOptions.autoInsertKeystone = v end },
-        { label = LText("AH Current Expansion"), get = function() return db.gameOptions.ahCurrentExpansion end, set = function(v) db.gameOptions.ahCurrentExpansion = v end },
-    })
+    }
+    if IsForeverFeatureAvailable("mythicPlus") then
+        items[#items + 1] = { label = LText("Auto Insert Keystone"), get = function() return db.gameOptions.autoInsertKeystone end, set = function(v) db.gameOptions.autoInsertKeystone = v end }
+    end
+    if IsForeverFeatureAvailable("auctionHouseExpansion") then
+        items[#items + 1] = { label = LText("AH Current Expansion"), get = function() return db.gameOptions.ahCurrentExpansion end, set = function(v) db.gameOptions.ahCurrentExpansion = v end }
+    end
+
+    local y, h = AddToggleList(container, W, items)
 
     _, h = W:Slider(container, LText("Auto loot delay"), -y,
         function() return db.gameOptions.autoLootDelay or 0.1 end,
@@ -1897,6 +1912,9 @@ local function BuildAutomationBlock(container, W, db)
 end
 
 local function BuildLGFAutomationBlock(container, W, db)
+    if not IsForeverFeatureAvailable("lfg") then
+        return 0
+    end
     db.automation.lfgRoles = db.automation.lfgRoles or {}
 
     local y, h = AddToggleList(container, W, {
@@ -1933,16 +1951,22 @@ local function BuildBlocksBlock(container, W, db)
 end
 
 local function BuildGroupsBlock(container, W, db)
-    local y, h = AddToggleList(container, W, {
+    local items = {
         { label = LText("Party from friends"), get = function() return db.groups.partyFromFriends end, set = function(v) db.groups.partyFromFriends = v end },
         { label = LText("Sync from friends"), get = function() return db.groups.syncFromFriends end, set = function(v) db.groups.syncFromFriends = v end },
-        { label = LText("Queue from friends"), get = function() return db.groups.queueFromFriends end, set = function(v) db.groups.queueFromFriends = v end },
         { label = LText("Invite from whispers"), get = function() return db.groups.inviteFromWhispers end, set = function(v) db.groups.inviteFromWhispers = v end },
-        { label = LText("Persistent LFG note"), get = function() return db.groups.persistentLFGNoteEnabled end, set = function(v) db.groups.persistentLFGNoteEnabled = v end },
         { label = LText("Whispers only from friends"), get = function() return db.groups.whisperFriendsOnly end, set = function(v) db.groups.whisperFriendsOnly = v end },
         { label = LText("Treat guild as friends"), get = function() return db.groups.guildAsFriends end, set = function(v) db.groups.guildAsFriends = v end },
-        { label = LText("Treat communities as friends"), get = function() return db.groups.communitiesAsFriends end, set = function(v) db.groups.communitiesAsFriends = v end },
-    })
+    }
+    if IsForeverFeatureAvailable("lfg") then
+        items[#items + 1] = { label = LText("Queue from friends"), get = function() return db.groups.queueFromFriends end, set = function(v) db.groups.queueFromFriends = v end }
+        items[#items + 1] = { label = LText("Persistent LFG note"), get = function() return db.groups.persistentLFGNoteEnabled end, set = function(v) db.groups.persistentLFGNoteEnabled = v end }
+    end
+    if IsForeverFeatureAvailable("communities") then
+        items[#items + 1] = { label = LText("Treat communities as friends"), get = function() return db.groups.communitiesAsFriends end, set = function(v) db.groups.communitiesAsFriends = v end }
+    end
+
+    local y, h = AddToggleList(container, W, items)
 
     _, h = W:Input(container, LText("Whisper keyword"), -y,
         function() return db.groups.whisperKeyword or "inv" end,
@@ -1953,27 +1977,29 @@ local function BuildGroupsBlock(container, W, db)
         end)
     y = y + h
 
-    _, h = W:Input(container, LText("Persistent LFG note text"), -y,
-        function()
-            if Mod and Mod.GetPersistentLFGNote then
-                return Mod:GetPersistentLFGNote()
-            end
-            return db.groups.persistentLFGNote or ""
-        end,
-        function(v)
-            if Mod and Mod.SetPersistentLFGNote then
-                Mod:SetPersistentLFGNote(v)
-            else
-                db.groups.persistentLFGNote = (v and strtrim(v)) or ""
-                db.groups.persistentLFGNoteBackup = db.groups.persistentLFGNote
-                db.groups.persistentLFGNoteEnabled = db.groups.persistentLFGNote ~= ""
-            end
-            if Mod and Mod.ApplyPersistentLFGNote then
-                Mod:ApplyPersistentLFGNote()
-            end
-        end,
-        { commitOnTextChanged = true })
-    y = y + h
+    if IsForeverFeatureAvailable("lfg") then
+        _, h = W:Input(container, LText("Persistent LFG note text"), -y,
+            function()
+                if Mod and Mod.GetPersistentLFGNote then
+                    return Mod:GetPersistentLFGNote()
+                end
+                return db.groups.persistentLFGNote or ""
+            end,
+            function(v)
+                if Mod and Mod.SetPersistentLFGNote then
+                    Mod:SetPersistentLFGNote(v)
+                else
+                    db.groups.persistentLFGNote = (v and strtrim(v)) or ""
+                    db.groups.persistentLFGNoteBackup = db.groups.persistentLFGNote
+                    db.groups.persistentLFGNoteEnabled = db.groups.persistentLFGNote ~= ""
+                end
+                if Mod and Mod.ApplyPersistentLFGNote then
+                    Mod:ApplyPersistentLFGNote()
+                end
+            end,
+            { commitOnTextChanged = true })
+        y = y + h
+    end
 
     return y
 end
@@ -1985,17 +2011,23 @@ local function BuildSocialBlock(container, W, db)
 end
 
 local function BuildUIClutterBlock(container, W, db)
-    return AddToggleList(container, W, {
+    local items = {
         { label = LText("Hide Alerts"), get = function() return db.visibility.hideAlerts end, set = function(v) db.visibility.hideAlerts = v end },
         { label = LText("Hide Talking Head"), get = function() return db.visibility.hideTalkingFrame end, set = function(v) db.visibility.hideTalkingFrame = v end },
         { label = LText("Hide Event Toasts"), get = function() return db.visibility.hideEventToasts end, set = function(v) db.visibility.hideEventToasts = v end },
         { label = LText("Hide Zone Text"), get = function() return db.visibility.hideZoneText end, set = function(v) db.visibility.hideZoneText = v end },
-        { label = LText("Auto-confirm LFG application"), get = function() return db.visibility.skipQueueConfirmation end, set = function(v) db.visibility.skipQueueConfirmation = v end },
         { label = LText("Hide Minimap Icon"), get = function() return db.visibility.hideMinimapIcon end, set = function(v) db.visibility.hideMinimapIcon = v end, refreshOpts = { rebuild = true } },
-    })
+    }
+    if IsForeverFeatureAvailable("lfg") then
+        items[#items + 1] = { label = LText("Auto-confirm LFG application"), get = function() return db.visibility.skipQueueConfirmation end, set = function(v) db.visibility.skipQueueConfirmation = v end }
+    end
+    return AddToggleList(container, W, items)
 end
 
 local function BuildLFGVisualsBlock(container, W, db)
+    if not IsForeverFeatureAvailable("lfg") then
+        return 0
+    end
     return AddToggleList(container, W, {
         {
             label = LText('Show LFG class color bars'),
@@ -2092,6 +2124,9 @@ local function BuildSpellQueueBlock(container, W, db, startY)
 end
 
 local function BuildDiagnosticsBlock(container, W, startY)
+    if not IsForeverFeatureAvailable("addonProfiler") then
+        return 0
+    end
     local originY = startY or 0
     local y, h = originY, 0
 
@@ -2259,8 +2294,10 @@ local function BuildSystemAccordion(parent, W, db, startY)
     y = y + h + 10
     _, h = AddAccordionSection(parent, "system_performance", LText("FPS Limits"), BuildSystemPerformanceSection, false, W, db, -y)
     y = y + h + 10
-    _, h = AddAccordionSection(parent, "system_monitor", LText("Diagnostics"), BuildSystemDiagnosticsSection, false, W, db, -y)
-    y = y + h
+    if IsForeverFeatureAvailable("addonProfiler") then
+        _, h = AddAccordionSection(parent, "system_monitor", LText("Diagnostics"), BuildSystemDiagnosticsSection, false, W, db, -y)
+        y = y + h
+    end
 
     return y
 end
@@ -2305,8 +2342,8 @@ end
 
 local CATEGORY_SECTIONS = {
     instance = {
-        { column = "left", title = LText("Dungeon History"), build = BuildDungeonHistoryBlock },
-        { column = "left", title = LText("Combat Res"), build = BuildCombatRezBlock },
+        { column = "left", title = LText("Dungeon History"), build = BuildDungeonHistoryBlock, feature = "dungeonHistory" },
+        { column = "left", title = LText("Combat Res"), build = BuildCombatRezBlock, feature = "combatRez" },
         { column = "right", title = LText("Equipment Reminder"), build = BuildEquipmentReminderBlock },
         { column = "left", title = LText("Items / Loot"), build = BuildItemsLootBlock },
         { column = "right", title = LText("Death / Durability / Repair"), build = BuildDeathBlock },
@@ -2319,7 +2356,7 @@ local CATEGORY_SECTIONS = {
     },
     automation = {
         { column = "left", title = LText("Automation"), build = BuildAutomationBlock },
-        { column = "right", title = LText("LFG Automation"), build = BuildLGFAutomationBlock },
+        { column = "right", title = LText("LFG Automation"), build = BuildLGFAutomationBlock, feature = "lfg" },
         { column = "right", title = LText("Groups"), build = BuildGroupsBlock },
         { column = "left", title = LText("Blocks"), build = BuildBlocksBlock },
         { column = "right", title = LText("Social"), build = BuildSocialBlock },
@@ -2340,7 +2377,17 @@ CATEGORY_SECTIONS.interface[#CATEGORY_SECTIONS.interface + 1] = {
     column = 'left',
     title = LText('LFG Visuals'),
     build = BuildLFGVisualsBlock,
+    feature = 'lfg',
 }
+
+for _, sections in pairs(CATEGORY_SECTIONS) do
+    for index = #sections, 1, -1 do
+        local feature = sections[index].feature
+        if feature and not IsForeverFeatureAvailable(feature) then
+            table.remove(sections, index)
+        end
+    end
+end
 
 local function BuildActiveCategory(parent, W, db)
     local activeKey = GetActiveCategory()

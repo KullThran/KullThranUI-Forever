@@ -53,13 +53,10 @@ KT:RegisterPage("skins", "Skins", 20, function(sc, W)
         { key="inspect",         label="Inspect Frame"      },
         { key="gamemenu",        label="Game Menu (Esc)"    },
         { key="settings",        label="Blizzard Options"   },
-        { key="housing",         label="Housing"           },
         { key="spellbook",       label="Spellbook & Talents" },
         { key="alerts",          label="Alerts (Toasts)"    },
         { key="lfg",             label="LFG / Dungeon Finder" },
         { key="guild",           label="Guild & Guild Bank" },
-        { key="collections",     label="Collections"        },
-        { key="encounterjournal",label="Encounter Journal"  },
         { key="quest",           label="Quest Frames"       },
         { key="gossip",          label="Gossip (NPCs)"      },
         { key="merchant",        label="Merchant Frame"     },
@@ -73,7 +70,16 @@ KT:RegisterPage("skins", "Skins", 20, function(sc, W)
         { key="cooldownmanager", label="Cooldown Manager"        },
     }
 
-    blizzToggles[#blizzToggles + 1] = { key='weeklyrewards', label=LText('Great Vault') }
+    -- These Blizzard addons are not loaded by Forever/Camelot. Keep their
+    -- source modules for shared Mainline compatibility, but do not expose
+    -- dead Retail toggles in the Forever options page.
+    if not (S and S.IsForeverProject and S:IsForeverProject()) then
+        blizzToggles[#blizzToggles + 1] = { key="housing", label="Housing" }
+        blizzToggles[#blizzToggles + 1] = { key="collections", label="Collections" }
+        blizzToggles[#blizzToggles + 1] = { key="encounterjournal", label="Encounter Journal" }
+        blizzToggles[#blizzToggles + 1] = { key="weeklyrewards", label=LText("Great Vault") }
+    end
+
 
     local MAX_VISIBLE = 13
     local ITEM_H = 38

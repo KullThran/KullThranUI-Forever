@@ -1,9 +1,10 @@
-## Interface: 160001
+## Interface: 16001
+## AllowLoadGameType: camelot
 ## LoadOnDemand: 1
 ## Title: KullThranUI - Dragon Riding
 ## Notes: KullThranUI module: Dragon Riding
 ## Author: KullThran
-## Version: 0.0.2
+## Version: 0.0.3
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

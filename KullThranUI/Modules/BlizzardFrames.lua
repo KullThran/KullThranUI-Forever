@@ -871,13 +871,24 @@ function Mod:RegisterFrames()
     local durability = _G.DurabilityFrame
     if durability then
         local durabilityProxy = CreateUnlockProxy("KT_DurabilityUnlockProxy", "Equipment Durability", 60, 75)
+        -- Forever reference layout: keep Equipment Durability in the lower-left area.
+        -- These are the coordinates shown by Unlock Mode for the requested layout.
         local durabilityDefault = {
-            point = "TOPRIGHT",
-            relativePoint = "TOPRIGHT",
-            x = -150,
-            y = -200,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            x = 745,
+            y = -1138,
         }
-        local durabilityPos = ResolvePosition(framesDB, "durability_frame", durability, durabilityDefault)
+        -- Do not capture Blizzard's transient native anchor as the default.
+        local durabilitySaved = framesDB["durability_frame"]
+        if durabilitySaved and durabilitySaved.point == "TOPRIGHT"
+            and durabilitySaved.relativePoint == "TOPRIGHT"
+            and durabilitySaved.x == -150 and durabilitySaved.y == -200 then
+            -- This was the old built-in default, not a user placement.
+            framesDB["durability_frame"] = nil
+            durabilitySaved = nil
+        end
+        local durabilityPos = ResolvePosition(framesDB, "durability_frame", nil, durabilityDefault)
         ApplyPosition(durabilityProxy, durabilityPos, nil)
 
         if not durability.KT_UnlockOnShowHooked and durability.HookScript then

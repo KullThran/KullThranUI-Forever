@@ -7,6 +7,66 @@ end
 local Mod = KT:GetModule("Enhancements", true) or KT:NewModule("Enhancements", "AceEvent-3.0")
 ns.Enhancements = Mod
 
+local IS_FOREVER_BUILD = KT.IS_FOREVER == true
+    or (KT.IsForever and KT:IsForever())
+
+-- Forever intentionally does not expose the Retail systems below. Keep this
+-- policy in the runtime module as well as in the options page: SavedVariables
+-- may contain an older Retail profile and must not re-enable these paths.
+local FOREVER_DISABLED_FEATURES = {
+    dungeonHistory = true,
+    mythicPlus = true,
+    combatRez = true,
+    lfg = true,
+    communities = true,
+    auctionHouseExpansion = true,
+    addonProfiler = true,
+}
+
+function Mod:IsForeverFeatureAvailable(feature)
+    if not IS_FOREVER_BUILD then
+        return true
+    end
+    return FOREVER_DISABLED_FEATURES[feature] ~= true
+end
+
+function Mod:ApplyForeverCompatibility(db)
+    if not IS_FOREVER_BUILD or not db then
+        return
+    end
+
+    if db.mplusTracker then
+        db.mplusTracker.enabled = false
+    end
+    if db.dungeonHistory then
+        db.dungeonHistory.enabled = false
+        db.dungeonHistory.autoShow = false
+    end
+    if db.combatRez then
+        db.combatRez.enabled = false
+    end
+    if db.gameOptions then
+        db.gameOptions.autoInsertKeystone = false
+        db.gameOptions.ahCurrentExpansion = false
+    end
+    if db.automation then
+        db.automation.skipLFGRoleCheck = false
+        db.automation.lfgRoles = db.automation.lfgRoles or {}
+        db.automation.lfgRoles.tank = false
+        db.automation.lfgRoles.healer = false
+        db.automation.lfgRoles.damager = false
+    end
+    if db.visibility then
+        db.visibility.skipQueueConfirmation = false
+        db.visibility.showLFGClassBars = false
+    end
+    if db.groups then
+        db.groups.queueFromFriends = false
+        db.groups.persistentLFGNoteEnabled = false
+        db.groups.communitiesAsFriends = false
+    end
+end
+
 local C_Timer = _G.C_Timer
 local CreateFrame = _G.CreateFrame
 local C_BattleNet = _G.C_BattleNet
@@ -860,6 +920,7 @@ function Mod:GetDB()
     KT.db.profile.enhancements = KT.db.profile.enhancements or {}
     MergeDefaults(KT.db.profile.enhancements, DEFAULTS)
     local enhancements = KT.db.profile.enhancements
+    self:ApplyForeverCompatibility(enhancements)
 
     -- Forever migration: the old default was enabled. Apply the new default
     -- once to profiles that still carry that old implicit value.
@@ -1313,6 +1374,9 @@ function Mod:DeclinePendingFriendInvites()
 end
 
 function Mod:UpdatePersistentLFGNotePatch()
+    if not self:IsForeverFeatureAvailable("lfg") then
+        return
+    end
     local db = self:GetDB()
     local noteText = self:GetPersistentLFGNote()
     if not (IsModuleEnabled() and db.groups.persistentLFGNoteEnabled and noteText ~= "") then
@@ -1360,6 +1424,9 @@ function Mod:UpdatePersistentLFGNotePatch()
 end
 
 function Mod:ApplyPersistentLFGNote()
+    if not self:IsForeverFeatureAvailable("lfg") then
+        return
+    end
     local db = self:GetDB()
     if not (IsModuleEnabled() and db.groups.persistentLFGNoteEnabled) then
         return
@@ -1423,6 +1490,9 @@ function Mod:ApplyPersistentLFGNoteNow()
 end
 
 function Mod:EnsureLFGNoteHooks()
+    if not self:IsForeverFeatureAvailable("lfg") then
+        return
+    end
     self:UpdatePersistentLFGNotePatch()
 
     local dialog = _G.LFGListApplicationDialog
@@ -1832,15 +1902,13 @@ function Mod:RefreshSettings()
 end
 
 function Mod:OnInitialize()
-    local db = self:GetDB()
-    -- Mythic+ timer is intentionally unavailable in the Forever build.
-    if db and db.mplusTracker then
-        db.mplusTracker.enabled = false
-    end
+    self:ApplyForeverCompatibility(self:GetDB())
 end
 
 function Mod:OnEnable()
-    self:RegisterPersistentLFGNoteCommand()
+    if self:IsForeverFeatureAvailable("lfg") then
+        self:RegisterPersistentLFGNoteCommand()
+    end
     self:InstallHooks()
     self:RefreshSettings()
     local enhancementsDB = self:GetDB()
@@ -1848,10 +1916,12 @@ function Mod:OnEnable()
         and enhancementsDB.mplusTracker.enabled == true then
         self:InitializeMythicPlusTracker()
     end
-    if self.InitializeDungeonHistory then
-        self:InitializeDungeonHistory()
-    elseif self.InitializeMythicPlusHistory then
-        self:InitializeMythicPlusHistory()
+    if self:IsForeverFeatureAvailable("dungeonHistory") then
+        if self.InitializeDungeonHistory then
+            self:InitializeDungeonHistory()
+        elseif self.InitializeMythicPlusHistory then
+            self:InitializeMythicPlusHistory()
+        end
     end
     if self._ktCombatTimerInit then self:_ktCombatTimerInit() end
 

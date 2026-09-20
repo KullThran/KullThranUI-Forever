@@ -219,7 +219,7 @@ function Mod:RegisterUnlockElement()
         getSize = function()
             local bar = Mod and Mod.bar
             local db = Mod and Mod.db
-            local width = bar and bar.GetWidth and bar:GetWidth() or 250
+            local width = bar and bar.GetWidth and bar:GetWidth() or 135
             local height = bar and bar.GetHeight and bar:GetHeight() or 20
             if db and db.showIcon then
                 width = width + (db.height or height) + 2
@@ -238,7 +238,7 @@ function Mod:RegisterUnlockElement()
             local frameScale = bar:GetEffectiveScale()
             local left = bar:GetLeft() * frameScale / uiScale
             local top = bar:GetTop() * frameScale / uiScale
-            local width = (bar.GetWidth and bar:GetWidth() or 250) * frameScale / uiScale
+            local width = (bar.GetWidth and bar:GetWidth() or 135) * frameScale / uiScale
             local height = (bar.GetHeight and bar:GetHeight() or 20) * frameScale / uiScale
 
             if db and db.showIcon then
@@ -415,6 +415,32 @@ function Mod:OnInitialize()
             db._ktCastbarHeightDefaultMigrated_v1 = true
         end
 
+        -- New defaults: fixed 175px width with Auto Width disabled.
+        -- Only migrate profiles that still match the untouched previous defaults.
+        if not db._ktCastbarDefaultMigrated_v2 then
+            local h = tonumber(db.height)
+            local w = tonumber(db.width)
+            local s = tonumber(db.scale)
+            if db.autoWidth == true and h == 20 and w == 250
+                and (s == nil or s == 1 or s == 1.0) then
+                db.autoWidth = false
+                db.width = 175
+            end
+            db._ktCastbarDefaultMigrated_v2 = true
+        end
+
+        -- Follow-up default: reduce the fixed castbar width from 175px to 135px.
+        if not db._ktCastbarDefaultMigrated_v3 then
+            local h = tonumber(db.height)
+            local w = tonumber(db.width)
+            local s = tonumber(db.scale)
+            if db.autoWidth == false and h == 20 and w == 175
+                and (s == nil or s == 1 or s == 1.0) then
+                db.width = 135
+            end
+            db._ktCastbarDefaultMigrated_v3 = true
+        end
+
         if type(db.color) ~= "table" then
             local r, g, b = GetThemeAccentColor()
             db.color = { r = r, g = g, b = b, a = 1 }
@@ -431,8 +457,8 @@ function Mod:OnInitialize()
         KT.db.profile.castbar = {
             enable        = true,
             autoPosition  = true,
-            autoWidth     = true,
-            width         = 250,
+            autoWidth     = false,
+            width         = 135,
             height        = 20,
             scale         = 1.0,
             frameStrata   = "MEDIUM",
@@ -453,7 +479,7 @@ function Mod:OnInitialize()
 
     self.db = KT.db.profile.castbar
     if self.db.autoPosition == nil then self.db.autoPosition = true end
-    if self.db.autoWidth    == nil then self.db.autoWidth    = true end
+    if self.db.autoWidth    == nil then self.db.autoWidth    = false end
     if self.db.classColor   == nil then self.db.classColor   = false end
     if self.db.colorMode    == nil then self.db.colorMode    = "THEME" end
     self.isDummy = false
@@ -994,7 +1020,7 @@ function Mod:ApplySettings()
     local bar = self.bar
     local db = self.db
 
-    bar:SetWidth(db.width or 250)
+    bar:SetWidth(db.width or 135)
     bar:SetHeight(db.height or 20)
     bar:SetScale(db.scale or 1)
     bar:SetFrameStrata(db.frameStrata or "MEDIUM")
@@ -1398,8 +1424,8 @@ end
 function Mod:Refresh()
     if not KT.db.profile.castbar then
         KT.db.profile.castbar = {
-            enable = true, autoPosition = true, autoWidth = true,
-            width = 250, height = 20, scale = 1.0,
+            enable = true, autoPosition = true, autoWidth = false,
+            width = 135, height = 20, scale = 1.0,
             frameStrata = "MEDIUM", frameLevel = 10, texture = "Melli",
             color = GetThemeAccentColorTable(),
             colorMode = "THEME",

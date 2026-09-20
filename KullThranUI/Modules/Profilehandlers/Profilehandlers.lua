@@ -70,6 +70,9 @@ end
 
 local function ApplyAceDBProfile(savedVarName, addonGlobal, profileName, profileData, opts)
     opts = opts or {}
+    if KT and KT.ScopeProfileName and type(profileName) == "string" then
+        profileName = KT:ScopeProfileName(profileName)
+    end
     local activateProfile = opts.activate ~= false
 
     -- 1. Escribir en la base de datos cruda (_G) por si el addon carga después
@@ -88,10 +91,15 @@ local function ApplyAceDBProfile(savedVarName, addonGlobal, profileName, profile
 
     if activateProfile then
         rawDB["profileKeys"] = rawDB["profileKeys"] or {}
-        local charKey = UnitName("player") .. " - " .. GetRealmName()
+        local playerName = UnitName("player") or ""
+        local playerRealm = GetRealmName and GetRealmName() or nil
+        local charKey = playerName
+        if playerRealm and playerRealm ~= "" and not playerName:find("-", 1, true) then
+            charKey = playerName .. " - " .. playerRealm
+        end
         rawDB["profileKeys"][charKey] = profileName
 
-        local safeName = UnitName("player"):gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+        local safeName = playerName:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
         for k in pairs(rawDB["profileKeys"]) do
             if type(k) == "string" and k:find("^" .. safeName .. " %-") then
                 rawDB["profileKeys"][k] = profileName
@@ -228,6 +236,7 @@ function ns.Handlers.Layout(profileName, profileData)
     -- [2] Si es un layout interno de KullThranUI (Escala y Marcos propios)
     if type(profileData) ~= "table" then return false, "Formato de Layout inválido." end
 
+    profileName = KT.ScopeProfileName and KT:ScopeProfileName(profileName) or profileName
     if KT.db:GetCurrentProfile() ~= profileName then
         KT.db:SetProfile(profileName)
     end

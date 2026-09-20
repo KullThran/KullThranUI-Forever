@@ -125,8 +125,51 @@ local function SkinFontString(fontString)
     end
 end
 
+local function EnsureGossipButtonHeight(button)
+    if not (button and button.GetHeight and button.SetHeight) then return end
+
+    local baseHeight = button._ktGossipBaseHeight
+    if not baseHeight or baseHeight <= 0 then
+        baseHeight = math.max(22, button:GetHeight() or 22)
+        button._ktGossipBaseHeight = baseHeight
+    end
+
+    local requiredHeight = baseHeight
+    local fontStrings = {
+        button.GreetingText,
+        button.Text,
+        button.GetFontString and button:GetFontString(),
+    }
+    for _, fontString in ipairs(fontStrings) do
+        if fontString and fontString.GetStringHeight then
+            local textHeight = fontString:GetStringHeight()
+            if textHeight and textHeight > 0 then
+                requiredHeight = math.max(requiredHeight, textHeight + 8)
+            end
+        end
+    end
+
+    if button.GetRegions then
+        for _, region in ipairs({ button:GetRegions() }) do
+            if region and region.IsObjectType and region:IsObjectType("FontString") and region.GetStringHeight then
+                local textHeight = region:GetStringHeight()
+                if textHeight and textHeight > 0 then
+                    requiredHeight = math.max(requiredHeight, textHeight + 8)
+                end
+            end
+        end
+    end
+
+    if requiredHeight > (button:GetHeight() or 0) then
+        button:SetHeight(requiredHeight)
+        return true
+    end
+
+    return false
+end
+
 local function SkinGossipButton(button)
-    if not button then return end
+    if not button then return false end
 
     if button.GreetingText then
         SkinFontString(button.GreetingText)
@@ -147,12 +190,29 @@ local function SkinGossipButton(button)
         button.Icon:SetDrawLayer("ARTWORK", 5)
         button.Icon:SetAlpha(1)
     end
+
+    return EnsureGossipButtonHeight(button)
 end
 
 local function RefreshGossipScrollBox(scrollBox)
     if not (scrollBox and scrollBox.ForEachFrame) then return end
 
-    scrollBox:ForEachFrame(SkinGossipButton)
+    local resized = false
+    scrollBox:ForEachFrame(function(button)
+        if SkinGossipButton(button) then
+            resized = true
+        end
+    end)
+
+    if resized and not scrollBox._ktGossipReflowing then
+        scrollBox._ktGossipReflowing = true
+        if scrollBox.FullUpdate then
+            scrollBox:FullUpdate()
+        elseif scrollBox.Update then
+            scrollBox:Update()
+        end
+        scrollBox._ktGossipReflowing = nil
+    end
 end
 
 local function SkinPageButton(button, text)

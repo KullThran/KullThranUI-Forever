@@ -1,8 +1,9 @@
-## Interface: 160001
+## Interface: 16001
+## AllowLoadGameType: camelot
 ## Title: KullThranUI - Bags
 ## Notes: KullThranUI module: Bags
 ## Author: KullThran
-## Version: 0.0.2
+## Version: 0.0.3
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

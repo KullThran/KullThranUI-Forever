@@ -61,7 +61,7 @@ local function IsForeverProject()
     if projectID ~= nil and (projectID == betaID or projectID == foreverID) then return true end
     local _, _, _, version = GetBuildInfo()
     local numericVersion = tonumber(version)
-    return numericVersion ~= nil and numericVersion >= 16000 and numericVersion < 17000
+    return numericVersion == 16001
 end
 
 local name = "BlizzMove";
@@ -505,6 +505,13 @@ do
     BlizzMove.gameBuild   = tonumber(buildNumber);
     BlizzMove.gameVersion = tonumber(gameVersion);
     BlizzMove.isForever = IsForeverProject();
+    BlizzMove.displayName = BlizzMove.isForever and "KUI Move Forever" or "KullThranUI Move";
+    _G.KUI_Move = BlizzMove;
+    if BlizzMove.isForever then
+        _G.KUI_ForeverMove = BlizzMove;
+    else
+        _G.KUI_ForeverMove = nil;
+    end
 
     local function checkRanges(ranges, needle)
         for _, range in ipairs(ranges) do
@@ -1674,6 +1681,8 @@ do
 
         self:InitMouseWheelCaptureFrame();
 
+        self:RegisterChatCommand('kuimove', 'OnSlashCommand');
+        self:RegisterChatCommand('kuifm', 'OnSlashCommand');
         self:RegisterChatCommand('kuiblizzmove', 'OnSlashCommand');
         self:RegisterChatCommand('kuibm', 'OnSlashCommand');
         self:RegisterChatCommand('blizzmove', 'OnSlashCommand');
@@ -1729,7 +1738,7 @@ do
             or arg1 == commands.debugAnchor
             or arg1 == commands.dumpTopLevelFrames
         then
-            self:Print("Integrated KullThranUI BlizzMove debug plugin is not bundled.");
+            self:Print("Integrated " .. (self.displayName or "KUI Move") .. " debug plugin is not bundled.");
             return;
         end
 
@@ -1783,6 +1792,13 @@ do
     end
 
     function BlizzMove:ApplyAddOnSpecificFixes(addOnName)
+        -- Forever has its own frame catalogue. Retail-only anchor workarounds
+        -- are intentionally skipped there; they reference globals and APIs
+        -- that do not exist in the Forever client.
+        if self.isForever and addOnName ~= INTERNAL_ADDON_NAME then
+            return;
+        end
+
         -- fix a stupid anchor family connection issue blizzard added in 9.1.5
         if addOnName == "Blizzard_Collections" then
             local checkbox = _G.WardrobeTransmogFrame and _G.WardrobeTransmogFrame.ToggleSecondaryAppearanceCheckbox;

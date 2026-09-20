@@ -28,6 +28,7 @@ local Config = {};
 BlizzMove.Config = Config;
 
 Config.version = KT.VERSION or "unknown";
+Config.displayName = BlizzMove.displayName or (BlizzMove.isForever and "KUI Move Forever" or "KullThranUI Move");
 
 function Config:GetOptions()
     local leftClick = CreateAtlasMarkup('NPE_LeftClick', 18, 18);
@@ -54,7 +55,9 @@ function Config:GetOptions()
                         order = increment(),
                         type = "description",
                         name =
-                            L["This addon makes the Blizzard windows movable."] .. "\n"
+                            self.displayName .. "\n"
+                            .. (BlizzMove.isForever and "Forever uses a curated catalogue of its own Blizzard windows; Retail-only panels are not registered." or "") .. "\n"
+                            .. L["This addon makes the Blizzard windows movable."] .. "\n"
                             .. "\n"
                             .. L["To temporarily move a window just %s the window and drag it to where you want it for the current game session."]:format(leftClick) .. "\n"
                             .. "\n"
@@ -68,7 +71,7 @@ function Config:GetOptions()
                             .. "  " .. L["CTRL + %s to reset the scale of a window."]:format(rightClick) .. "\n"
                             .. "  " .. L["ALT + %s to re-attach a child window."]:format(rightClick) .. "\n"
                             .. "\n"
-                            .. L["Addon authors can enable support for their own custom frames by utilizing the BlizzMoveAPI functions"],
+                            .. (BlizzMove.isForever and "KUI Move API support is kept for compatible Forever addons." or L["Addon authors can enable support for their own custom frames by utilizing the BlizzMoveAPI functions"]),
                     },
                     newline1 = {
                         order = increment(),
@@ -286,11 +289,12 @@ function Config:Initialize()
     self.search = "";
     self:RegisterOptions();
     local ACD = LibStub("AceConfigDialog-3.0");
-    local success, _, categoryID = pcall(ACD.AddToBlizOptions, ACD, OPTIONS_TABLE_NAME, "KullThranUI Move");
-    if success then
+    local success, _, categoryID = pcall(ACD.AddToBlizOptions, ACD, OPTIONS_TABLE_NAME, self.displayName);
+    if success and type(categoryID) == "number" then
         self.categoryID = categoryID;
     else
-        self.categoryID = ACD.BlizOptionsIDMap and ACD.BlizOptionsIDMap[OPTIONS_TABLE_NAME];
+        local mappedCategoryID = ACD.BlizOptionsIDMap and ACD.BlizOptionsIDMap[OPTIONS_TABLE_NAME];
+        self.categoryID = type(mappedCategoryID) == "number" and mappedCategoryID or nil;
     end
 
     StaticPopupDialogs[POPUP_NAME] = {
@@ -325,11 +329,24 @@ function Config:Initialize()
 end
 
 function Config:OpenConfig()
-    if C_SettingsUtil and C_SettingsUtil.OpenSettingsPanel and InCombatLockdown() then
-        LibStub("AceConfigDialog-3.0"):Open(OPTIONS_TABLE_NAME);
+    local ACD = LibStub("AceConfigDialog-3.0");
+    -- Forever may return the category name instead of a numeric Settings ID.
+    -- C_SettingsUtil.OpenSettingsPanel rejects that string, so use the
+    -- AceConfig fallback whenever Blizzard did not provide a valid ID.
+    if
+        InCombatLockdown()
+        or type(self.categoryID) ~= "number"
+        or not Settings
+        or type(Settings.OpenToCategory) ~= "function"
+    then
+        ACD:Open(OPTIONS_TABLE_NAME);
         return;
     end
-    Settings.OpenToCategory(self.categoryID);
+
+    local opened = pcall(Settings.OpenToCategory, self.categoryID);
+    if not opened then
+        ACD:Open(OPTIONS_TABLE_NAME);
+    end
 end
 
 function Config:RegisterOptions()

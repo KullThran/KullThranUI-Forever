@@ -326,9 +326,12 @@ local function ForceSetProfile(addonName, profileName, altAddonName)
     end
     if addonName == "KullThranUI" then table.insert(dbNames, "KullThranDB") end
 
-    local myName = UnitName("player")
-    local myRealm = GetRealmName()
-    local exactKey = myName .. " - " .. myRealm
+    local myName = UnitName("player") or ""
+    local myRealm = GetRealmName and GetRealmName() or nil
+    local exactKey = myName
+    if myRealm and myRealm ~= "" and not myName:find("-", 1, true) then
+        exactKey = myName .. " - " .. myRealm
+    end
     
     for _, dbName in ipairs(dbNames) do
         local db = _G[dbName]
@@ -2787,7 +2790,8 @@ function Mod:GetInitialProfileChoices()
 
     local currentProfile = KT.db:GetCurrentProfile()
     for _, profileName in ipairs(KT.db:GetProfiles({})) do
-        if type(profileName) == "string" and profileName ~= "" and profileName ~= currentProfile then
+        if type(profileName) == "string" and profileName ~= "" and profileName ~= currentProfile
+            and (not KT.IsProfileNameForCurrentFlavor or KT:IsProfileNameForCurrentFlavor(profileName)) then
             profiles[#profiles + 1] = profileName
         end
     end
@@ -2798,6 +2802,9 @@ function Mod:GetInitialProfileChoices()
 end
 
 function Mod:CompleteInitialProfileChoice(profileName)
+    if profileName and KT.ScopeProfileName then
+        profileName = KT:ScopeProfileName(profileName)
+    end
     if profileName and KT.db:GetCurrentProfile() ~= profileName then
         KT._installerProfileChoiceInProgress = true
         local ok, err = pcall(KT.db.SetProfile, KT.db, profileName)
@@ -3358,12 +3365,17 @@ function Mod:ShowWelcomeStep()
     self.content = content
     
     local icon = content:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(80, 80)
-    icon:SetPoint("TOP", 0, -60)
-    icon:SetTexture(ICON_PATH .. "KUI.png")
-    
+    icon:SetSize(90, 90)
+    icon:SetPoint("TOP", 0, -44)
+    icon:SetTexture(KUI_TEXTURE_PATH .. "KUILogoCuadrado.PNG")
+
+    local foreverLogo = content:CreateTexture(nil, "ARTWORK")
+    foreverLogo:SetSize(140, 34)
+    foreverLogo:SetPoint("TOP", icon, "BOTTOM", 0, -7)
+    foreverLogo:SetTexture(KUI_TEXTURE_PATH .. "Forever.png")
+
     local title = content:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOP", icon, "BOTTOM", 0, -20)
+    title:SetPoint("TOP", foreverLogo, "BOTTOM", 0, -14)
     title:SetFont(GetKTFont(), 30, "OUTLINE")
     title:SetText(L["Welcome to KullThranUI"])
     title:SetTextColor(unpack(KT_COLOR))
@@ -3379,7 +3391,7 @@ function Mod:ShowWelcomeStep()
     text:SetPoint("TOP", cmdText, "BOTTOM", 0, -20)
     text:SetWidth(600)
     text:SetFont(GetKTFont(), 16)
-    text:SetText(L["This guided setup will help you choose language, fonts, visual style, and recommended addons."])
+    text:SetText(L["This guided setup is for KullThranUI Forever, an adaptation of the Retail KullThranUI addon. It will help you choose language, fonts, visual style, and recommended addons."])
     text:SetTextColor(0.9, 0.9, 0.9)
     text:SetJustifyH("CENTER")
     
@@ -3388,7 +3400,9 @@ function Mod:ShowWelcomeStep()
     shape:SetSize(665, 285)
     shape:SetPoint("CENTER", -50, -100) -- Debajo del texto
     shape:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\feralshape.tga")
-    shape:SetVertexColor(1, 1, 1, 0.25)
+    if shape.SetDesaturated then shape:SetDesaturated(true) end
+    shape:SetVertexColor(0, 0.498039, 0.662745, 1)
+    shape:SetAlpha(0.48)
     
     -- Botones
     local btnNext = CreateFrame("Button", nil, content, "BackdropTemplate")
