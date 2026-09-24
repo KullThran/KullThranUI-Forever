@@ -391,7 +391,10 @@ local NON_SECRET_SPELL_IDS = {
 --  Snapshots player aura state before entering combat so we have a reliable
 --  fallback for any whitelisted spell whose live API returns nil in combat.
 -------------------------------------------------------------------------------
-local _preCombatAuraCache = {}  -- [spellID] = true/false, snapshotted at REGEN_DISABLED
+local _preCombatAuraCache = {}      -- [spellID] = true/false
+local _preCombatAuraNameCache = {}  -- [normalized spell name] = true/false
+local GetHelpfulAuraByName
+local NormalizeAuraName
 local _kuiarLogEnabled = false   -- toggled by /kuiarlog
 
 local function _isRuntimeNonSecret(id)
@@ -406,13 +409,31 @@ end
 
 local function SnapshotPlayerAuras()
     wipe(_preCombatAuraCache)
+    wipe(_preCombatAuraNameCache)
     -- Snapshot every whitelisted spell ID before entering combat.
-    -- GetPlayerAuraBySpellID returns nil for everything during combat,
-    -- and UNIT_AURA payload spell IDs are all secret values in combat,
-    -- so this snapshot is the ONLY reliable source of aura state.
+    -- GetPlayerAuraBySpellID can miss a Classic/Forever rank, so also cache
+    -- the logical aura name for a rank-independent combat fallback.
     for id in pairs(NON_SECRET_SPELL_IDS) do
-        local result = C_UnitAuras.GetPlayerAuraBySpellID(id)
+        local result
+        if C_UnitAuras and type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
+            local ok, value = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+            if ok then result = value end
+        end
         _preCombatAuraCache[id] = (result ~= nil)
+
+        local info = SafeSpellInfo(id)
+        local name = info and info.name
+        if name and not (issecretvalue and issecretvalue(name)) then
+            local key = NormalizeAuraName(name)
+            if key then
+                local aura = GetHelpfulAuraByName("player", name)
+                if aura ~= nil then
+                    _preCombatAuraNameCache[key] = true
+                elseif _preCombatAuraNameCache[key] == nil then
+                    _preCombatAuraNameCache[key] = false
+                end
+            end
+        end
     end
 end
 
@@ -430,31 +451,83 @@ local _lookupScratch    = {}
 -- Patch 12.1: index/slot aura enumeration can raise a taint error whenever the
 -- aura collection is secret, including some nominally out-of-combat states.
 -- Direct spell lookup is the supported readable path.
+NormalizeAuraName = function(name)
+    if type(name) ~= "string" then return nil end
+    -- Classic/Forever may expose the rank in the aura label while the spell
+    -- name does not contain it. Compare both forms when scanning legacy data.
+    name = name:gsub("%s*%(Rank%s*%d+%)%s*$", "")
+    name = name:gsub("%s+[Rr]ank%s*%d+%s*$", "")
+    return name
+end
+
+GetHelpfulAuraByName = function(unit, auraName)
+    if not (unit and auraName) then return nil, false end
+    if issecretvalue and issecretvalue(auraName) then return nil, false end
+
+    local auraAPI = C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName
+    if type(auraAPI) == "function" then
+        local ok, aura = pcall(auraAPI, unit, auraName, "HELPFUL")
+        if ok and aura ~= nil then return aura, true end
+    end
+
+    local findByName = AuraUtil and AuraUtil.FindAuraByName
+    if type(findByName) == "function" then
+        local ok, aura = pcall(findByName, auraName, unit, "HELPFUL")
+        if ok and aura ~= nil then return aura, true end
+    end
+
+    -- UnitAura enumeration is retained only as an out-of-combat fallback.
+    -- Forever can restrict aura fields while in combat.
+    if type(UnitAura) == "function" and not InCombat() then
+        local wanted = NormalizeAuraName(auraName)
+        for index = 1, 40 do
+            local ok, name = pcall(UnitAura, unit, index, "HELPFUL")
+            if not ok or name == nil then break end
+            if name == auraName or NormalizeAuraName(name) == wanted then
+                return true, true
+            end
+        end
+    end
+
+    return nil, not InCombat()
+end
+
 local function GetHelpfulAuraBySpellID(unit, spellID)
     if not (unit and spellID) then return nil, false end
     if not C_UnitAuras and not AuraUtil and type(UnitAura) ~= "function" then return nil, false end
+
+    -- First use the exact spell ID. This is the reliable path when the client
+    -- exposes the active rank/variant directly.
     local fn
     if unit == "player" then
-        fn = C_UnitAuras.GetPlayerAuraBySpellID
+        fn = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
     else
-        fn = C_UnitAuras.GetUnitAuraBySpellID
+        fn = C_UnitAuras and C_UnitAuras.GetUnitAuraBySpellID
     end
-    if fn then
+    if type(fn) == "function" then
         local ok, aura
         if unit == "player" then ok, aura = pcall(fn, spellID)
         else ok, aura = pcall(fn, unit, spellID) end
         if ok and aura ~= nil then return aura, true end
     end
 
-    -- Forever can keep the direct lookup callable while returning nil for a
-    -- protected collection during combat. Try the legacy/utility lookup
-    -- before falling back to the pre-combat snapshot; otherwise a reminder
-    -- can remain visible after the player applies the aura in combat.
-    if AuraUtil and type(AuraUtil.FindAuraBySpellID) == "function" then
-        local ok, aura = pcall(AuraUtil.FindAuraBySpellID, spellID, unit, "HELPFUL")
+    -- Ranks and Forever variants can have different IDs but the same aura
+    -- name. Try the name before returning a false negative from the ID path.
+    local spellInfo = SafeSpellInfo(spellID)
+    local spellName = spellInfo and spellInfo.name
+    if spellName and not (issecretvalue and issecretvalue(spellName)) then
+        local aura, readable = GetHelpfulAuraByName(unit, spellName)
+        if aura ~= nil then return aura, true end
+        if readable then return nil, true end
+    end
+
+    -- Keep the remaining compatibility paths for clients that expose a
+    -- spell-ID finder but not GetAuraDataBySpellName.
+    local findByID = AuraUtil and AuraUtil.FindAuraBySpellID
+    if type(findByID) == "function" then
+        local ok, aura = pcall(findByID, spellID, unit, "HELPFUL")
         if ok and aura ~= nil then return aura, true end
-        if not InCombat() then return nil, true end
-    elseif type(UnitAura) == "function" then
+    elseif type(UnitAura) == "function" and not InCombat() then
         for index = 1, 40 do
             local ok, name, _, _, _, _, _, _, _, auraSpellID = pcall(UnitAura, unit, index, "HELPFUL")
             if not ok or name == nil then break end
@@ -462,26 +535,11 @@ local function GetHelpfulAuraBySpellID(unit, spellID)
                 return true, true
             end
         end
-        return nil, true
     end
 
-    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
-    if not issecretvalue(name) and name and C_UnitAuras.GetAuraDataBySpellName then
-        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, name, "HELPFUL")
-        if ok and aura ~= nil then return aura, true end
-    end
-    -- A nil direct result in combat is not proof that the aura is absent.
-    -- Keep the snapshot fallback only when no readable fallback exists.
+    -- A nil result in combat is not proof that the aura is absent.
     return nil, not InCombat()
 end
-
-local function GetHelpfulAuraByName(unit, auraName)
-    if not (auraName and C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName) then return nil, false end
-    local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, auraName, "HELPFUL")
-    if ok then return aura, true end
-    return nil, false
-end
-
 local function PlayerHasAuraByID(spellIDs)
     if not spellIDs or not spellIDs[1] then return true end
     local inCombat = InCombat()
@@ -489,7 +547,13 @@ local function PlayerHasAuraByID(spellIDs)
         local id = spellIDs[j]
         local aura, readable = GetHelpfulAuraBySpellID("player", id)
         if readable and aura ~= nil then return true end
-        if not readable and _preCombatAuraCache[id] then return true end
+        if not readable then
+            if _preCombatAuraCache[id] then return true end
+            local info = SafeSpellInfo(id)
+            local name = info and info.name
+            local key = name and NormalizeAuraName(name)
+            if key and _preCombatAuraNameCache[key] then return true end
+        end
     end
     return false
 end

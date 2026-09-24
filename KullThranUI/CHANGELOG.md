@@ -5,6 +5,18 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.4 (2026-09-24)
+
+Forever beta maintenance release focused on chat, minimap, Armory, Collections, Appearances, and Bags.
+
+- Fixed outgoing chat and whisper history handling on Forever, including protected payloads and lineID 0 events.
+- Applied the Retail minimap positioning and launcher restoration fixes to the Forever layout.
+- Improved Armory surfaces, stats/progress panels, and texture treatment so character and inspection views remain readable.
+- Reworked Collections and Appearances skinning with safe Forever OnClick hooks, restored native slot and right-hand icons, and balanced textured surfaces.
+- Restored visible KUI texture treatment in Bags while keeping the bag grid, controls, and layout readable.
+- Hardened Aura Reminders, Unit Frames, Party Frames, Nameplates, Cooldown Manager, and Objective Tracker paths for Forever API and protected-value differences.
+- Validated the changed Lua modules with Lua 5.1 syntax checks and repository whitespace checks.
+
 ## 0.0.3 (2026-09-20)
 
 Forever beta follow-up focused on the Forever-native layout, options, installer, and release flow.

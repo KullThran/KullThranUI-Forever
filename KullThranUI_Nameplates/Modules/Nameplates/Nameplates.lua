@@ -20,6 +20,31 @@ local function LText(text)
 end
 local C_UnitAuras_GetAuraAppDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
 local C_UnitAuras_GetAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
+
+-- Forever rejects derived target tokens and group-unit tokens such as
+-- targettarget, focustarget, party1 and raid1 in
+-- C_NamePlate.GetNamePlateForUnit. Those units can still produce UNIT_LEVEL
+-- and similar events, so resolve only supported tokens and fail safely.
+local function GetSafeNamePlateForUnit(unit)
+    if type(unit) ~= "string"
+        or unit == "targettarget"
+        or unit == "focustarget"
+        or unit:match("^party%d+$")
+        or unit:match("^raid%d+$")
+        or unit:match("^partypet%d+$")
+        or unit:match("^raidpet%d+$") then
+        return nil
+    end
+    if not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
+        return nil
+    end
+
+    local ok, nameplate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+    if not ok then
+        return nil
+    end
+    return nameplate
+end
 ns.IsAccessibleValue = ns.IsAccessibleValue or function(value)
     if issecretvalue and issecretvalue(value) then return false end
     if canaccessvalue and not canaccessvalue(value) then return false end
@@ -2918,7 +2943,7 @@ local function SetupAuraCVars()
         end
         hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, addedUnit)
             if addedUnit == "preview" then return end
-            local np = C_NamePlate.GetNamePlateForUnit(addedUnit)
+            local np = GetSafeNamePlateForUnit(addedUnit)
             if np and addedUnit and ns.IsEnemyNameplateUnit(addedUnit, np) then
                 ns.HideBlizzardFrame(np, addedUnit)
             end
@@ -5990,7 +6015,7 @@ transitionState.CreatePendingWatcher = function(unit, nameplate)
 
         -- Promoción: retirar friendly → adquirir enemiga → vigilar retorno
         RemoveFriendlyPresentation(u)
-        local np = C_NamePlate.GetNamePlateForUnit(u)
+        local np = GetSafeNamePlateForUnit(u)
         if np then AcquireEnemyPlate(u, np) end
         transitionState.enemyWatchers[u] = transitionState.CreateEnemyWatcher(u)
     end)
@@ -6012,7 +6037,7 @@ transitionState.CreateEnemyWatcher = function(unit)
         ReleaseEnemyPlate(u)
 
         -- Intentar restaurar presentación friendly y preparar el camino inverso
-        local np = C_NamePlate.GetNamePlateForUnit(u)
+        local np = GetSafeNamePlateForUnit(u)
         if not np then return end
         transitionState.pendingUnits[u] = np
         transitionState.pendingWatchers[u] = transitionState.CreatePendingWatcher(u, np)
@@ -6069,7 +6094,7 @@ local function ReconcileFactionTransitions()
     for i = 1, #staleEnemies do
         local unit = staleEnemies[i]
         ReleaseEnemyPlate(unit)
-        local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+        local nameplate = GetSafeNamePlateForUnit(unit)
         if nameplate then
             transitionState.pendingUnits[unit] = nameplate
             transitionState.pendingWatchers[unit] = transitionState.CreatePendingWatcher(unit, nameplate)
@@ -6147,7 +6172,7 @@ transitionState.factionFrame:SetScript("OnEvent", function(_, event, unit)
     end
 end)
 local function UpdateMouseover()
-    local mouseoverNameplate = UnitExists("mouseover") and C_NamePlate.GetNamePlateForUnit("mouseover")
+    local mouseoverNameplate = UnitExists("mouseover") and GetSafeNamePlateForUnit("mouseover")
     local newMouseoverPlate = mouseoverNameplate and ns.platesByNameplate[mouseoverNameplate] or nil
 
     if transitionState.currentMouseoverPlate and transitionState.currentMouseoverPlate ~= newMouseoverPlate then
@@ -6253,7 +6278,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
     elseif not IsNameplatesEnabled() then
         return
     elseif event == "NAME_PLATE_UNIT_ADDED" then
-        local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+        local nameplate = GetSafeNamePlateForUnit(unit)
         if not nameplate then return end
         if not ns.IsEnemyNameplateUnit(unit, nameplate) then
             transitionState.pendingUnits[unit] = nameplate
@@ -6320,7 +6345,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         questMobCache[unit] = nil
         -- Restaurar elementos del UnitFrame de Blizzard para que el nameplate reciclado quede limpio
-        local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+        local nameplate = GetSafeNamePlateForUnit(unit)
         if nameplate then
             if ns.UpdateFriendlyPlayerLevel then
                 ns.UpdateFriendlyPlayerLevel(nameplate, nil)
@@ -6377,7 +6402,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
         end
         if ns.RemoveFriendlyPlate then ns.RemoveFriendlyPlate(unit) end
     elseif event == "PLAYER_TARGET_CHANGED" then
-        local targetNameplate = UnitExists("target") and C_NamePlate.GetNamePlateForUnit("target")
+        local targetNameplate = UnitExists("target") and GetSafeNamePlateForUnit("target")
         local newTargetPlate = targetNameplate and ns.platesByNameplate[targetNameplate] or nil
         if ns.currentTargetPlate and ns.currentTargetPlate ~= newTargetPlate then
             ns.currentTargetPlate:ApplyTarget()
@@ -6387,7 +6412,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
         end
         ns.currentTargetPlate = newTargetPlate
     elseif event == "UNIT_LEVEL" then
-        local nameplate = unit and C_NamePlate.GetNamePlateForUnit(unit)
+        local nameplate = unit and GetSafeNamePlateForUnit(unit)
         if nameplate and ns.UpdateFriendlyPlayerLevel then
             ns.UpdateFriendlyPlayerLevel(nameplate, unit)
         end
@@ -6397,7 +6422,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
         end
     elseif event == "PLAYER_FOCUS_CHANGED" then
         local focusPct = GetFocusCastHeight()
-        local focusNameplate = UnitExists("focus") and C_NamePlate.GetNamePlateForUnit("focus")
+        local focusNameplate = UnitExists("focus") and GetSafeNamePlateForUnit("focus")
         local newFocusPlate = focusNameplate and ns.platesByNameplate[focusNameplate] or nil
         local function RefreshFocusPlate(plate)
             if not plate then return end

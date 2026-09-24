@@ -117,6 +117,23 @@ local function SkinArmory()
     if ArmoryFrame.Bg then ArmoryFrame.Bg:Hide() end
     if _G.CharacterFrameBg then _G.CharacterFrameBg:Hide() end
     if _G.CharacterModelFrameBackgroundOverlay then _G.CharacterModelFrameBackgroundOverlay:Hide() end
+    -- Reapply the shared KUI artwork after Blizzard backgrounds are removed.
+    -- The lower wash keeps the surface visible on Forever instead of leaving
+    -- CharacterFrame and its inset panels as flat black rectangles.
+    if S.ApplyKuiSurface then
+        S:ApplyKuiSurface(ArmoryFrame, { washAlpha = 0.24 })
+        if ArmoryFrame.Inset then
+            S:ApplyKuiSurface(ArmoryFrame.Inset, { washAlpha = 0.28 })
+        end
+        if _G.CharacterFrameInsetRight then
+            S:ApplyKuiSurface(_G.CharacterFrameInsetRight, { washAlpha = 0.28 })
+        end
+        if _G.KT_ArmoryStats then
+            -- Keep the custom KUI stats panel on the same dark textured
+            -- treatment as the rest of the Skins module.
+            S:ApplyKuiSurface(_G.KT_ArmoryStats, { washAlpha = 0.45 })
+        end
+    end
 
     -- 2. Pestañas Superiores
     for i = 1, 3 do

@@ -160,7 +160,7 @@ function KT:GenerateDefaults()
                 tabConfigs = {
                     { id = "general", label = "General", prompt = "Say", command = "", filterMode = "GENERAL", channelMatch = "" },
                     { id = "combat", label = "Combat", prompt = "Combat Log", command = "", filterMode = "COMBAT", channelMatch = "" },
-                    { id = "trade", label = "Trade", prompt = "Trade", command = "/1 ", filterMode = "CHANNEL", channelMatch = "" },
+                    { id = "trade", label = "Trade", prompt = "Trade", command = "/2 ", filterMode = "CHANNEL", channelMatch = "" },
                     { id = "guild", label = "Guild", prompt = "Guild", command = "/g ", filterMode = "GUILD", channelMatch = "" },
                     { id = "group", label = "Group", prompt = "Group", command = "/p ", filterMode = "GROUP", channelMatch = "" },
                     { id = "whisper", label = "Whisp", prompt = "Whisper", command = "/w ", filterMode = "WHISPER", channelMatch = "" },

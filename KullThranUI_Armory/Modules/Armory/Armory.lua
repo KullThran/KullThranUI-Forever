@@ -20,6 +20,12 @@ local GetItemInfo = GetItemInfo
 local C_Item = C_Item
 local C_TooltipInfo = C_TooltipInfo
 
+local GetBuildInfo = GetBuildInfo
+
+-- Forever deliberately reports itself as mainline in several API checks, so
+-- the TOC interface is the reliable flavor discriminator for this module.
+local ARMORY_INTERFACE_VERSION = GetBuildInfo and select(4, GetBuildInfo()) or nil
+local IS_FOREVER = tonumber(ARMORY_INTERFACE_VERSION) == 16001 or tonumber(ARMORY_INTERFACE_VERSION) == 160001
 local ItemLocation = ItemLocation
 local UnitClass = UnitClass
 local UnitName = UnitName
@@ -33,7 +39,6 @@ local GetSpecializationInfo = type(GetSpecializationInfo) == "function" and GetS
 local UnitStat = UnitStat
 local UnitArmor = UnitArmor
 local UnitResistance = UnitResistance
-local UnitWeaponAttackPower = UnitWeaponAttackPower
 local GetCritChance = GetCritChance
 local GetHaste = GetHaste
 local UnitSpellHaste = UnitSpellHaste
@@ -332,7 +337,7 @@ local function LayoutHeaderSideLines(leftLine, rightLine, label, parent, color)
     local parentWidth = parent.GetWidth and parent:GetWidth() or 180
     local labelWidth = label.GetStringWidth and label:GetStringWidth() or 0
     local gap = math.max(10, math.floor(parentWidth * 0.06))
-    local lineWidth = math.max(28, math.floor((parentWidth - labelWidth - (gap * 2)) / 2))
+    local lineWidth = math.max(0, math.floor((parentWidth - labelWidth - (gap * 2)) / 2))
     local labelHalfWidth = math.floor((labelWidth or 0) / 2)
     local r = (color and color.r) or 1
     local g = (color and color.g) or 1
@@ -344,14 +349,14 @@ local function LayoutHeaderSideLines(leftLine, rightLine, label, parent, color)
     leftLine:SetPoint("RIGHT", label, "CENTER", -(labelHalfWidth + gap), 0)
     leftLine:SetTexture(WHITE8X8)
     leftLine:SetColorTexture(r, g, b, a)
-    leftLine:Show()
+    leftLine:SetShown(lineWidth >= 8)
 
     rightLine:ClearAllPoints()
     rightLine:SetSize(lineWidth, 2)
     rightLine:SetPoint("LEFT", label, "CENTER", labelHalfWidth + gap, 0)
     rightLine:SetTexture(WHITE8X8)
     rightLine:SetColorTexture(r, g, b, a)
-    rightLine:Show()
+    rightLine:SetShown(lineWidth >= 8)
 end
 
 local function EnsureArmoryColorDefaults(profile)
@@ -702,7 +707,7 @@ function AR:ApplyStatsPanelTheme()
     if not self.StatsFrame then return end
 
     if KT and KT.ApplyTexturedSurface then
-        KT:ApplyTexturedSurface(self.StatsFrame)
+        KT:ApplyTexturedSurface(self.StatsFrame, nil, 0.45)
         if self.StatsFrame.Background then
             self.StatsFrame.Background:SetAlpha(0)
         end
@@ -1347,14 +1352,12 @@ local ICONS = {
     Agility = StaticIcon(STAT_ICON_PATH .. "ability_hunter_aspectofthemonkey"),
     Intellect = StaticIcon(STAT_ICON_PATH .. "spell_holy_magicalsentry"),
     Stamina = StaticIcon(STAT_ICON_PATH .. "inv_misc_coin_01"),
+    Spirit = StaticIcon(STAT_ICON_PATH .. "spell_holy_divinespirit"),
     Health = StaticIcon(STAT_ICON_PATH .. "spell_holy_wordfortitude"),
     Mana = StaticIcon(STAT_ICON_PATH .. "spell_shadow_manaburn"),
     GCD = StaticIcon(STAT_ICON_PATH .. "inv_misc_pocketwatch_01"),
 
     -- Attack
-    MainHand = StaticIcon(STAT_ICON_PATH .. "inv_sword_04"),
-    OffHand = StaticIcon(STAT_ICON_PATH .. "inv_shield_04"),
-    Ranged = StaticIcon(STAT_ICON_PATH .. "inv_weapon_bow_07"),
     AttackPower = StaticIcon(STAT_ICON_PATH .. "ability_warrior_bloodbath"),
     AttackSpeed = StaticIcon(STAT_ICON_PATH .. "ability_rogue_sprint"),
     SpellPower = StaticIcon(STAT_ICON_PATH .. "spell_fire_fireball"),
@@ -1442,7 +1445,10 @@ end
 
 function AR:LayoutStatsPanel()
     local f = self.StatsFrame
-    local anchor = _G.CharacterFrame or _G.PaperDollFrame
+    -- Forever can expose PaperDollFrame independently of the outer character frame.
+    -- Prefer the paper-doll coordinate space there so the stats column follows
+    -- the equipment layout instead of drifting over the model.
+    local anchor = (IS_FOREVER and _G.PaperDollFrame) or _G.CharacterFrame or _G.PaperDollFrame
     if not f or not anchor then return end
 
     local statsWidth = tonumber(self.db and self.db.statsPanelWidth) or ARMORY_STATS_PANEL_WIDTH
@@ -1713,50 +1719,78 @@ function AR:UpdateMyStats()
     local attrHeaderColor = self.db.attrHeaderColor or ARMORY_HEADER_ATTRIBUTE
     table.insert(statsList, { type = "header", label = _G["STAT_CATEGORY_ATTRIBUTES"] or "Attributes", color = attrHeaderColor })
 
-    local primaryStatID = nil
-    if class == "HUNTER" or class == "ROGUE" or class == "DEMONHUNTER" then primaryStatID = 2
-    elseif class == "MAGE" or class == "WARLOCK" or class == "PRIEST" or class == "EVOKER" then primaryStatID = 4
-    elseif class == "WARRIOR" or class == "DEATHKNIGHT" then primaryStatID = 1
-    elseif class == "PALADIN" then primaryStatID = (spec == 1) and 4 or 1
-    elseif class == "SHAMAN" then primaryStatID = (spec == 2) and 2 or 4
-    elseif class == "MONK" then primaryStatID = (spec == 2) and 4 or 2
-    elseif class == "DRUID" then primaryStatID = (spec == 1 or spec == 4) and 4 or 2 end
+    if IS_FOREVER then
+        -- Forever uses the classic five-attribute sheet. Do not derive a
+        -- Retail-style "primary stat" from specialization here.
+        local foreverAttributes = {
+            { id = 1, key = "strength", icon = ICONS.Strength, color = self.db.strengthColor },
+            { id = 2, key = "agility", icon = ICONS.Agility, color = self.db.agilityColor },
+            { id = 3, key = "stamina", icon = ICONS.Stamina, color = self.db.staminaColor },
+            { id = 4, key = "intellect", icon = ICONS.Intellect, color = self.db.intellectColor },
+            { id = 5, key = "spirit", icon = ICONS.Spirit, color = self.db.spiritColor or self.db.attrColor },
+        }
 
-    if primaryStatID then
-        local statVal, effectiveStat = SafeArmoryNumberCall(UnitStat, unit, primaryStatID)
-        local statName = _G["SPELL_STAT"..primaryStatID.."_NAME"]
-        local statColor = self.db.attrColor
-        local icon = ""
-        if primaryStatID == 1 then statColor = self.db.strengthColor; icon = ICONS.Strength
-        elseif primaryStatID == 2 then statColor = self.db.agilityColor; icon = ICONS.Agility
-        elseif primaryStatID == 4 then statColor = self.db.intellectColor; icon = ICONS.Intellect end
+        for _, definition in ipairs(foreverAttributes) do
+            local baseStat, effectiveStat = SafeArmoryNumberCall(UnitStat, unit, definition.id)
+            local value = effectiveStat or baseStat
+            if value ~= nil then
+                table.insert(statsList, {
+                    statKey = definition.key,
+                    label = ArmoryLabel(definition.icon, _G["SPELL_STAT" .. definition.id .. "_NAME"], definition.key),
+                    value = value,
+                    numericValue = FormatArmoryNumber(value),
+                    numericValueLabel = "Value",
+                    color = definition.color or self.db.attrColor,
+                    tooltip = _G["DEFAULT_STAT" .. definition.id .. "_TOOLTIP"],
+                    showLabel = true,
+                })
+            end
+        end
+    else
+        local primaryStatID = nil
+        if class == "HUNTER" or class == "ROGUE" or class == "DEMONHUNTER" then primaryStatID = 2
+        elseif class == "MAGE" or class == "WARLOCK" or class == "PRIEST" or class == "EVOKER" then primaryStatID = 4
+        elseif class == "WARRIOR" or class == "DEATHKNIGHT" then primaryStatID = 1
+        elseif class == "PALADIN" then primaryStatID = (spec == 1) and 4 or 1
+        elseif class == "SHAMAN" then primaryStatID = (spec == 2) and 2 or 4
+        elseif class == "MONK" then primaryStatID = (spec == 2) and 4 or 2
+        elseif class == "DRUID" then primaryStatID = (spec == 1 or spec == 4) and 4 or 2 end
 
-        local primaryValue = effectiveStat or statVal
+        if primaryStatID then
+            local statVal, effectiveStat = SafeArmoryNumberCall(UnitStat, unit, primaryStatID)
+            local statName = _G["SPELL_STAT"..primaryStatID.."_NAME"]
+            local statColor = self.db.attrColor
+            local icon = ""
+            if primaryStatID == 1 then statColor = self.db.strengthColor; icon = ICONS.Strength
+            elseif primaryStatID == 2 then statColor = self.db.agilityColor; icon = ICONS.Agility
+            elseif primaryStatID == 4 then statColor = self.db.intellectColor; icon = ICONS.Intellect end
+
+            local primaryValue = effectiveStat or statVal
+            table.insert(statsList, {
+                statKey = (primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil,
+                label = ArmoryLabel(icon, statName, "Primary Stat"),
+                value = primaryValue,
+                numericValue = FormatArmoryNumber(primaryValue),
+                numericValueLabel = "Value",
+                color = statColor or self.db.attrColor,
+                tooltip = _G["DEFAULT_STAT"..primaryStatID.."_TOOLTIP"],
+                showLabel = primaryValue ~= nil and self:IsStatLabelVisible((primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil),
+            })
+        end
+
+        local stamBase, stamEffective = SafeArmoryNumberCall(UnitStat, unit, 3)
+        local staminaValue = stamEffective or stamBase
         table.insert(statsList, {
-            statKey = (primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil,
-            label = ArmoryLabel(icon, statName, "Primary Stat"),
-            value = primaryValue,
-            numericValue = FormatArmoryNumber(primaryValue),
+            statKey = "stamina",
+            label = ArmoryLabel(ICONS.Stamina, _G["SPELL_STAT3_NAME"], "Stamina"),
+            value = staminaValue,
+            numericValue = FormatArmoryNumber(staminaValue),
             numericValueLabel = "Value",
-            color = statColor or self.db.attrColor,
-            tooltip = _G["DEFAULT_STAT"..primaryStatID.."_TOOLTIP"],
-            showLabel = primaryValue ~= nil and self:IsStatLabelVisible((primaryStatID == 1 and "strength") or (primaryStatID == 2 and "agility") or (primaryStatID == 4 and "intellect") or nil),
+            color = self.db.staminaColor or self.db.attrColor,
+            tooltip = _G["DEFAULT_STAT3_TOOLTIP"],
+            showLabel = staminaValue ~= nil and self:IsStatLabelVisible("stamina"),
         })
     end
-
-    local stamBase, stamEffective = SafeArmoryNumberCall(UnitStat, unit, 3)
-    local staminaValue = stamEffective or stamBase
-    table.insert(statsList, {
-        statKey = "stamina",
-        label = ArmoryLabel(ICONS.Stamina, _G["SPELL_STAT3_NAME"], "Stamina"),
-        value = staminaValue,
-        numericValue = FormatArmoryNumber(staminaValue),
-        numericValueLabel = "Value",
-        color = self.db.staminaColor or self.db.attrColor,
-        tooltip = _G["DEFAULT_STAT3_TOOLTIP"],
-        showLabel = staminaValue ~= nil and self:IsStatLabelVisible("stamina"),
-    })
-
     local health = SafeArmoryNumberCall(UnitHealthMax, unit)
     local healthText = health and FormatArmoryNumber(health) or "—"
     table.insert(statsList, {
@@ -1794,49 +1828,31 @@ function AR:UpdateMyStats()
     local critEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Crit, _G["STAT_CRITICAL_STRIKE"], "Critical Strike"), crit, critRating, self.db.critColor, _G["CR_CRIT_TOOLTIP"])
     critEntry.statKey = "crit"; critEntry.showLabel = crit ~= nil and self:IsStatLabelVisible("crit"); table.insert(statsList, critEntry)
 
-    local haste = GetArmoryHastePercent()
-    local hasteRating = CR_HASTE_MELEE and SafeArmoryNumberCall(GetCombatRating, CR_HASTE_MELEE)
-    local hasteEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Haste, _G["STAT_HASTE"], "Haste"), haste, hasteRating, self.db.hasteColor, _G["STAT_HASTE_TOOLTIP"])
-    hasteEntry.statKey = "haste"; hasteEntry.showLabel = haste ~= nil and self:IsStatLabelVisible("haste"); table.insert(statsList, hasteEntry)
+    if not IS_FOREVER then
+        local haste = GetArmoryHastePercent()
+        local hasteRating = CR_HASTE_MELEE and SafeArmoryNumberCall(GetCombatRating, CR_HASTE_MELEE)
+        local hasteEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Haste, _G["STAT_HASTE"], "Haste"), haste, hasteRating, self.db.hasteColor, _G["STAT_HASTE_TOOLTIP"])
+        hasteEntry.statKey = "haste"; hasteEntry.showLabel = haste ~= nil and self:IsStatLabelVisible("haste"); table.insert(statsList, hasteEntry)
 
-    local mastery = SafeArmoryNumberCall(GetMasteryEffect)
-    local masteryRating = (CR_MASTERY and SafeArmoryNumberCall(GetCombatRating, CR_MASTERY)) or 0
-    local masteryEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Mastery, _G["STAT_MASTERY"], "Mastery"), mastery, masteryRating, self.db.masteryColor, _G["STAT_MASTERY_TOOLTIP"])
-    masteryEntry.statKey = "mastery"; masteryEntry.showLabel = mastery ~= nil and self:IsStatLabelVisible("mastery"); table.insert(statsList, masteryEntry)
+        local mastery = SafeArmoryNumberCall(GetMasteryEffect)
+        local masteryRating = (CR_MASTERY and SafeArmoryNumberCall(GetCombatRating, CR_MASTERY)) or 0
+        local masteryEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Mastery, _G["STAT_MASTERY"], "Mastery"), mastery, masteryRating, self.db.masteryColor, _G["STAT_MASTERY_TOOLTIP"])
+        masteryEntry.statKey = "mastery"; masteryEntry.showLabel = mastery ~= nil and self:IsStatLabelVisible("mastery"); table.insert(statsList, masteryEntry)
 
-    local versRating = CR_VERSATILITY_DAMAGE_DONE and SafeArmoryNumberCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
-    local versBonusA = SafeArmoryNumberCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
-    local versBonusB = SafeArmoryNumberCall(GetVersatilityBonus, CR_VERSATILITY_DAMAGE_DONE)
-    local versAvailable = versRating ~= nil or versBonusA ~= nil or versBonusB ~= nil
-    local vers = (versBonusA or 0) + (versBonusB or 0)
-    local versEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Versatility, _G["STAT_VERSATILITY"], "Versatility"), vers, versRating, self.db.versatilityColor, _G["CR_VERSATILITY_TOOLTIP"])
-    versEntry.statKey = "versatility"; versEntry.showLabel = versAvailable and self:IsStatLabelVisible("versatility"); table.insert(statsList, versEntry)
-
+        local versRating = CR_VERSATILITY_DAMAGE_DONE and SafeArmoryNumberCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+        local versBonusA = SafeArmoryNumberCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+        local versBonusB = SafeArmoryNumberCall(GetVersatilityBonus, CR_VERSATILITY_DAMAGE_DONE)
+        local versAvailable = versRating ~= nil or versBonusA ~= nil or versBonusB ~= nil
+        local vers = (versBonusA or 0) + (versBonusB or 0)
+        local versEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Versatility, _G["STAT_VERSATILITY"], "Versatility"), vers, versRating, self.db.versatilityColor, _G["CR_VERSATILITY_TOOLTIP"])
+        versEntry.statKey = "versatility"; versEntry.showLabel = versAvailable and self:IsStatLabelVisible("versatility"); table.insert(statsList, versEntry)
+    end
     -- ATTACK
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_ATTACK or "Attack", color = {r=0.8, g=0.2, b=0.2, a=1} })
 
-    -- Forever may expose weapon attack power separately from total attack
-    -- power.  Add only the hands that return a safe value.
-    local mainHandWeaponAP, offHandWeaponAP, rangedWeaponAP = SafeArmoryNumberCall(UnitWeaponAttackPower, unit)
-    if mainHandWeaponAP ~= nil or offHandWeaponAP ~= nil or rangedWeaponAP ~= nil then
-        local function AddWeaponPowerRow(statKey, label, value, icon)
-            if value == nil then return end
-            table.insert(statsList, {
-                statKey = statKey,
-                label = ArmoryLabel(icon, label, "Weapon Attack Power"),
-                value = FormatArmoryNumber(value),
-                numericValue = FormatArmoryNumber(value),
-                numericValueLabel = "Value",
-                color = self.db.attackPowerColor or self.db.attrColor,
-                tooltip = _G["STAT_ATTACK_POWER_TOOLTIP"],
-                showLabel = true,
-            })
-        end
-        AddWeaponPowerRow("mainhand_weapon_attack_power", _G["MAINHANDSLOT"] or "Main-hand Weapon AP", mainHandWeaponAP, ICONS.MainHand)
-        AddWeaponPowerRow("offhand_weapon_attack_power", _G["OFFHANDSLOT"] or "Off-hand Weapon AP", offHandWeaponAP, ICONS.OffHand)
-        AddWeaponPowerRow("ranged_weapon_attack_power", _G["RANGEDSLOT"] or "Ranged Weapon AP", rangedWeaponAP, ICONS.Ranged)
-    end
-
+    -- UnitWeaponAttackPower returns base/positive/negative components, not
+    -- Main Hand, Off-hand and Ranged rows. Those rows showed incorrect values
+    -- and repeated weapon icons in Forever.
     -- UnitAttackPower can return secret numbers during combat.  Never perform
     -- arithmetic on the raw values; keep the row visible when unavailable.
     local apBase, apPos, apNeg = SafeArmoryNumberCall(UnitAttackPower, unit)
@@ -1871,18 +1887,20 @@ function AR:UpdateMyStats()
     })
 
     local sp = SafeArmoryNumberCall(GetSpellBonusDamage, 7)
-    local spellPowerText = sp and FormatArmoryNumber(sp) or "—"
-    table.insert(statsList, {
-        statKey = "spellpower",
-        label = ArmoryLabel(ICONS.SpellPower, _G["STAT_SPELL_POWER"], "Spell Power"),
-        value = sp or "—",
-        numericValue = spellPowerText,
-        numericValueLabel = "Value",
-        color = self.db.spellPowerColor or self.db.attrColor,
-        tooltip = _G["STAT_SPELL_POWER_TOOLTIP"],
-        showLabel = sp ~= nil,
-    })
-
+    local showSpellPower = sp ~= nil and (not IS_FOREVER or sp > 0)
+    if showSpellPower then
+        local spellPowerText = FormatArmoryNumber(sp)
+        table.insert(statsList, {
+            statKey = "spellpower",
+            label = ArmoryLabel(ICONS.SpellPower, _G["STAT_SPELL_POWER"], "Spell Power"),
+            value = sp,
+            numericValue = spellPowerText,
+            numericValueLabel = "Value",
+            color = self.db.spellPowerColor or self.db.attrColor,
+            tooltip = _G["STAT_SPELL_POWER_TOOLTIP"],
+            showLabel = true,
+        })
+    end
     -- DEFENSE
     local defHeaderColor = ARMORY_HEADER_DEFENSE
     table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_DEFENSE or "Defense", color = defHeaderColor })
@@ -1956,26 +1974,26 @@ function AR:UpdateMyStats()
         end
     end
 
-    -- GENERAL
-    local genHeaderColor = ARMORY_HEADER_GENERAL
-    table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_GENERAL or "General", color = genHeaderColor })
+    if not IS_FOREVER then
+        local genHeaderColor = ARMORY_HEADER_GENERAL
+        table.insert(statsList, { type = "header", label = _G.STAT_CATEGORY_GENERAL or "General", color = genHeaderColor })
 
-    local leech = SafeArmoryNumberCall(GetLifesteal)
-    local leechRating = (CR_LIFESTEAL and SafeArmoryNumberCall(GetCombatRating, CR_LIFESTEAL)) or 0
-    local leechEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Leech, _G["STAT_LIFESTEAL"], "Lifesteal"), leech, leechRating, self.db.leechColor, _G["CR_LIFESTEAL_TOOLTIP"])
-    leechEntry.statKey = "leech"; leechEntry.showLabel = leech ~= nil and self:IsStatLabelVisible("leech"); table.insert(statsList, leechEntry)
+        local leech = SafeArmoryNumberCall(GetLifesteal)
+        local leechRating = (CR_LIFESTEAL and SafeArmoryNumberCall(GetCombatRating, CR_LIFESTEAL)) or 0
+        local leechEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Leech, _G["STAT_LIFESTEAL"], "Lifesteal"), leech, leechRating, self.db.leechColor, _G["CR_LIFESTEAL_TOOLTIP"])
+        leechEntry.statKey = "leech"; leechEntry.showLabel = leech ~= nil and self:IsStatLabelVisible("leech"); table.insert(statsList, leechEntry)
 
-    local avoidance = SafeArmoryNumberCall(GetAvoidance)
-    local avoidanceRating = (CR_AVOIDANCE and SafeArmoryNumberCall(GetCombatRating, CR_AVOIDANCE)) or 0
-    local avoidanceEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Avoidance, _G["STAT_AVOIDANCE"], "Avoidance"), avoidance, avoidanceRating, self.db.avoidanceColor, _G["CR_AVOIDANCE_TOOLTIP"])
-    avoidanceEntry.statKey = "avoidance"; avoidanceEntry.showLabel = avoidance ~= nil and self:IsStatLabelVisible("avoidance"); table.insert(statsList, avoidanceEntry)
+        local avoidance = SafeArmoryNumberCall(GetAvoidance)
+        local avoidanceRating = (CR_AVOIDANCE and SafeArmoryNumberCall(GetCombatRating, CR_AVOIDANCE)) or 0
+        local avoidanceEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Avoidance, _G["STAT_AVOIDANCE"], "Avoidance"), avoidance, avoidanceRating, self.db.avoidanceColor, _G["CR_AVOIDANCE_TOOLTIP"])
+        avoidanceEntry.statKey = "avoidance"; avoidanceEntry.showLabel = avoidance ~= nil and self:IsStatLabelVisible("avoidance"); table.insert(statsList, avoidanceEntry)
 
-    local speed = GetArmorySpeedPercent()
-    -- Speed is a total movement percentage, not a useful raw combat-rating
-    -- number: CR_SPEED is normally 0 at base speed and makes the UI look broken.
-    local speedEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Speed, _G["STAT_SPEED"], "Speed"), speed, speed, self.db.speedColor, _G["CR_SPEED_TOOLTIP"], speed)
-    speedEntry.statKey = "speed"; speedEntry.showLabel = speed ~= nil and self:IsStatLabelVisible("speed"); table.insert(statsList, speedEntry)
-
+        local speed = GetArmorySpeedPercent()
+        -- Speed is a total movement percentage, not a useful raw combat-rating
+        -- number: CR_SPEED is normally 0 at base speed and makes the UI look broken.
+        local speedEntry = BuildSecondaryStatEntry(secondaryMode, ArmoryLabel(ICONS.Speed, _G["STAT_SPEED"], "Speed"), speed, speed, self.db.speedColor, _G["CR_SPEED_TOOLTIP"], speed)
+        speedEntry.statKey = "speed"; speedEntry.showLabel = speed ~= nil and self:IsStatLabelVisible("speed"); table.insert(statsList, speedEntry)
+    end
     local visibleStats = {}
     local pendingHeader
     for _, data in ipairs(statsList) do
@@ -2121,20 +2139,25 @@ function AR:UpdateMyStats()
                 row.LeftLine = row:CreateTexture(nil, "ARTWORK")
             end
 
-            row.LeftLine:Show()
+            -- Size the separators from the real header label width. Fixed
+            -- 80px lines overlapped short panels and localized headings.
+            local headerLabelWidth = row.Label.GetStringWidth and row.Label:GetStringWidth() or 0
+            local headerGap = 5
+            local headerLineWidth = math.max(0, math.floor((row:GetWidth() - headerLabelWidth - (headerGap * 2)) / 2))
+
             row.LeftLine:ClearAllPoints()
-            row.LeftLine:SetPoint("RIGHT", row.Label, "LEFT", -5, 1)
-            row.LeftLine:SetSize(80, 8)
+            row.LeftLine:SetPoint("RIGHT", row.Label, "LEFT", -headerGap, 1)
+            row.LeftLine:SetSize(headerLineWidth, 8)
             row.LeftLine:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
             row.LeftLine:SetTexCoord(1, 0, 0, 1)
+            row.LeftLine:SetShown(headerLineWidth >= 8)
 
-            row.RightLine:Show()
             row.RightLine:ClearAllPoints()
-            row.RightLine:SetPoint("LEFT", row.Label, "RIGHT", 5, 1)
-            row.RightLine:SetSize(80, 8)
+            row.RightLine:SetPoint("LEFT", row.Label, "RIGHT", headerGap, 1)
+            row.RightLine:SetSize(headerLineWidth, 8)
             row.RightLine:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\separator_armory.png")
             row.RightLine:SetTexCoord(0, 1, 0, 1)
-
+            row.RightLine:SetShown(headerLineWidth >= 8)
             if data.color then
                 row.LeftLine:SetVertexColor(data.color.r, data.color.g, data.color.b, 1)
                 row.RightLine:SetVertexColor(data.color.r, data.color.g, data.color.b, 1)
@@ -2273,16 +2296,10 @@ function AR:UpdateMyStats()
             end
             row.Label:SetText(cleanLabel)
             row.Label:ClearAllPoints()
-            if row.Icon:IsShown() then
-                row.Label:SetPoint("LEFT", row.Icon, "RIGHT", 4, 0)
-            else
-                row.Label:SetPoint("LEFT", row, "LEFT", 10, -2)
-            end
-            -- Keep the label inside the gap before the value even when a
-            -- localization produces a wider stat name.
-            row.Label:SetPoint("RIGHT", row.Value, "LEFT", -columnGap, 0)
+            -- Use one explicit label column. Anchoring both sides and then
+            -- setting a width allowed FontStrings/icons to paint over values.
+            row.Label:SetPoint("LEFT", row, "LEFT", labelStart, -2)
             row.Label:SetWidth(labelWidth)
-
             if self.db.colorStats and data.color then
                 row.Label:SetTextColor(data.color.r, data.color.g, data.color.b)
             else

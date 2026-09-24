@@ -146,12 +146,12 @@ local hooksecurefunc = _G.hooksecurefunc
 
 KT.VERSION = KT.VERSION
     or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
-		or "0.0.3"
+		or "0.0.4"
 -- When loaded directly from the source tree (without the BigWigs packager),
 -- GetAddOnMetadata returns the literal "@project-version@" token.  Strip it
 -- so the in-game UI never displays the raw packager placeholder.
 if KT.VERSION and KT.VERSION:find("@", 1, true) then
-    KT.VERSION = "0.0.3"
+    KT.VERSION = "0.0.4"
 end
 
 function KT:IsBlizzardEditModeActive()

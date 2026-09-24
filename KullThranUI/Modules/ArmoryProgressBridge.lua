@@ -1182,7 +1182,7 @@ function Bridge:CreateProgressFrame()
     frame.bg:SetColorTexture(0, 0, 0, 0.96)
 
     if KT and KT.ApplyTexturedSurface then
-        KT:ApplyTexturedSurface(frame)
+        KT:ApplyTexturedSurface(frame, nil, 0.28)
         frame.bg:SetAlpha(0)
     else
         frame.overlay = frame:CreateTexture(nil, "BORDER")
@@ -1238,7 +1238,7 @@ function Bridge:CreateKuiPane(name)
     frame.bg:SetColorTexture(0, 0, 0, 0.96)
 
     if KT and KT.ApplyTexturedSurface then
-        KT:ApplyTexturedSurface(frame)
+        KT:ApplyTexturedSurface(frame, nil, 0.28)
         frame.bg:SetAlpha(0)
     else
         frame.overlay = frame:CreateTexture(nil, "BORDER")
