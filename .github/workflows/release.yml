@@ -1,6 +1,12 @@
 name: Publicar KullThranUI Forever y Notificar
 
 on:
+  workflow_dispatch:
+    inputs:
+      notify_discord:
+        description: 'Send the release announcement to Discord (@everyone)'
+        type: boolean
+        default: false
   push:
     tags:
       - 'v*'
@@ -16,6 +22,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Require an explicit beta tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta$ ]]; then
+            echo "Forever releases require a vX.Y.Z-beta tag." >&2
+            exit 1
+          fi
 
       - name: Extraer la última versión del CHANGELOG
         shell: bash
@@ -41,6 +55,8 @@ jobs:
             echo "No se encontró una sección de versión en $changelog_file." >&2
             exit 1
           fi
+
+          cp "$changelog_tmp" RELEASE_NOTES.md
 
           # Discord allows 2000 characters per message.  Truncate if needed.
           max_chars=1900
@@ -70,13 +86,14 @@ jobs:
       - name: Empaquetar y publicar KullThranUI Forever en Curse y Wago
         uses: BigWigsMods/packager@v2
         with:
-          args: '-n "KullThranUI_Forever_beta_${{ steps.version.outputs.KUI_VERSION }}:KullThranUI Forever beta ${{ steps.version.outputs.KUI_VERSION }}"'
+          args: '-n "KullThranUI_Forever_beta_${{ steps.version.outputs.KUI_VERSION }}:KullThranUI Forever BETA ${{ steps.version.outputs.KUI_VERSION }}"'
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notificar a Discord
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_discord }}
         uses: Ilshidur/action-discord@master
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}

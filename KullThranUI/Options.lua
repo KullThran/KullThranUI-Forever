@@ -964,13 +964,15 @@ local CHANGELOG_ENTRIES = {
         sourceLabel = "Forever Beta",
         sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
         notes = {
-            "Fixed outgoing chat and whisper history handling on Forever, including protected payloads and lineID 0 events.",
+            "Restored chat sender names, class colors and clickable player links with Blizzard right-click interaction; preserved message text, item links and whisper history through reloads.",
+            "Fixed chat payload handling so empty or protected messages cannot be replaced with the sender name.",
             "Applied the Retail minimap positioning and launcher restoration fixes to the Forever layout.",
             "Improved Armory surfaces, stats/progress panels, and texture treatment so the character and inspection views remain readable.",
             "Reworked Collections and Appearances skinning with safe Forever OnClick hooks, restored native slot and right-hand icons, and balanced textured surfaces.",
-            "Restored visible KUI texture treatment in Bags while keeping the bag grid, controls, and layout readable.",
+            "Set Bags texture darkening to 62% across the window panels.",
+            "Removed the syntax-broken popup recovery fragment; the active popup skin remains in Popups.lua.",
             "Hardened Aura Reminders, Unit Frames, Party Frames, Nameplates, Cooldown Manager, and Objective Tracker paths for Forever API and protected-value differences.",
-            "Validated the changed Lua modules with Lua 5.1 syntax checks and repository whitespace checks.",
+            "Published explicitly as BETA with matching release notes on GitHub, CurseForge and Wago.",
         },
     },
     ["0.0.3"] = {
