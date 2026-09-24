@@ -2097,7 +2097,9 @@ KT_ColorizePlayerName = function(name, senderGUID)
         return name
     end
 
-    local _, classTag = GetPlayerInfoByGUID(senderGUID)
+    if type(GetPlayerInfoByGUID) ~= "function" then return name end
+    local ok, _, classTag = pcall(GetPlayerInfoByGUID, senderGUID)
+    classTag = ok and KT_GetNonEmptyAccessibleString(classTag) or nil
     if not classTag then
         return name
     end
@@ -6258,7 +6260,7 @@ function Mod:RegisterChatEvents()
             if not KT_GetNonEmptyAccessibleString(rawMessage) then
                 if not isDuplicate and Mod.RequestSecretMirror then
                     local chatType = tostring(event or ""):gsub("^CHAT_MSG_", "")
-                    local sender = KT_GetNonEmptyAccessibleString(select(2, ...))
+                    local sender = KT_GetNonEmptyAccessibleString((select(2, ...)))
                     Mod:RequestSecretMirror({
                         event = event,
                         chatType = chatType,
@@ -6266,7 +6268,7 @@ function Mod:RegisterChatEvents()
                         label = KT_GetDisplayChatLabel(chatType) or chatType,
                         author = sender and KT_AmbiguateAccessibleName(sender, sender) or nil,
                         authorRaw = sender,
-                        senderGUID = KT_GetNonEmptyAccessibleString(select(12, ...)),
+                        senderGUID = KT_GetNonEmptyAccessibleString((select(12, ...))),
                     })
                 end
                 return false
@@ -6450,7 +6452,7 @@ function Mod:BuildPreformattedEntryFromMonitor(event, renderedMessage, r, g, b, 
     local bnSenderID = KT_IsBNetWhisperEvent(event) and KT_GetBNetWhisperSenderID(arg13, arg14) or nil
     local author = nil
     if sender then
-        if chatType:find("^BN_", 1, true) then
+        if chatType:find("^BN_") then
             author = (type(bnSenderID) == "number" and KT_ResolveBNetWhisperTarget(bnSenderID)) or sender
         else
             local ok, shortened = pcall(Ambiguate, sender, "short")
@@ -6493,7 +6495,7 @@ function Mod:BuildPreformattedEntryFromMonitor(event, renderedMessage, r, g, b, 
         channelName = normalizedChannel,
         author = normalizedAuthor,
         authorRaw = sender,
-        authorFull = (senderFull and not tostring(normalizedType):find("^BN_", 1, true)) and senderFull or nil,
+        authorFull = (senderFull and not tostring(normalizedType):find("^BN_")) and senderFull or nil,
         senderGUID = normalizedSenderGUID,
         lineID = lineID,
         bnSenderID = bnSenderID,
@@ -6516,13 +6518,19 @@ function Mod:BuildEntryFromEvent(event, ...)
     -- instead of calling MessageEventHandler on a synthetic frame.
     local chatType = tostring(event or ""):gsub("^CHAT_MSG_", "")
     local info = ChatTypeInfo[chatType] or ChatTypeInfo.SYSTEM or {}
-    local rawMessage = KT_GetNonEmptyAccessibleString(select(1, ...))
+    -- Parentheses keep select from passing the sender as the fallback value.
+    local rawMessage = KT_GetNonEmptyAccessibleString((select(1, ...)))
     if not rawMessage then
         return nil
     end
 
     local replaced = KT_ReplaceChatExpressions(rawMessage, chatType, false)
-    return self:BuildPreformattedEntryFromMonitor(event, replaced, info.r or 1, info.g or 1, info.b or 1, ...)
+    local entry = self:BuildPreformattedEntryFromMonitor(event, replaced, info.r or 1, info.g or 1, info.b or 1, ...)
+    if entry then
+        -- Event text has no author prefix yet. Monitor captures already do.
+        entry.preformatted = nil
+    end
+    return entry
 end
 
 
@@ -6670,7 +6678,8 @@ function Mod:GetEntryMessage(entry, includeTimestamp)
         return ""
     end
 
-    local message = KT_GetAccessibleString(entry.rawMessage, KT_GetAccessibleString(entry.message, "")) or ""
+    local message = KT_GetNonEmptyAccessibleString(entry.rawMessage)
+        or KT_GetAccessibleString(entry.message, "") or ""
     if entry.preformatted == true then
         return message
     end
@@ -6680,9 +6689,29 @@ function Mod:GetEntryMessage(entry, includeTimestamp)
     local timestamp = KT_GetAccessibleString(entry.timestamp, nil)
     local label = KT_GetAccessibleString(entry.label, nil)
     local author = KT_GetAccessibleString(entry.author, KT_GetAccessibleString(entry.authorRaw, nil))
+    local chatType = KT_GetAccessibleString(entry.chatType, "")
+    if chatType == "CHANNEL" then
+        label = KT_GetNonEmptyAccessibleString(entry.channelName, label)
+    elseif chatType == "SYSTEM" or chatType == "LOOT" or chatType == "MONEY" or chatType == "CURRENCY" then
+        -- These event messages already contain their full localized text.
+        label = nil
+        author = nil
+    end
     local authorLink = nil
-    if KT_SafeString(entry.chatType, ""):find("WHISPER", 1, true) then
+    if chatType:find("WHISPER", 1, true) then
         authorLink = KT_BuildWhisperDisplayLink(entry)
+    elseif author and author ~= "" and CHAT_EVENT_LOOKUP[entry.event] then
+        local target = KT_GetNonEmptyAccessibleString(entry.authorFull)
+            or KT_GetNonEmptyAccessibleString(entry.authorRaw, author)
+        local displayAuthor = author
+        if self.db and self.db.classColorNames ~= false then
+            displayAuthor = KT_ColorizePlayerName(author, entry.senderGUID) or author
+        end
+        local linkData = table.concat({
+            target, tostring(KT_GetAccessibleNumber(entry.lineID, 0)), chatType,
+            target, "", "0", "0", "", "", KT_GetAccessibleString(entry.senderGUID, ""),
+        }, ":")
+        authorLink = "|Hplayer:" .. linkData .. "|h[" .. displayAuthor .. "]|h"
     end
     if type(authorLink) == "string" and authorLink ~= "" then
         author = authorLink
