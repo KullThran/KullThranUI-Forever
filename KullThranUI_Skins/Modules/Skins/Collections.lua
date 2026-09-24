@@ -19,6 +19,24 @@ local function IsUIObject(object)
         and type(object.GetObjectType) == "function"
 end
 
+local function HookOptionalScript(frame, scriptName, handler)
+    if not (IsUIObject(frame) and frame.HookScript) then
+        return false
+    end
+
+    -- Forever exposes some Collections tabs as plain Frames. They can still
+    -- be styled, but OnClick is not a supported script type on those objects.
+    if scriptName == "OnClick" and frame.GetObjectType then
+        local objectType = frame:GetObjectType()
+        if objectType ~= "Button" and objectType ~= "CheckButton" then
+            return false
+        end
+    end
+
+    local ok = pcall(frame.HookScript, frame, scriptName, handler)
+    return ok
+end
+
 local function HideRegion(region)
     if not region then return end
     if region.SetAlpha then region:SetAlpha(0) end
@@ -67,7 +85,7 @@ local function SetPanelBackdrop(frame, alpha)
         if S.ApplyKuiSurface then
             -- Keep the artwork inside the helper backdrop so its border stays
             -- above the surface while the texture fills the content panel.
-            S:ApplyKuiSurface(frame.backdrop, { flat = frame.backdrop, washAlpha = 0.55 })
+            S:ApplyKuiSurface(frame.backdrop, { flat = frame.backdrop, washAlpha = 0.32 })
         else
             S:RegisterBlizzardWindowBackground(frame.backdrop)
         end
@@ -78,7 +96,7 @@ local function ApplyCollectionSurface(frame, washAlpha)
     if not IsUIObject(frame) or not S.ApplyKuiSurface then return end
     S:ApplyKuiSurface(frame, {
         flat = frame.backdrop,
-        washAlpha = washAlpha or 0.55,
+        washAlpha = washAlpha or 0.32,
     })
 end
 
@@ -302,6 +320,142 @@ local function SkinSquareControl(frame, explicitIcon)
     frame._ktCollectionSquareSkinned = true
 end
 
+local function UpdateWardrobeSlotState(button)
+    if not button then return end
+    local selected = button.SelectedTexture and button.SelectedTexture.IsShown
+        and button.SelectedTexture:IsShown()
+    local color = Accent()
+    if button._ktSlotSelectionBar then
+        button._ktSlotSelectionBar:SetShown(selected == true)
+    end
+    if button.backdrop then
+        button.backdrop:SetBackdropBorderColor(
+            selected and color[1] or 0.12,
+            selected and color[2] or 0.12,
+            selected and color[3] or 0.14,
+            1)
+        button.backdrop:SetBackdropColor(
+            selected and 0.10 or 0.045,
+            selected and 0.10 or 0.050,
+            selected and 0.12 or 0.060,
+            0.96)
+    end
+end
+
+local function RestoreWardrobeButtonIcon(button)
+    if not IsUIObject(button) then return end
+
+    local icon = button.Icon or button.icon or button.ItemIcon or button.itemIcon
+        or button.IconTexture or button.iconTexture
+        or (button.GetNormalTexture and button:GetNormalTexture())
+    if not icon then return end
+
+    -- The shell pass can hide native button regions together with Blizzard
+    -- artwork. Restore only the icon/normal region; keep KUI borders intact.
+    if icon.SetAlpha then icon:SetAlpha(1) end
+    if icon.SetVertexColor then icon:SetVertexColor(1, 1, 1, 1) end
+    if icon.Show then icon:Show() end
+end
+
+local function RestoreWardrobeChildIcons(frame, depth)
+    if not (IsUIObject(frame) and frame.GetChildren) or (depth or 0) < 0 then return end
+
+    RestoreWardrobeButtonIcon(frame)
+    for _, child in ipairs({ frame:GetChildren() }) do
+        -- Some Forever builds expose the right-hand control as a Frame rather
+        -- than a Button, so inspect icon fields on every child container.
+        RestoreWardrobeButtonIcon(child)
+        if child.GetChildren and (depth or 0) > 0 then
+            RestoreWardrobeChildIcons(child, depth - 1)
+        end
+    end
+end
+
+local function SkinWardrobeSlotButton(button)
+    if not IsUIObject(button) or button._ktWardrobeSlotSkinned then return end
+
+    -- These are atlas-based navigation buttons, not item icons. Passing their
+    -- NormalTexture through HandleIcon crops the atlas and breaks the circular
+    -- slot artwork on Forever.
+    EnsureBackdrop(button, 1)
+    if button.backdrop then
+        button.backdrop:SetBackdropColor(0.045, 0.050, 0.060, 0.96)
+        button.backdrop:SetBackdropBorderColor(0.12, 0.12, 0.14, 1)
+        S:SetInside(button.backdrop, button, 0)
+    end
+
+    local highlight = button.Highlight or (button.GetHighlightTexture and button:GetHighlightTexture())
+    if highlight then
+        local color = Accent()
+        highlight:SetVertexColor(color[1], color[2], color[3], 0.55)
+        highlight:SetAlpha(0.55)
+    end
+
+    if not button._ktSlotSelectionBar then
+        local bar = button:CreateTexture(nil, "OVERLAY", nil, 7)
+        local color = Accent()
+        bar:SetColorTexture(color[1], color[2], color[3], 1)
+        bar:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 1)
+        bar:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 1)
+        bar:SetHeight(2)
+        button._ktSlotSelectionBar = bar
+    end
+
+    if button.SelectedTexture and button.SelectedTexture.SetVertexColor then
+        local color = Accent()
+        button.SelectedTexture:SetVertexColor(color[1], color[2], color[3], 1)
+    end
+
+    if not button._ktWardrobeSlotHooks then
+        if button.SelectedTexture then
+            if type(button.SelectedTexture.Show) == "function" then
+                hooksecurefunc(button.SelectedTexture, "Show", function()
+                    UpdateWardrobeSlotState(button)
+                end)
+            end
+            if type(button.SelectedTexture.Hide) == "function" then
+                hooksecurefunc(button.SelectedTexture, "Hide", function()
+                    UpdateWardrobeSlotState(button)
+                end)
+            end
+        end
+        button:HookScript("OnEnter", function(self)
+            if self.backdrop then
+                self.backdrop:SetBackdropBorderColor(1, 1, 1, 0.85)
+            end
+        end)
+        button:HookScript("OnLeave", function(self)
+            UpdateWardrobeSlotState(self)
+        end)
+        button._ktWardrobeSlotHooks = true
+    end
+
+    button._ktWardrobeSlotSkinned = true
+    UpdateWardrobeSlotState(button)
+end
+
+local function ApplyWardrobeContentSurface(frame)
+    if not IsUIObject(frame) then return end
+    if S.ApplyKuiSurface then
+        -- Forever's ItemsCollectionFrame needs the shared KUI artwork. The
+        -- lower wash keeps the texture visible instead of flattening it into
+        -- the almost-black Blizzard background.
+        S:ApplyKuiSurface(frame, { washAlpha = 0.50 })
+    else
+        ApplyCollectionSurface(frame, 0.50)
+    end
+    EnsureOverlayBorder(frame, false)
+end
+local function EnsureWardrobeSlotDivider(frame)
+    if not IsUIObject(frame) or frame._ktWardrobeSlotDivider then return end
+    local divider = frame:CreateTexture(nil, "ARTWORK", nil, 6)
+    local color = Accent()
+    divider:SetColorTexture(color[1], color[2], color[3], 0.40)
+    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -56)
+    divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -56)
+    divider:SetHeight(1)
+    frame._ktWardrobeSlotDivider = divider
+end
 local function SkinSpellFrame(frame)
     if not IsUIObject(frame) then return end
     local frameName = frame.GetName and frame:GetName()
@@ -378,7 +532,7 @@ local function SkinCollectionTab(tab, journal)
         EnsureOverlayBorder(tab, false)
         local text = tab.Text or (tab.GetFontString and tab:GetFontString())
         SetWhiteFont(text)
-        tab:HookScript("OnClick", function(self)
+        HookOptionalScript(tab, "OnClick", function(self)
             C_Timer.After(0, function()
                 UpdateAllCollectionTabs(journal)
             end)
@@ -407,7 +561,7 @@ local function SkinWardrobeTab(tab, frame)
         end
         EnsureOverlayBorder(tab, false)
         SetWhiteFont(tab.Text or (tab.GetFontString and tab:GetFontString()))
-        tab:HookScript("OnClick", function()
+        HookOptionalScript(tab, "OnClick", function()
             C_Timer.After(0, function() UpdateWardrobeTabs(frame) end)
         end)
         tab._ktCollectionFlatTab = true
@@ -727,7 +881,11 @@ local function SoftenWardrobeModel(model)
             end
         end
     end
-    if model.backdrop then model.backdrop:SetBackdropColor(0, 0, 0, 0.12) end
+    EnsureBackdrop(model, 1)
+    if model.backdrop then
+        model.backdrop:SetBackdropColor(0.025, 0.030, 0.040, 0.92)
+        model.backdrop:SetBackdropBorderColor(0.10, 0.10, 0.12, 1)
+    end
     EnsureOverlayBorder(model, false)
 end
 
@@ -746,8 +904,9 @@ local function SkinWardrobe()
 
     local items = frame.ItemsCollectionFrame
     if items then
-        ApplyCollectionSurface(items, 0.58)
-        DarkenNativeBackground(items, 0.12)
+        ApplyWardrobeContentSurface(items)
+        DarkenNativeBackground(items, 0.34)
+        EnsureWardrobeSlotDivider(items)
         SkinCommonControls(items)
         if items.Models then
             for _, model in pairs(items.Models) do
@@ -756,10 +915,16 @@ local function SkinWardrobe()
         end
         if items.SlotsFrame and items.SlotsFrame.Buttons then
             for _, button in pairs(items.SlotsFrame.Buttons) do
-                HideRegion(button.SelectedTexture)
-                SkinSquareControl(button, button.NormalTexture)
+                SkinWardrobeSlotButton(button)
+                RestoreWardrobeButtonIcon(button)
             end
         end
+
+        -- Forever may expose the extra right-hand appearance control outside
+        -- SlotsFrame.Buttons. Restore native button icons in the Wardrobe tree
+        -- without bringing back the old Blizzard panel artwork.
+        RestoreWardrobeChildIcons(items, 3)
+        RestoreWardrobeChildIcons(frame, 3)
     end
 
     local sets = frame.SetsCollectionFrame
@@ -883,7 +1048,7 @@ local function SkinModernCollectionsShell(journal)
         journal._ktModernHeaderDivider = divider
     end
 
-    S:ApplyKuiSurface(journal, { flat = journal._ktModernSolidBackground })
+    S:ApplyKuiSurface(journal, { flat = journal._ktModernSolidBackground, washAlpha = 0.50 })
     journal._ktModernHeader:SetAlpha(1)
     journal._ktModernHeaderDivider:SetAlpha(1)
     EnsureOverlayBorder(journal, true)

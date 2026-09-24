@@ -644,6 +644,7 @@ local function QueueCinematicMinimapRestore()
     end
 
     Mod._ktCinematicRestoreToken = (Mod._ktCinematicRestoreToken or 0) + 1
+    Mod._ktCinematicPositionRestoreActive = true
     local token = Mod._ktCinematicRestoreToken
     for _, delay in ipairs({ 0, 0.10, 0.35, 0.75 }) do
         C_Timer.After(delay, function()
@@ -651,8 +652,6 @@ local function QueueCinematicMinimapRestore()
                 return
             end
 
-            -- The cinematic frame can still be visible for one frame after the
-            -- stop event. Let its OnHide hook queue the actual restore instead.
             if (_G.CinematicFrame and _G.CinematicFrame:IsShown())
                 or (_G.MovieFrame and _G.MovieFrame:IsShown()) then
                 return
@@ -660,6 +659,17 @@ local function QueueCinematicMinimapRestore()
 
             if Mod.RestoreEditModeMinimapPosition then
                 Mod:RestoreEditModeMinimapPosition(true)
+            end
+
+            if delay == 0.75 then
+                C_Timer.After(0.05, function()
+                    if Mod and token == Mod._ktCinematicRestoreToken then
+                        Mod._ktCinematicPositionRestoreActive = nil
+                        if Mod.RememberClusterPosition then
+                            Mod:RememberClusterPosition()
+                        end
+                    end
+                end)
             end
         end)
     end
@@ -960,6 +970,8 @@ function Mod:OnEnable()
     self:RegisterEvent("GUILD_ROSTER_UPDATE", "UpdateSocialStats")
     self:RegisterEvent("UPDATE_PENDING_MAIL", "UpdateOverlayVisibility")
     self:RegisterEvent("CVAR_UPDATE", "OnCVarUpdate")
+    self:RegisterEvent("CINEMATIC_START", "OnCinematicStart")
+    self:RegisterEvent("PLAY_MOVIE", "OnCinematicStart")
     self:RegisterEvent("CINEMATIC_STOP", "OnCinematicStop")
     self:RegisterEvent("STOP_MOVIE", "OnCinematicStop")
 
@@ -1035,6 +1047,19 @@ function Mod:OnEnable()
 
     self:DisableEmbeddedMinimapStatsRuntime()
     self:CreateLayout()
+
+    if not self._ktClusterPositionHooked and _G.MinimapCluster and hooksecurefunc then
+        self._ktClusterPositionHooked = true
+        hooksecurefunc(_G.MinimapCluster, "SetPoint", function()
+            if not Mod or Mod._ktRestoringClusterPosition or Mod._ktCinematicPositionRestoreActive then
+                return
+            end
+            if Mod.RememberClusterPosition then
+                Mod:RememberClusterPosition()
+            end
+        end)
+    end
+
     HookMinimapShowRefresh(_G.MinimapCluster)
     HookMinimapShowRefresh(Minimap)
 
@@ -1800,20 +1825,37 @@ function Mod:ApplyDefaultOffset()
     self.db.defaultOffsetVersion = DEFAULT_OFFSET_VERSION
 end
 
-function Mod:RestoreConfiguredClusterPosition(force)
+function Mod:RememberClusterPosition()
     local cluster = _G.MinimapCluster
-    if not (cluster and UIParent and cluster.GetPoint and cluster.ClearAllPoints and cluster.SetPoint) then
+    if not (cluster and cluster.GetPoint) then
+        return
+    end
+    if self._ktRestoringClusterPosition or self._ktCinematicPositionRestoreActive then
         return
     end
 
     local point, relativeTo, relativePoint, offsetX, offsetY = cluster:GetPoint(1)
-    local isConfiguredPosition = point == "TOPRIGHT"
-        and relativePoint == "TOPRIGHT"
-        and (relativeTo == UIParent or relativeTo == nil)
-        and math.abs((tonumber(offsetX) or 0) + 20) < 1
-        and math.abs((tonumber(offsetY) or 0) + 20) < 1
+    if not point or not relativePoint then
+        return
+    end
 
-    if not force and isConfiguredPosition then
+    self._ktLastKnownClusterPosition = {
+        point = point,
+        relativeTo = relativeTo or UIParent,
+        relativePoint = relativePoint,
+        offsetX = tonumber(offsetX) or 0,
+        offsetY = tonumber(offsetY) or 0,
+    }
+end
+
+function Mod:RestoreConfiguredClusterPosition(force)
+    if not force then
+        return
+    end
+
+    local cluster = _G.MinimapCluster
+    local saved = self._ktLastKnownClusterPosition
+    if not (cluster and UIParent and saved and cluster.GetPoint and cluster.ClearAllPoints and cluster.SetPoint) then
         return
     end
     if InCombatLockdown and InCombatLockdown() then
@@ -1821,14 +1863,17 @@ function Mod:RestoreConfiguredClusterPosition(force)
     end
 
     self._ktRestoringClusterPosition = true
-    pcall(function()
+    local restored = pcall(function()
         cluster:ClearAllPoints()
-        cluster:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -20)
+        cluster:SetPoint(saved.point, saved.relativeTo or UIParent, saved.relativePoint, saved.offsetX, saved.offsetY)
         if cluster.SetUserPlaced then
             cluster:SetUserPlaced(true)
         end
     end)
     self._ktRestoringClusterPosition = nil
+    if not restored then
+        return
+    end
 end
 
 function Mod:RestoreMinimapInteraction()
@@ -1907,7 +1952,12 @@ function Mod:Refresh()
         return
     end
 
-    isSquare = self.db.shape == "SQUARE"
+    local configuredShape = type(self.db.shape) == "string" and self.db.shape:upper() or "SQUARE"
+    if configuredShape ~= "ROUND" then
+        configuredShape = "SQUARE"
+    end
+    self.db.shape = configuredShape
+    isSquare = configuredShape == "SQUARE"
 
     self:CreateLayout()
     RestoreNativeInstanceDifficulty()
@@ -1919,7 +1969,7 @@ function Mod:Refresh()
 
     Minimap:SetScale(self.db.scale or 1)
     self:ApplyDefaultOffset()
-    self:RestoreConfiguredClusterPosition()
+    self:RememberClusterPosition()
     self:RestoreMinimapInteraction()
     self:UpdatePixelPerfectBorder()
 
@@ -1980,7 +2030,6 @@ function Mod:RefreshAfterUIShow()
     self:HandleBorders()
     Minimap:SetScale(self.db.scale or 1)
     self:UpdatePixelPerfectBorder()
-    self:RestoreConfiguredClusterPosition()
     self:RestoreMinimapInteraction()
     self:RestoreClusterSize()
 
@@ -2052,7 +2101,13 @@ function Mod:RestoreEditModeMinimapPosition(force)
     self._ktRestoringEditMode = nil
 end
 
+function Mod:OnCinematicStart()
+    self:RememberClusterPosition()
+    self._ktCinematicPositionRestoreActive = true
+end
+
 function Mod:OnCinematicStop()
+    self._ktCinematicPositionRestoreActive = true
     QueueCinematicMinimapRestore()
 end
 
@@ -2629,19 +2684,19 @@ function Mod:HandleBorders()
     local cluster = _G.MinimapCluster
 
     if _G.MinimapBorder then
-        _G.MinimapBorder:Hide()
+        HideTextureObject(_G.MinimapBorder)
     end
     if _G.MinimapBorderTop then
-        _G.MinimapBorderTop:Hide()
+        HideTextureObject(_G.MinimapBorderTop)
     end
     if _G.MinimapBackdrop then
-        _G.MinimapBackdrop:Hide()
+        HideTextureObject(_G.MinimapBackdrop)
     end
     if _G.MinimapNorthTag then
-        _G.MinimapNorthTag:Hide()
+        HideTextureObject(_G.MinimapNorthTag)
     end
     if _G.MinimapCompassTexture then
-        _G.MinimapCompassTexture:Hide()
+        HideTextureObject(_G.MinimapCompassTexture)
     end
     if cluster and cluster.BorderTop then
         HideTextureObject(cluster.BorderTop)

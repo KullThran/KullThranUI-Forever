@@ -141,6 +141,8 @@ local INDICATOR_ANCHOR_VALUES = {
 }
 local INDICATOR_ANCHOR_ORDER = { "AUTO", "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
 
+local ResolveFontPath
+
 local function ApplyPreviewCharacterLevelTextStyle(text, db)
     if not (text and text.SetFont) then return end
     db = db or {}
@@ -148,7 +150,7 @@ local function ApplyPreviewCharacterLevelTextStyle(text, db)
     if outline == "NONE" then outline = "" end
     if type(outline) ~= "string" then outline = "OUTLINE" end
     local size = math.max(6, math.min(48, tonumber(db.levelFontSize) or 11))
-    text:SetFont(ResolvePreviewFont(db.levelFont or DEFAULT_FONT_NAME), size, outline)
+    text:SetFont(ResolveFontPath(db.levelFont or DEFAULT_FONT_NAME), size, outline)
     local color = db.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
     text:SetTextColor(color.r or 1, color.g or 1, color.b or 1, color.a or 1)
     text:ClearAllPoints()
@@ -301,11 +303,12 @@ local MISSING_BUFF_PREVIEW_RULES = IS_FOREVER_CLIENT and {
 local memberColorOverrides = {}
 local previewDebuffSeed = 0
 -- Lista de clases disponibles para randomizar
-local classOrderForRandomization = {
+local classOrderForRandomization = IS_FOREVER_CLIENT and {
+    "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR",
+} or {
     "DEATHKNIGHT", "DEMONHUNTER", "DRUID", "EVOKER", "HUNTER", "MONK",
-    "WARRIOR", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "MAGE", "PALADIN"
+    "WARRIOR", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "MAGE", "PALADIN",
 }
-
 local function RandomizePartyMemberColors()
     memberColorOverrides = {}
     ns.PF_TestStatusOverrides = {}
@@ -434,7 +437,7 @@ local function ApplyPreset(presetKey)
     RefreshPage()
 end
 
-local function ResolveFontPath(fontName)
+ResolveFontPath = function(fontName)
     if KT.ResolveFontPath then
         return KT:ResolveFontPath(fontName or DEFAULT_FONT_NAME, DEFAULT_FONT_PATH)
     end
@@ -578,7 +581,7 @@ local function BuildSpecValues(mod)
     local specs = mod and mod.GetPlayerSpecs and mod:GetPlayerSpecs() or {}
     for _, spec in ipairs(specs) do
         local key = tostring(spec.id)
-        local auto = spec.id == 1473 and "Heal" or (spec.role == "HEALER" and "Heal" or "DPS / Tank")
+        local auto = (not IS_FOREVER_CLIENT and spec.id == 1473) and "Heal" or (spec.role == "HEALER" and "Heal" or "DPS / Tank")
         values[key] = (spec.name or key) .. " - Auto: " .. auto
         order[#order + 1] = key
     end

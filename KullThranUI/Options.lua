@@ -954,10 +954,25 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.3"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.4"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.0.4"] = {
+        version = "0.0.4",
+        published = "2026-09-24",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Fixed outgoing chat and whisper history handling on Forever, including protected payloads and lineID 0 events.",
+            "Applied the Retail minimap positioning and launcher restoration fixes to the Forever layout.",
+            "Improved Armory surfaces, stats/progress panels, and texture treatment so the character and inspection views remain readable.",
+            "Reworked Collections and Appearances skinning with safe Forever OnClick hooks, restored native slot and right-hand icons, and balanced textured surfaces.",
+            "Restored visible KUI texture treatment in Bags while keeping the bag grid, controls, and layout readable.",
+            "Hardened Aura Reminders, Unit Frames, Party Frames, Nameplates, Cooldown Manager, and Objective Tracker paths for Forever API and protected-value differences.",
+            "Validated the changed Lua modules with Lua 5.1 syntax checks and repository whitespace checks.",
+        },
+    },
     ["0.0.3"] = {
         version = "0.0.3",
         published = "2026-09-20",
@@ -1180,12 +1195,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.0.3"
+        or "0.0.4"
     -- When loaded from the source tree without the BigWigs packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "0.0.3"
+        ver = "0.0.4"
     end
     return ver
 end
@@ -2240,7 +2255,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.3")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.4")))
     end
     if menu._foreverLogo then
         menu._foreverLogo:SetVertexColor(accent.r or 1, accent.g or 0, accent.b or 0.333, 1)
@@ -3898,12 +3913,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.3") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.4") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.0.3"
+	f._versionValue = KT.VERSION or "0.0.4"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving

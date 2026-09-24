@@ -52,6 +52,35 @@ local KT_BAGS_DEFAULT_PANEL_COLOR = { r = 0.2, g = 0.0980392157, b = 0.0, a = 0.
 local KT_BAGS_WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 local KT_BAGS_BACKGROUND_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\BagsBackground.png"
 
+local KT_BAGS_KUI_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\KUISettingsSurface.png"
+
+local function KT_Bags_ApplyKuiSurface(frame, washAlpha)
+    if not (frame and frame.CreateTexture) then
+        return
+    end
+
+    -- Bags uses BackdropTemplate backgrounds that can render above the shared
+    -- TexturedSurface BACKGROUND layer. Keep a dedicated ARTWORK layer so the
+    -- KUI texture remains visible while child controls stay above it.
+    local artwork = frame.KT_BagsKUIArtwork
+    if not artwork then
+        artwork = frame:CreateTexture(nil, "ARTWORK", nil, -8)
+        artwork:SetAllPoints(frame)
+        artwork:SetTexture(KT_BAGS_KUI_TEXTURE)
+        frame.KT_BagsKUIArtwork = artwork
+    end
+    artwork:SetAlpha(0.86)
+    artwork:Show()
+
+    local wash = frame.KT_BagsKUIWash
+    if not wash then
+        wash = frame:CreateTexture(nil, "ARTWORK", nil, -7)
+        wash:SetAllPoints(frame)
+        frame.KT_BagsKUIWash = wash
+    end
+    wash:SetColorTexture(0.008, 0.010, 0.016, washAlpha or 0.42)
+    wash:Show()
+end
 local function KT_Bags_GetAccentColor(alpha)
     local skin = KT and KT.db and KT.db.profile and KT.db.profile.skin or nil
     if skin and skin.bagsColorMode == "custom" and skin.bagsColor then
@@ -2063,6 +2092,7 @@ function Mod:CreateNativeWindow()
     window:SetAlpha(1)
 
     KT:AddBackdrop(window, 0.05, 0.07, 0.09, 0.94)
+    KT_Bags_ApplyKuiSurface(window, 0.46)
     KT:AddBorder(window, 0.10, 0.10, 0.10, 1)
     KT_Bags_ApplyAccentSurface(window, {
         topAlpha = 0.03,
@@ -2085,6 +2115,7 @@ function Mod:CreateNativeWindow()
     })
     header:SetBackdropColor(0.08, 0.08, 0.09, 0.95)
     header:SetBackdropBorderColor(0.16, 0.16, 0.16, 1)
+    KT_Bags_ApplyKuiSurface(header, 0.48)
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart", function()
@@ -2236,6 +2267,7 @@ function Mod:CreateNativeWindow()
     })
     toolbar:SetBackdropColor(0.05, 0.05, 0.06, 0.94)
     toolbar:SetBackdropBorderColor(0.14, 0.14, 0.14, 1)
+    KT_Bags_ApplyKuiSurface(toolbar, 0.48)
     KT_Bags_ApplyAccentSurface(toolbar, {
         topAlpha = 0.038,
         leftAlpha = 0.02,
@@ -2559,6 +2591,7 @@ function Mod:CreateNativeWindow()
     })
     sidebar:SetBackdropColor(0.018, 0.018, 0.022, 0.95)
     sidebar:SetBackdropBorderColor(0.12, 0.12, 0.12, 1)
+    KT_Bags_ApplyKuiSurface(sidebar, 0.44)
     KT_Bags_ApplyAccentSurface(sidebar, {
         topAlpha = 0.026,
         leftAlpha = 0.018,
@@ -2621,12 +2654,13 @@ function Mod:CreateNativeWindow()
     })
     gridPanel:SetBackdropColor(0.012, 0.012, 0.016, 0.94)
     gridPanel:SetBackdropBorderColor(0.12, 0.12, 0.12, 1)
+    KT_Bags_ApplyKuiSurface(gridPanel, 0.40)
     KT_Bags_ApplyAmbientGradient(gridPanel, {
         fillAlpha = 0.16,
         fillEndAlpha = 0.06,
         shadeTopAlpha = 0.10,
         shadeBottomAlpha = 0.02,
-        artAlpha = 0.82,
+        artAlpha = 0.42,
     })
     KT_Bags_ApplyAccentSurface(gridPanel, {
         topAlpha = 0.03,
@@ -2693,6 +2727,7 @@ function Mod:CreateNativeWindow()
     })
     footer:SetBackdropColor(0.06, 0.06, 0.07, 0.95)
     footer:SetBackdropBorderColor(0.14, 0.14, 0.14, 1)
+    KT_Bags_ApplyKuiSurface(footer, 0.48)
     KT_Bags_ApplyAccentSurface(footer, {
         topAlpha = 0.032,
         leftAlpha = 0.016,
@@ -2886,7 +2921,7 @@ function Mod:ApplyPanelColor()
             fillEndAlpha = 0.06,
             shadeTopAlpha = 0.10,
             shadeBottomAlpha = 0.02,
-            artAlpha = 0.82,
+            artAlpha = 0.42,
         })
         KT_Bags_ApplyAccentSurface(window.KT_GridPanel, {
             topAlpha = 0.03,
@@ -4865,6 +4900,26 @@ function Mod:ApplyNativeViewLayout(window, isCompact)
     end
 end
 
+
+-- The grid does not occupy the complete bag window: the toolbar, the gap
+-- below it and the footer are outside the scroll frame. Derive that fixed
+-- overhead from the live frame geometry instead of assuming a constant. The
+-- Forever layout has a taller toolbar than Retail, so the old constant could
+-- leave the last compact row behind the footer.
+function Mod:GetGridLayoutOverhead(window)
+    if not window or not window.KT_GridScrollFrame then
+        return 162
+    end
+
+    local windowHeight = tonumber(window:GetHeight()) or 0
+    local viewportHeight = tonumber(window.KT_GridScrollFrame:GetHeight()) or 0
+    if windowHeight <= 0 or viewportHeight <= 0 then
+        return 162
+    end
+
+    return math.max(162, math.ceil(windowHeight - viewportHeight))
+end
+
 function Mod:FinalizeBagLayout(window, visibleSlots, columns, gridWidth, buttonIndex, offsetY, used, free, total, isCategoryView)
     for index = buttonIndex, #self.itemButtons do
         local btn = self.itemButtons[index]
@@ -4887,7 +4942,7 @@ function Mod:FinalizeBagLayout(window, visibleSlots, columns, gridWidth, buttonI
     window.KT_Grid:SetSize(gridWidth, math.max(paddedHeight, 1))
 
     local minWindowHeight = self.db.window.height or KT_BAGS_WINDOW_HEIGHT
-    local requiredHeight = math.ceil(paddedHeight + 162)
+    local requiredHeight = math.ceil(paddedHeight + self:GetGridLayoutOverhead(window))
     local maxWindowHeight = math.max(minWindowHeight, math.floor(UIParent:GetHeight() * (isCategoryView and 0.72 or 0.92)))
     if isCategoryView then
         window:SetHeight(math.min(maxWindowHeight, math.max(minWindowHeight, requiredHeight)))
@@ -5247,7 +5302,8 @@ function Mod:RefreshBagSlots()
     end
 
     if isCompact and #visibleSlots > 0 then
-        local availableHeight = math.max(1, math.floor(UIParent:GetHeight() * 0.92) - 162 - (KT_GRID_PADDING * 2))
+        local maxWindowHeight = math.floor(UIParent:GetHeight() * 0.92)
+        local availableHeight = math.max(1, maxWindowHeight - self:GetGridLayoutOverhead(window) - (KT_GRID_PADDING * 2))
         local maxRows = math.max(1, math.floor(availableHeight / (itemSize + KT_ITEM_SPACING)))
         columns = math.max(columns, math.ceil(#visibleSlots / maxRows))
         gridWidth = math.max(1, (columns * (itemSize + KT_ITEM_SPACING)) - KT_ITEM_SPACING + (KT_GRID_PADDING * 2))

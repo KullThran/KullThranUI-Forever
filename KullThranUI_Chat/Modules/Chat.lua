@@ -59,6 +59,12 @@ local KT_NATIVE_CHAT_WINDOW_NAMES = {
     whisper = "KUI Whisper",
 }
 
+local KT_CHAT_INTERFACE_VERSION = GetBuildInfo and select(4, GetBuildInfo()) or nil
+-- Forever has appeared with both the 16001 and 160001 interface values while
+-- sharing the secure-chat API surface with Mainline.
+local KT_IS_FOREVER_BUILD = (KT and KT.IsForever and KT:IsForever()) == true
+    or tonumber(KT_CHAT_INTERFACE_VERSION) == 16001
+    or tonumber(KT_CHAT_INTERFACE_VERSION) == 160001
 local KT_NATIVE_CHAT_WINDOW_IDS = {
     trade = 3,
     guild = 4,
@@ -763,40 +769,47 @@ end
 
 local function KT_CollectTradeChannels(sourceFrame)
     local channels = {}
-    if KT_IsSecureChatSafeMode() then
-        return channels
-    end
-
     local seen = {}
 
     local function addChannel(channelName, channelID)
-        if type(channelName) ~= "string" or channelName == "" or not KT_IsTradeChannelName(channelName) then
+        local safeName = KT_GetNonEmptyAccessibleString(channelName)
+        if not safeName or not KT_IsTradeChannelName(safeName) then
             return
         end
 
-        local id = type(channelID) == "number" and channelID or nil
+        local id = KT_GetAccessibleNumber(channelID)
+        if id and id <= 0 then
+            id = nil
+        end
         if not id and _G.GetChannelName then
-            local ok, resolvedID = pcall(_G.GetChannelName, channelName)
-            if ok and type(resolvedID) == "number" then
+            local ok, resolvedID = pcall(_G.GetChannelName, safeName)
+            resolvedID = ok and KT_GetAccessibleNumber(resolvedID) or nil
+            if resolvedID and resolvedID > 0 then
                 id = resolvedID
             end
         end
 
-        if type(id) ~= "number" or id <= 0 or seen[id] then
+        local seenKey = id and ('id:' .. tostring(id)) or ('name:' .. safeName)
+        if seen[seenKey] then
             return
         end
 
-        seen[id] = true
-        channels[#channels + 1] = { id = id, name = channelName }
+        seen[seenKey] = true
+        channels[#channels + 1] = { id = id, name = safeName }
     end
 
-    local channelList = sourceFrame and sourceFrame.channelList
-    if type(channelList) == "table" then
-        for key, value in pairs(channelList) do
-            if type(key) == "string" then
-                addChannel(key, type(value) == "number" and value or nil)
-            elseif type(value) == "string" then
-                addChannel(value, type(key) == "number" and key or nil)
+    -- Forever/Mainline can protect the frame-owned channelList. Only inspect
+    -- it on the legacy path; GetChannelList is the public source on secure
+    -- clients and its values are individually screened above.
+    if not KT_IsSecureChatSafeMode() then
+        local channelList = sourceFrame and sourceFrame.channelList
+        if type(channelList) == 'table' then
+            for key, value in pairs(channelList) do
+                if type(key) == 'string' then
+                    addChannel(key, value)
+                elseif type(value) == 'string' then
+                    addChannel(value, key)
+                end
             end
         end
     end
@@ -822,22 +835,48 @@ local function KT_GetTradeChannelCommand()
 end
 
 local function KT_RefreshTradeNativeChannels(frame)
-    if KT_IsSecureChatSafeMode() then
+    if KT_IsSecureChatSafeMode() and not KT_IS_FOREVER_BUILD then
         return 0
     end
 
-    if not (frame and _G.ChatFrame_AddChannel) then
+    if (InCombatLockdown and InCombatLockdown()) or KT_IsChatMessagingLocked() then
         return 0
     end
-    if _G.ChatFrame_RemoveAllChannels then
+
+    if not (frame and type(_G.ChatFrame_AddChannel) == 'function') then
+        return 0
+    end
+    -- On Forever the channel tables are protected, but the public add/remove
+    -- APIs are still the supported way to subscribe a native chat frame. Do
+    -- not inspect or clear those tables on the secure path.
+    if not KT_IS_FOREVER_BUILD and _G.ChatFrame_RemoveAllChannels then
         pcall(_G.ChatFrame_RemoveAllChannels, frame)
     end
 
     local channels = KT_CollectTradeChannels(_G.ChatFrame1)
+    local subscribed = 0
     for _, channel in ipairs(channels) do
-        pcall(_G.ChatFrame_AddChannel, frame, channel.name)
+        local ok, result = pcall(_G.ChatFrame_AddChannel, frame, channel.name)
+        if ok and result ~= false then
+            subscribed = subscribed + 1
+        end
     end
-    return #channels
+    if #channels == 0 and KT_IS_FOREVER_BUILD then
+        -- The standard Trade channel is channel 2 on Forever. Prefer the
+        -- localized client constant when available, then use the stable
+        -- internal name as the final fallback.
+        local fallbackNames = { _G.TRADE, _G.TRADE_CHAT, 'Trade' }
+        for _, channelName in ipairs(fallbackNames) do
+            local safeName = KT_GetNonEmptyAccessibleString(channelName)
+            if safeName then
+                local ok, result = pcall(_G.ChatFrame_AddChannel, frame, safeName)
+                if ok and result ~= false then
+                    subscribed = subscribed + 1
+                end
+            end
+        end
+    end
+    return subscribed
 end
 
 local function KT_GetGroupCommand()
@@ -1909,7 +1948,7 @@ function Mod:HookBlizzardChatEvents()
         return
     end
 
-    if KT_IsSecureChatSafeMode() then
+    if KT_IsSecureChatSafeMode() and not KT_IS_FOREVER_BUILD then
         self.blizzardChatEventsHooked = true
         return
     end
@@ -6154,12 +6193,22 @@ function Mod:RegisterChatEvents()
     self.chatEventsRegistered = true
 
     if KT_IsSecureChatSafeMode() then
-        -- Retail keeps Battle.net whispers in the inline/toast path instead of
-        -- appending them to the native chat frames. Capture only these two
-        -- events here; the payload readers below reject inaccessible values
-        -- before doing any string or number work.
-        self:RegisterEvent('CHAT_MSG_BN_WHISPER', 'OnWhisperEvent')
-        self:RegisterEvent('CHAT_MSG_BN_WHISPER_INFORM', 'OnWhisperEvent')
+        if KT_IS_FOREVER_BUILD then
+            -- Forever exposes the Retail secret-value helpers, but its normal
+            -- chat payloads are still usable by the KUI renderer. Register the
+            -- events directly so the module also receives outgoing messages
+            -- when Blizzard's ChatFrame1 is hidden by the custom window.
+            for _, eventName in ipairs(CHAT_EVENTS) do
+                self:RegisterEvent(eventName, "OnChatEvent")
+            end
+        else
+            -- Retail keeps Battle.net whispers in the inline/toast path instead of
+            -- appending them to the native chat frames. Capture only these two
+            -- events here; the payload readers below reject inaccessible values
+            -- before doing any string or number work.
+            self:RegisterEvent('CHAT_MSG_BN_WHISPER', 'OnWhisperEvent')
+            self:RegisterEvent('CHAT_MSG_BN_WHISPER_INFORM', 'OnWhisperEvent')
+        end
 
         -- KUI Chat: We no longer UnregisterAllEvents as it breaks whisper flow.
         -- Let Blizzard's native frames own the complete message path. In
@@ -6880,17 +6929,39 @@ function Mod:ConfigureDedicatedNativeTabFrame(frame, role)
     -- tables from addon code poisons the later native iteration, which then
     -- attributes the failure to whichever addon happened to run last.
     if KT_IsSecureChatSafeMode() then
-        -- GROUP still needs its complete native subscription on Retail. Add
-        -- the missing message groups through Blizzard's API only while chat is
-        -- unlocked; do not inspect, clear or iterate the protected lists.
-        if role == "group"
+        -- Forever protects the native subscription tables, but still accepts
+        -- ChatFrame_AddMessageGroup/AddChannel outside combat. Configure the
+        -- four dedicated frames through those APIs instead of leaving the
+        -- Trade/Guild/Group buttons attached to empty default frames.
+        if KT_IS_FOREVER_BUILD
+            and not (InCombatLockdown and InCombatLockdown())
+            and not KT_IsChatMessagingLocked()
+            and frame.KT_NativeTabConfigured ~= true then
+            local canAddMessageGroup = type(_G.ChatFrame_AddMessageGroup) == 'function'
+            local configured = canAddMessageGroup
+            for _, messageGroup in ipairs(groups) do
+                if canAddMessageGroup then
+                    local ok, result = pcall(_G.ChatFrame_AddMessageGroup, frame, messageGroup)
+                    configured = configured and ok and result ~= false
+                end
+            end
+            if role == 'trade' then
+                configured = KT_RefreshTradeNativeChannels(frame) > 0 and configured
+            end
+            if configured then
+                self:ClearNativeChatFrameContent(frame)
+                frame.KT_NativeTabConfigured = true
+                frame.KT_NativeTabRole = role
+            end
+        elseif role == 'group'
             and frame.KT_NativeTabConfigured ~= true
             and not (InCombatLockdown and InCombatLockdown())
             and not KT_IsChatMessagingLocked()
-            and _G.ChatFrame_AddMessageGroup then
+            and type(_G.ChatFrame_AddMessageGroup) == 'function' then
             local configured = true
             for _, messageGroup in ipairs(groups) do
-                configured = pcall(_G.ChatFrame_AddMessageGroup, frame, messageGroup) and configured
+                local ok, result = pcall(_G.ChatFrame_AddMessageGroup, frame, messageGroup)
+                configured = configured and ok and result ~= false
             end
             if configured then
                 frame.KT_NativeTabConfigured = true
@@ -6898,12 +6969,14 @@ function Mod:ConfigureDedicatedNativeTabFrame(frame, role)
             end
         end
 
+        if role == 'trade' and KT_IS_FOREVER_BUILD then
+            KT_RefreshTradeNativeChannels(frame)
+        end
         frame.KT_KeepVisible = true
         self:HideNativeChatChrome(frame)
         self:ApplyConfiguredFontToFrame(frame)
         return frame
     end
-
     if frame.KT_WhisperDedicatedRegistered and role ~= "whisper" and _G.FCFManager_UnregisterDedicatedFrame then
         pcall(_G.FCFManager_UnregisterDedicatedFrame, frame, "WHISPER")
         pcall(_G.FCFManager_UnregisterDedicatedFrame, frame, "BN_WHISPER")
@@ -7277,7 +7350,7 @@ function Mod:PrintBNetWhisperDebug()
 end
 
 function Mod:StartNativeWhisperScanner()
-    if not KT_IsSecureChatSafeMode() or self.nativeWhisperScanner or not (C_Timer and C_Timer.NewTicker) then
+    if not KT_IsSecureChatSafeMode() or KT_IS_FOREVER_BUILD or self.nativeWhisperScanner or not (C_Timer and C_Timer.NewTicker) then
         return
     end
 
@@ -7381,7 +7454,10 @@ function Mod:GetActiveMessageFrame()
 end
 
 function Mod:ShouldUseBlizzardPrimaryFrame()
-    return self:IsBlizzardPrimaryTab(self:GetActiveTab())
+    -- Forever exposes several Retail secret-value APIs, but its KUI chat
+    -- path must still own the visible General tab so outgoing messages are
+    -- captured and rendered in the module window.
+    return not KT_IS_FOREVER_BUILD and self:IsBlizzardPrimaryTab(self:GetActiveTab())
 end
 
 function Mod:EnsurePrimaryChatFrame(parent)
@@ -8147,9 +8223,42 @@ function Mod:OnCombatLogEvent()
 end
 
 function Mod:OnChatEvent(event, ...)
-    return
-end
+    if not self.runtimeInitialized or not self.chatEventsRegistered then
+        return
+    end
+    if not event or not CHAT_EVENT_LOOKUP[event] then
+        return
+    end
 
+    local isWhisper = event == "CHAT_MSG_WHISPER"
+        or event == "CHAT_MSG_WHISPER_INFORM"
+        or event == "CHAT_MSG_BN_WHISPER"
+        or event == "CHAT_MSG_BN_WHISPER_INFORM"
+    if isWhisper then
+        return self:OnWhisperEvent(event, ...)
+    end
+
+    local entry = self:BuildEntryFromEvent(event, ...)
+    if not entry then
+        return
+    end
+
+    local handleIncomingEntry = rawget(self, "HandleIncomingEntry") or rawget(Mod, "HandleIncomingEntry")
+    if type(handleIncomingEntry) == "function" then
+        return handleIncomingEntry(self, entry) ~= nil
+    end
+
+    local pushed = self:PushHistory(entry)
+    if pushed then
+        self:RecordChatActivity()
+        self:ShowWindowForActivity(false)
+        self:AddEntryToFrames(pushed)
+        self:ScheduleWindowFade()
+        self:UpdateScrollButtonVisibility()
+        return true
+    end
+    return false
+end
 function Mod:EnsureWhisperVisibleInGeneral(entry)
     if type(entry) ~= "table" then
         return

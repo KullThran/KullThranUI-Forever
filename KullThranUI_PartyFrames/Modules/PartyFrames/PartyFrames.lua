@@ -1869,7 +1869,7 @@ local function GetTestUnitData(fakeUnit, mode)
             result.absorb = 0
         end
     end
-    local testClasses = {"HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR", "DRUID", "DEATHKNIGHT", "MONK", "DEMONHUNTER", "EVOKER"}
+    local testClasses = IS_FOREVER_CLIENT and {"DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR"} or {"HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR", "DRUID", "DEATHKNIGHT", "MONK", "DEMONHUNTER", "EVOKER"}
     result.class = fakeUnit.isPlayer and "PALADIN" or testClasses[((index - 1) % #testClasses) + 1]
     return result
 end
@@ -1888,7 +1888,7 @@ local function GetSpecInfo(specIndex)
 end
 
 local function GetAutoProfileForSpec(specID, role)
-    if specID == PF_STATIC.augmentationSpecID then
+    if not IS_FOREVER_CLIENT and specID == PF_STATIC.augmentationSpecID then
         return "heal"
     end
     if role == "HEALER" then

@@ -8,6 +8,8 @@ local _skinned = setmetatable({}, { __mode = "k" })
 local _hookedTrackers = setmetatable({}, { __mode = "k" })
 local _hookedTrackerCount = 0
 local _headerColorHooks = setmetatable({}, { __mode = "k" })
+local _titleTextHooks = setmetatable({}, { __mode = "k" })
+local _titleTextGuards = setmetatable({}, { __mode = "k" })
 
 local function GetFont()
     local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
@@ -44,10 +46,8 @@ local function GetAccent()
 end
 
 local function GetQuestTitleColor()
-    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
-    if db and db.useBlizzardQuestColors then
-        return nil, nil, nil
-    end
+    -- Forever quest titles may contain Blizzard difficulty color escape codes.
+    -- Titles are always owned by KUI and use the active accent.
     return GetAccent()
 end
 
@@ -80,6 +80,46 @@ local function StyleFontString(fs, size)
     ApplyShadow(fs)
 end
 
+local function ApplyTitleAccent(fs)
+    if not fs or not fs.SetTextColor then
+        return
+    end
+
+    if _titleTextGuards[fs] then
+        return
+    end
+
+    _titleTextGuards[fs] = true
+    local text = fs.GetText and fs:GetText()
+    if type(text) == "string" and fs.SetText then
+        -- Blizzard embeds quest difficulty colors directly in the title text.
+        -- Strip only color wrappers; keep the actual title and other markup.
+        local cleanText = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        if cleanText ~= text then
+            fs:SetText(cleanText)
+        end
+    end
+
+    local r, g, b = GetAccent()
+    fs:SetTextColor(r, g, b)
+    _titleTextGuards[fs] = nil
+end
+
+local function SetTitleAccent(fs)
+    if not fs then
+        return
+    end
+
+    if not _titleTextHooks[fs] and fs.SetText then
+        _titleTextHooks[fs] = true
+        hooksecurefunc(fs, "SetText", function(fontString)
+            ApplyTitleAccent(fontString)
+        end)
+    end
+
+    ApplyTitleAccent(fs)
+end
+
 local function SkinHeader(header)
     if not header then return end
 
@@ -98,7 +138,7 @@ local function SkinHeader(header)
     end
     local r, g, b = GetAccent()
     if text then
-        text:SetTextColor(r, g, b)
+        SetTitleAccent(text)
         StyleFontString(text, 14)
     end
 
@@ -185,8 +225,7 @@ local function SetBlockTitleAccent(block)
     end
     if not title then title = FindFirstBlockFontString(block, 0) end
     if not title then return end
-    local r, g, b = GetQuestTitleColor()
-    if r then title:SetTextColor(r, g, b) end
+    SetTitleAccent(title)
 end
 
 local function EnsureBlockHoverColor(block)
@@ -216,15 +255,12 @@ local function StyleBlockText(block)
         headerText = headerText.Text
     end
     local firstFontString
-    local accentR, accentG, accentB = GetQuestTitleColor()
 
     -- On Forever the title may be a direct child field rather than a region
     -- returned by GetRegions().
     if headerText then
         StyleFontString(headerText, 13)
-        if accentR then
-            headerText:SetTextColor(accentR, accentG, accentB)
-        end
+        SetTitleAccent(headerText)
     end
 
     if block.GetRegions then
@@ -234,9 +270,7 @@ local function StyleBlockText(block)
                 firstFontString = firstFontString or region
                 StyleFontString(region, 13)
                 if region == headerText or (not headerText and region == firstFontString) then
-                    if accentR then
-                        region:SetTextColor(accentR, accentG, accentB)
-                    end
+                    SetTitleAccent(region)
                 end
             end
         end

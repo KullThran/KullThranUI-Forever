@@ -177,11 +177,7 @@ KT:RegisterPage("objectivetracker", "Objective Tracker", 55, function(sc, W)
                     fs:SetPoint("TOPLEFT", previewFrame, "TOPLEFT", 10, currentY)
                 elseif line.isQuest then
                     fontSize = size
-                    if db.useBlizzardQuestColors then
-                        fs:SetTextColor((line.selected or line.hovered) and 1 or 1, (line.selected or line.hovered) and 1 or 0.82, (line.selected or line.hovered) and 1 or 0)
-                    else
-                        fs:SetTextColor((line.selected or line.hovered) and 1 or r, (line.selected or line.hovered) and 1 or g, (line.selected or line.hovered) and 1 or b)
-                    end
+                    fs:SetTextColor(r, g, b)
                     fs:SetPoint("TOPLEFT", previewFrame, "TOPLEFT", 30, currentY)
                 else
                     fontSize = size - 1
@@ -288,14 +284,7 @@ KT:RegisterPage("objectivetracker", "Objective Tracker", 55, function(sc, W)
         false
     ); ly = ly + h + 10
     
-    _, h = W:Toggle(leftCol, LText("Use Blizzard Quest Colors"), -ly,
-        function() return db.useBlizzardQuestColors end,
-        function(v) 
-            db.useBlizzardQuestColors = v
-            if KT.ObjectiveTrackerSkin_UpdateColors then KT.ObjectiveTrackerSkin_UpdateColors() end
-        end
-    ); ly = ly + h + 10
-    
+
     -- VISIBILITY SECTION
     _, h = W:SectionHeader(leftCol, LText("Visibility"), -ly); ly = ly + h
     local function RefreshVisibility()

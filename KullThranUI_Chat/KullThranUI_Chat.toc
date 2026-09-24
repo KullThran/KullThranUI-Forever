@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Chat
 ## Notes: KullThranUI module: Chat
 ## Author: KullThran
-## Version: 0.0.3
+## Version: 0.0.4
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

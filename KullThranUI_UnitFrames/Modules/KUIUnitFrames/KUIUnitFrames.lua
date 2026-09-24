@@ -3499,17 +3499,38 @@ local function SetupShowOnCastBar(frame, unit)
             hideWhenInactive = v
         end
     end
-    local function SyncCastbarInactiveVisibility()
-        local activeCast = UnitHasActiveCast(unit)
-        local showBg = activeCast or not hideWhenInactive
+
+    local function IsCastbarEnabled()
+        local s = db and db.profile and GetSettingsForUnit(unit)
+        if not s then return true end
+        if unit == "player" then
+            return s.showPlayerCastbar ~= false
+        end
+        return s.showCastbar ~= false
+    end
+
+    local function ShowCastbarIcon()
+        if not iconFrame then return end
+
         local s = db and db.profile and GetSettingsForUnit(unit)
         local showIcon
-
         if unit == "player" then
             showIcon = s and s.showPlayerCastIcon ~= false
         else
             showIcon = not s or s.showCastIcon ~= false
         end
+
+        if IsCastbarEnabled() and showIcon then
+            iconFrame:Show()
+        else
+            iconFrame:Hide()
+        end
+    end
+
+    local function SyncCastbarInactiveVisibility()
+        local castbarEnabled = IsCastbarEnabled()
+        local activeCast = castbarEnabled and UnitHasActiveCast(unit)
+        local showBg = castbarEnabled and (activeCast or not hideWhenInactive)
 
         if activeCast then
             castbar:Show()
@@ -3518,9 +3539,11 @@ local function SetupShowOnCastBar(frame, unit)
         end
 
         if iconFrame then
-            if activeCast and showIcon then
-                iconFrame:Show()
+            if activeCast then
+                ShowCastbarIcon()
             else
+                -- The icon is a separate frame from oUF's castbar. Always hide it
+                -- when the unit no longer has an active cast.
                 iconFrame:Hide()
             end
         end
@@ -3534,48 +3557,80 @@ local function SetupShowOnCastBar(frame, unit)
         end
     end
 
-    SyncCastbarInactiveVisibility()
-    castbar._syncInactiveVisibility = SyncCastbarInactiveVisibility
-
-    local savedCastHook = castbar.PostCastStart
-
-    castbar.PostCastStart = function(self, ...)
-        local bg = self:GetParent()
-        if bg then bg:Show() end
-        self:Show()
-        if self._iconFrame then
-            -- Respect per-unit showCastIcon / showPlayerCastIcon setting
-            local s = db and db.profile and GetSettingsForUnit(unit)
-            local showIcon
-            if unit == "player" then
-                showIcon = (s and s.showPlayerCastIcon ~= false)
-            else
-                showIcon = (not s or s.showCastIcon ~= false)
-            end
-            if showIcon then
-                self._iconFrame:Show()
-            else
-                self._iconFrame:Hide()
-            end
-        end
-        if savedCastHook then savedCastHook(self, ...) end
-    end
-    castbar.PostChannelStart = castbar.PostCastStart
-    castbar.PostCastInterruptible = savedCastHook
-
     local function dismissCastBar(self)
         self:Hide()
-        if self._iconFrame then self._iconFrame:Hide() end
+        if self._iconFrame then
+            self._iconFrame:Hide()
+        end
         if hideWhenInactive then
             local bg = self:GetParent()
             if bg then bg:Hide() end
         end
     end
+
+    SyncCastbarInactiveVisibility()
+    castbar._syncInactiveVisibility = SyncCastbarInactiveVisibility
+
+    local savedCastHook = castbar.PostCastStart
+    local savedInterruptibleHook = castbar.PostCastInterruptible
+
+    local function showCastBar(self, ...)
+        if not IsCastbarEnabled() then
+            dismissCastBar(self)
+            return
+        end
+
+        local bg = self:GetParent()
+        if bg then bg:Show() end
+        self:Show()
+        ShowCastbarIcon()
+        if savedCastHook then savedCastHook(self, ...) end
+    end
+
+    castbar.PostCastStart = showCastBar
+    castbar.PostChannelStart = showCastBar
+    castbar.PostCastInterruptible = savedInterruptibleHook or savedCastHook
+
+    -- oUF uses PostCastInterrupted for interruption events that carry an
+    -- interrupter GUID. Keep the separate icon in sync for that path as well.
+    castbar.PostCastInterrupted = dismissCastBar
     castbar.PostCastStop = dismissCastBar
     castbar.PostChannelStop = dismissCastBar
     castbar.PostCastFail = dismissCastBar
-end
 
+    -- The icon lives outside oUF's Castbar element, so also reconcile it from
+    -- the unit spellcast events. This covers target changes and interrupted or
+    -- failed casts where the oUF callback can be skipped due to a castID/state
+    -- mismatch on Forever.
+    local stateWatcher = castbar._castStateWatcher
+    if not stateWatcher then
+        stateWatcher = CreateFrame("Frame", nil, frame)
+        castbar._castStateWatcher = stateWatcher
+    end
+
+    local function ScheduleCastbarSync()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, SyncCastbarInactiveVisibility)
+        else
+            SyncCastbarInactiveVisibility()
+        end
+    end
+
+    stateWatcher:SetScript("OnEvent", ScheduleCastbarSync)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
+    stateWatcher:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
+    if unit == "target" then
+        stateWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+    elseif unit == "focus" then
+        stateWatcher:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    end
+end
 
 -- ─── Borders de unit frames: creación separada de apariencia ──────
 -- Fase 1: BuildBorderFrame - crea la estructura sin apariencia
