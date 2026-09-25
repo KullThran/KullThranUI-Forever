@@ -5,23 +5,17 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
-## 0.0.7 BETA (2026-09-25)
+## 0.0.5 (2026-09-25)
 
-Forever beta maintenance release focused on Nameplates and Aura Reminders adjustments.
+Forever maintenance release focused on Nameplates, Aura Reminders, texture opacity, and chat sync.
 
 - Reverted a scaling regression that caused Enemy Nameplates to stay excessively large at long distances instead of scaling normally.
 - Decreased the default size of Enemy Nameplate debuffs and upper/lower aura slots by 25%.
 - Implemented fully dynamic positioning for Nameplate level text; the level indicator now perfectly hugs the left edge of the unit's name, preventing overlap regardless of name length.
 - Refactored Aura Reminders: Removed group-wide logic (such as checking if party members are missing a buff). The module now operates on a strict personal basis, solely reminding you if your own character is missing the buff.
-
-## 0.0.5 BETA (2026-09-25)
-
-Forever beta maintenance release focused on texture opacity coherence, chat input sync, and module toggles.
-
 - Fixed an issue in Chat where clicking a channel or whisper link in the chat frame would immediately revert to the default channel instead of keeping the manually selected one.
 - Finetuned the darkening opacity (wash alpha) of the KUI background textures on the Bags, World Map, and Objective Tracker interfaces. The opacity has been set to 0.38, matching the Armory module for better visual consistency.
 - Audited all module toggle options (Enable Module). Fixed an issue where toggling the Enhancements and Cursor modules would not prompt for a UI reload, ensuring complete and clean activation/deactivation across all modules.
-
 ## 0.0.4 BETA (2026-09-24)
 
 Forever beta maintenance release focused on chat, minimap, Armory, Collections, Appearances, and Bags.
