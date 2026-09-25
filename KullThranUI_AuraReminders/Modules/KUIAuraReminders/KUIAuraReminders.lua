@@ -2124,12 +2124,7 @@ if inInstance or rb.showNonInstanced then
                 end
             end
             if canCheck then
-                local isMissing = false
-                if rb.showOthersMissing and (IsInGroup() or IsInRaid()) then
-                    isMissing = AnyGroupMemberMissingBuff(buff.buffIDs)
-                else
-                    isMissing = not PlayerHasAuraByID(buff.buffIDs)
-                end
+                local isMissing = not PlayerHasAuraByID(buff.buffIDs)
                 if isMissing then
                     missing[#missing+1] = {
                         cat = "raidbuff", data = buff, scale = rb.scale or 1.0,
@@ -3541,12 +3536,7 @@ SlashCmdList["KUIARDEBUG"] = function()
             elseif not classMatch then status = "wrong class (" .. buff.class .. ")"
             elseif not known then status = "spell not known"
             else
-                local isMissing
-                if rb.showOthersMissing and (inGroup or inRaid) then
-                    isMissing = AnyGroupMemberMissingBuff(buff.buffIDs)
-                else
-                    isMissing = not PlayerHasAuraByID(buff.buffIDs)
-                end
+                local isMissing = not PlayerHasAuraByID(buff.buffIDs)
                 status = isMissing and "|cffff4444MISSING|r" or "buff present"
             end
             p("  " .. buff.key .. " (" .. buff.name .. "): " .. status)

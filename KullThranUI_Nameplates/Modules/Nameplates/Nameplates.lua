@@ -4664,9 +4664,7 @@ function NameplateFrame:SetUnit(unit, nameplate)
     -- Paso 1: anclar al nameplate Blizzard
     self:SetParent(nameplate)
     if self.SetIgnoreParentScale then
-        -- The world nameplate changes its parent scale with camera depth.
-        -- Keep our own geometry in screen space and update it explicitly.
-        self:SetIgnoreParentScale(true)
+        self:SetIgnoreParentScale(false)
     end
     self:ClearAllPoints()
     PP.Point(self, "CENTER", nameplate, "CENTER", 0, GetHitboxYShift())

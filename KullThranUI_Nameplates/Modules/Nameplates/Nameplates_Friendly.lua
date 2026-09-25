@@ -1628,7 +1628,7 @@ function FriendlyFrame:SetUnit(unit, nameplate)
     self.nameplate = nameplate
     self:SetParent(nameplate)
     if self.SetIgnoreParentScale then
-        self:SetIgnoreParentScale(false)
+        self:SetIgnoreParentScale(true)
     end
     self:ClearAllPoints()
     local yOff = KullThranUINameplatesDB and KullThranUINameplatesDB.friendlyPlateYOffset or 0
@@ -1707,7 +1707,7 @@ function FriendlyFrame:ClearUnit()
     self.unit = nil
     self.nameplate = nil
     if self.SetIgnoreParentScale then
-        self:SetIgnoreParentScale(false)
+        self:SetIgnoreParentScale(true)
     end
     self.glow:Hide()
     self.highlight:Hide()
