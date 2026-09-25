@@ -93,7 +93,7 @@ jobs:
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notificar a Discord
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_discord }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.notify_discord) || github.event_name == 'push' }}
         uses: Ilshidur/action-discord@master
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
