@@ -4,7 +4,7 @@
 ## Title: KullThranUI - Dragon Riding
 ## Notes: KullThranUI module: Dragon Riding
 ## Author: KullThran
-## Version: 0.0.6
+## Version: 0.0.7
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

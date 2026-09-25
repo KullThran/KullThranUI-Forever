@@ -5,7 +5,7 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
-## 0.0.6 BETA (2026-09-25)
+## 0.0.7 BETA (2026-09-25)
 
 Forever beta maintenance release focused on Nameplates and Aura Reminders adjustments.
 
