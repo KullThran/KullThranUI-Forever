@@ -1262,21 +1262,33 @@ function KT.MakeFont(parent, size, flags, r, g, b, a)
 end
 
 KT.PP = KT.PP or {}
-KT.PP.Scale = KT.PP.Scale or function(value)
-    local scale = UIParent and UIParent:GetEffectiveScale() or 1
+local function GetPixelPerfectScale(regionOrScale)
+    if regionOrScale and regionOrScale.GetEffectiveScale then
+        local ok, scale = pcall(regionOrScale.GetEffectiveScale, regionOrScale)
+        if ok and type(scale) == "number" and scale > 0 then
+            return scale
+        end
+    elseif type(regionOrScale) == "number" and regionOrScale > 0 then
+        return regionOrScale
+    end
+    return UIParent and UIParent:GetEffectiveScale() or 1
+end
+KT.PP.Scale = KT.PP.Scale or function(value, regionOrScale)
+    local scale = GetPixelPerfectScale(regionOrScale)
     return floor(((value or 0) * scale) + 0.5) / scale
 end
 KT.PP.Point = KT.PP.Point or function(frame, point, relativeTo, relativePoint, x, y)
-    frame:SetPoint(point, relativeTo, relativePoint, KT.PP.Scale(x or 0), KT.PP.Scale(y or 0))
+    frame:SetPoint(point, relativeTo, relativePoint,
+        KT.PP.Scale(x or 0, frame), KT.PP.Scale(y or 0, frame))
 end
 KT.PP.Size = KT.PP.Size or function(frame, width, height)
-    frame:SetSize(KT.PP.Scale(width or 0), KT.PP.Scale(height or 0))
+    frame:SetSize(KT.PP.Scale(width or 0, frame), KT.PP.Scale(height or 0, frame))
 end
 KT.PP.Width = KT.PP.Width or function(frame, width)
-    frame:SetWidth(KT.PP.Scale(width or 0))
+    frame:SetWidth(KT.PP.Scale(width or 0, frame))
 end
 KT.PP.Height = KT.PP.Height or function(frame, height)
-    frame:SetHeight(KT.PP.Scale(height or 0))
+    frame:SetHeight(KT.PP.Scale(height or 0, frame))
 end
 KT.PP.DisablePixelSnap = KT.PP.DisablePixelSnap or function(tex)
     if tex and tex.SetSnapToPixelGrid then

@@ -3,7 +3,7 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.0.4
+## Version: 0.0.5
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
@@ -71,7 +71,7 @@ Locales\Overrides.lua
 Locales\Version_5_0.lua
 Locales\Modules\ObjectiveTracker.lua
 Locales\Modules\MythicPlusHistory.lua
-Locales\Modules\BlizzMove.lua
+# KUI Move is implemented by Modules\KT_UnlockMode.lua.
 Locales\Modules\OptionsCoverage.lua
 Locales\Modules\FontsColors.lua
 Locales\Modules\OptionsGaps.lua

@@ -199,6 +199,35 @@ local function SkinFriends()
             end)
         end)
     end
+    
+    local WhoFrame = _G.WhoFrame
+    if WhoFrame then
+        S:HandlePortraitFrame(WhoFrame)
+        if WhoFrame.TitleContainer and WhoFrame.TitleContainer.TitleText then
+            S:HandleFont(WhoFrame.TitleContainer.TitleText)
+        elseif WhoFrame.TitleText then
+            S:HandleFont(WhoFrame.TitleText)
+        end
+        for _, name in pairs({"WhoFrameWhoButton", "WhoFrameAddFriendButton", "WhoFrameGroupInviteButton"}) do
+            local btn = _G[name]
+            if btn then
+                S:HandleButton(btn)
+                local text = btn.Text or (btn.GetFontString and btn:GetFontString())
+                if text then S:HandleFont(text) end
+            end
+        end
+        if _G.WhoFrameEditBox then S:HandleEditBox(_G.WhoFrameEditBox) end
+        if _G.WhoFrameDropDown then S:HandleDropDownBox(_G.WhoFrameDropDown) end
+        for i = 1, 4 do
+            local header = _G["WhoFrameColumnHeader"..i]
+            if header then
+                S:StripTextures(header)
+            end
+        end
+        if _G.WhoListScrollFrame then
+            S:HandleScrollBar(_G.WhoListScrollFrame.ScrollBar or _G.WhoListScrollFrameScrollBar)
+        end
+    end
 end
 
 hooksecurefunc(S, "OnEnable", SkinFriends)

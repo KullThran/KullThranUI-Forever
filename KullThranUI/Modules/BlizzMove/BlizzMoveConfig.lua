@@ -14,7 +14,7 @@ local OPTIONS_TABLE_NAME = "KullThranUI_BlizzMove";
 local POPUP_NAME = "KUIBlizzMoveURLDialog";
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 ---@class BlizzMove
-local BlizzMove = KT:GetModule(name)
+local BlizzMove = KT:GetModule(name, true)
 if not BlizzMove then return; end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(name, true) or LibStub("AceLocale-3.0"):GetLocale("KullThranUI", true);

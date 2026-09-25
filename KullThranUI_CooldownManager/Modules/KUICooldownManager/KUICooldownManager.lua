@@ -5811,7 +5811,7 @@ ns.RACE_RACIALS = {
     Mechagnome         = { 312924 },
     Dracthyr           = { 357214, { 368970, class = "EVOKER" } },
     EarthenDwarf       = { 436344 },
-    Haranir            = { 1287685 },
+    Haranir            = { 1287685, 12594416 },
 }
 
 HEALTH_ITEMS = {

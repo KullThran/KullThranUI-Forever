@@ -2,6 +2,39 @@ local addon, ns = ...
 
 if not ns then return end
 
+local PP = (KullThranUI and KullThranUI.PP) or (KT and KT.PP)
+
+local function PixelPoint(frame, point, relativeTo, relativePoint, x, y)
+    if PP and PP.Point then
+        PP.Point(frame, point, relativeTo, relativePoint, x, y)
+    else
+        frame:SetPoint(point, relativeTo, relativePoint, x or 0, y or 0)
+    end
+end
+
+local function PixelSize(frame, width, height)
+    if PP and PP.Size then
+        PP.Size(frame, width, height)
+    else
+        frame:SetSize(width or 0, height or 0)
+    end
+end
+
+local function PixelWidth(frame, width)
+    if PP and PP.Width then
+        PP.Width(frame, width)
+    else
+        frame:SetWidth(width or 0)
+    end
+end
+
+local function PixelHeight(frame, height)
+    if PP and PP.Height then
+        PP.Height(frame, height)
+    else
+        frame:SetHeight(height or 0)
+    end
+end
 local function GetHealthBarHeight(...)
     local getter = ns.GetHealthBarHeight
     return getter and getter(...) or 30
@@ -42,16 +75,6 @@ local function SetFriendlyFSFont(fs, size, flags)
     end
 end
 
-local function ConfigureMovingFontRendering(fs)
-    if not fs then return end
-    if fs.SetSnapToPixelGrid then
-        fs:SetSnapToPixelGrid(false)
-    end
-    if fs.SetTexelSnappingBias then
-        fs:SetTexelSnappingBias(0)
-    end
-end
-
 local pairs, ipairs = pairs, ipairs
 local unpack = unpack or table.unpack
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
@@ -62,6 +85,7 @@ local UnitExists, UnitHealthPercent = UnitExists, UnitHealthPercent
 local GetGuildInfo = GetGuildInfo
 local GetRaidTargetIndex, SetRaidTargetIconTexture = GetRaidTargetIndex, SetRaidTargetIconTexture
 local C_NamePlate = C_NamePlate
+local C_TooltipInfo = C_TooltipInfo
 local Enum = Enum
 local issecretvalue, canaccessvalue = issecretvalue, canaccessvalue
 
@@ -183,7 +207,8 @@ local function GetFriendlyHealthTextSize()
 end
 
 local function GetFriendlyNPCNameTextSize()
-    return FriendlyDBVal("friendlyNPCNameTextSize", 13)
+    -- Friendly NPC names use the compact Classic nameplate size by default.
+    return FriendlyDBVal("friendlyNPCNameTextSize", 9)
 end
 
 local function GetFriendlyPlayerNameAlignment()
@@ -219,6 +244,139 @@ local function GetFriendlyNPCNameColor()
     return FriendlyDBColor("friendlyNPCNameColor", 0, 1, 0)
 end
 
+local function GetFriendlyNPCDescriptionTextSize()
+    return FriendlyDBVal("friendlyNPCDescriptionTextSize", 10)
+end
+
+local function GetFriendlyNPCDescriptionColor()
+    return FriendlyDBColor("friendlyNPCDescriptionColor", 0.85, 0.85, 0.85)
+end
+
+local function SafeTooltipLineText(line)
+    if not IsAccessible(line) or type(line) ~= "table" then return nil end
+    local text = line.leftText
+    if not IsAccessible(text) or type(text) ~= "string" or text == "" then return nil end
+    -- Tooltip text can carry color/icon markup; the nameplate only needs the
+    -- readable occupation text.
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+        :gsub("|r", "")
+        :gsub("|T.-|t", "")
+        :gsub("|A.-|a", "")
+    text = text:match("^%s*(.-)%s*$")
+    return text ~= "" and text or nil
+end
+
+local function GetTooltipUnitText(unit, functionName)
+    local fn = _G[functionName]
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, unit)
+    if ok and IsAccessible(value) and type(value) == "string" and value ~= "" then
+        return value
+    end
+    return nil
+end
+
+local function IsNonOccupationTooltipType(lineType, tooltipTypes)
+    if not lineType or not tooltipTypes then return false end
+    local excluded = {
+        "UnitName", "UnitLevel", "UnitClass", "UnitRace", "UnitGuild",
+        "UnitFaction", "UnitReaction", "UnitCreatureType",
+        "UnitCreatureFamily", "UnitClassification",
+    }
+    for _, key in ipairs(excluded) do
+        if tooltipTypes[key] and lineType == tooltipTypes[key] then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsNPCOccupationCandidate(unit, text, unitName)
+    if not text or text == "" then return false end
+    if unitName and text == unitName then return false end
+    if text:match("^%d+$") or text:match("^%d+%s*[-:]") then return false end
+
+    local unitLevel
+    if type(UnitLevel) == "function" then
+        local ok, value = pcall(UnitLevel, unit)
+        if ok and IsAccessible(value) and type(value) == "number" and value >= 0 then
+            unitLevel = tostring(value)
+        end
+    end
+    if unitLevel then
+        local lowerText = text:lower()
+        local levelLabel = type(_G.LEVEL) == "string" and _G.LEVEL:lower() or "level"
+        if lowerText == (levelLabel .. " " .. unitLevel)
+            or lowerText == ("level " .. unitLevel)
+            or lowerText == ("nivel " .. unitLevel) then
+            return false
+        end
+    end
+
+    local creatureType = GetTooltipUnitText(unit, "UnitCreatureType")
+    local creatureFamily = GetTooltipUnitText(unit, "UnitCreatureFamily")
+    if (creatureType and text == creatureType) or (creatureFamily and text == creatureFamily) then
+        return false
+    end
+
+    -- Keep the guard for clients that return a localized creature type in
+    -- the tooltip but do not expose it through UnitCreatureType().
+    local lower = text:lower()
+    local commonCreatureTypes = {
+        humanoid = true, beast = true, demon = true, dragonkin = true,
+        elemental = true, giant = true, undead = true, mechanical = true,
+        critter = true, aberration = true, gas = true,
+    }
+    return not commonCreatureTypes[lower]
+end
+
+local function GetFriendlyNPCDescription(unit)
+    if not unit or UnitIsPlayer(unit) or UnitCanAttack("player", unit) then return nil end
+
+    if C_TooltipInfo and C_TooltipInfo.GetUnit then
+        local ok, info = pcall(C_TooltipInfo.GetUnit, unit)
+        if ok and IsAccessible(info) and type(info) == "table" then
+            local lines = info.lines
+            if IsAccessible(lines) and type(lines) == "table" then
+                local tooltipTypes = Enum and Enum.TooltipDataLineType
+                local titleType = tooltipTypes and tooltipTypes.UnitTitle
+                local unitName = UnitName(unit)
+                if not IsAccessible(unitName) then unitName = nil end
+
+                -- Preferred path: Blizzard explicitly marks the occupation.
+                for _, line in ipairs(lines) do
+                    if IsAccessible(line) and type(line) == "table" then
+                        local lineType = IsAccessible(line.type) and line.type or nil
+                        if titleType and lineType == titleType then
+                            local title = SafeTooltipLineText(line)
+                            if IsNPCOccupationCandidate(unit, title, unitName) then
+                                return title
+                            end
+                        end
+                    end
+                end
+
+                -- Forever may expose the same occupation as an untyped
+                -- tooltip line. Accept it, but never use race/type text.
+                for _, line in ipairs(lines) do
+                    if IsAccessible(line) and type(line) == "table" then
+                        local lineType = IsAccessible(line.type) and line.type or nil
+                        if not IsNonOccupationTooltipType(lineType, tooltipTypes) then
+                            local candidate = SafeTooltipLineText(line)
+                            if IsNPCOccupationCandidate(unit, candidate, unitName) then
+                                return candidate
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Do not fall back to UnitCreatureFamily/UnitCreatureType: those are
+    -- race/type labels such as "Humanoid", not the NPC occupation.
+    return nil
+end
 local function ApplyAlignedTextLayout(fs, anchor, yOffset, alignment)
     if not fs then return end
     local align = alignment or "center"
@@ -227,11 +385,11 @@ local function ApplyAlignedTextLayout(fs, anchor, yOffset, alignment)
     fs:SetHeight(0)
     fs:SetJustifyH(GetAlignmentJustify(align))
     if align == "left" then
-        fs:SetPoint("LEFT", anchor, "LEFT", 0, yOffset or 0)
+        PixelPoint(fs, "LEFT", anchor, "LEFT", 0, yOffset or 0)
     elseif align == "right" then
-        fs:SetPoint("RIGHT", anchor, "RIGHT", 0, yOffset or 0)
+        PixelPoint(fs, "RIGHT", anchor, "RIGHT", 0, yOffset or 0)
     else
-        fs:SetPoint("CENTER", anchor, "CENTER", 0, yOffset or 0)
+        PixelPoint(fs, "CENTER", anchor, "CENTER", 0, yOffset or 0)
     end
 end
 
@@ -239,6 +397,8 @@ local function GetFriendlyHealthAnchorYOffset(plate)
     local offset = FRIENDLY_PLATE_Y_OFFSET
     if plate and plate.guild and plate.guild.IsShown and plate.guild:IsShown() then
         offset = offset - (GetFriendlyGuildTextSize() + 6)
+    elseif plate and plate.description and plate.description.IsShown and plate.description:IsShown() then
+        offset = offset - (GetFriendlyNPCDescriptionTextSize() + 6)
     end
     return offset
 end
@@ -246,7 +406,7 @@ end
 local function ApplyFriendlyHealthAnchor(plate)
     if not (plate and plate.health) then return end
     plate.health:ClearAllPoints()
-    plate.health:SetPoint("CENTER", plate, "CENTER", 0, GetFriendlyHealthAnchorYOffset(plate))
+    PixelPoint(plate.health, "CENTER", plate, "CENTER", 0, GetFriendlyHealthAnchorYOffset(plate))
 end
 
 local function ApplyFriendlyBarTextAnchors(plate)
@@ -256,26 +416,38 @@ local function ApplyFriendlyBarTextAnchors(plate)
         GetFriendlyNPCNameAlignment()
     if plate.name then
         plate.name:ClearAllPoints()
-        plate.name:SetWidth(width)
+        PixelWidth(plate.name, width)
         plate.name:SetJustifyH(GetAlignmentJustify(align))
         if align == "left" then
-            plate.name:SetPoint("BOTTOMLEFT", plate.health, "TOPLEFT", 0, 4)
+            PixelPoint(plate.name, "BOTTOMLEFT", plate.health, "TOPLEFT", 0, 4)
         elseif align == "right" then
-            plate.name:SetPoint("BOTTOMRIGHT", plate.health, "TOPRIGHT", 0, 4)
+            PixelPoint(plate.name, "BOTTOMRIGHT", plate.health, "TOPRIGHT", 0, 4)
         else
-            plate.name:SetPoint("BOTTOM", plate.health, "TOP", 0, 4)
+            PixelPoint(plate.name, "BOTTOM", plate.health, "TOP", 0, 4)
         end
     end
     if plate.guild and plate.name then
         plate.guild:ClearAllPoints()
-        plate.guild:SetWidth(width)
+        PixelWidth(plate.guild, width)
         plate.guild:SetJustifyH(GetAlignmentJustify(align))
         if align == "left" then
-            plate.guild:SetPoint("TOPLEFT", plate.name, "BOTTOMLEFT", 0, -1)
+            PixelPoint(plate.guild, "TOPLEFT", plate.name, "BOTTOMLEFT", 0, -1)
         elseif align == "right" then
-            plate.guild:SetPoint("TOPRIGHT", plate.name, "BOTTOMRIGHT", 0, -1)
+            PixelPoint(plate.guild, "TOPRIGHT", plate.name, "BOTTOMRIGHT", 0, -1)
         else
-            plate.guild:SetPoint("TOP", plate.name, "BOTTOM", 0, -1)
+            PixelPoint(plate.guild, "TOP", plate.name, "BOTTOM", 0, -1)
+        end
+    end
+    if plate.description and plate.name then
+        plate.description:ClearAllPoints()
+        PixelWidth(plate.description, width)
+        plate.description:SetJustifyH(GetAlignmentJustify(align))
+        if align == "left" then
+            PixelPoint(plate.description, "TOPLEFT", plate.name, "BOTTOMLEFT", 0, 1)
+        elseif align == "right" then
+            PixelPoint(plate.description, "TOPRIGHT", plate.name, "BOTTOMRIGHT", 0, 1)
+        else
+            PixelPoint(plate.description, "TOP", plate.name, "BOTTOM", 0, 1)
         end
     end
 end
@@ -294,37 +466,22 @@ local function ApplyFriendlyNameOnlyTextAnchors(nameplate)
     nameFS:SetMaxLines(1)
     nameFS:SetJustifyH(GetAlignmentJustify(align))
     if align == "left" then
-        nameFS:SetPoint("LEFT", uf, "LEFT", 0, 0)
+            PixelPoint(nameFS, "LEFT", uf, "LEFT", 0, 0)
     elseif align == "right" then
-        nameFS:SetPoint("RIGHT", uf, "RIGHT", 0, 0)
+            PixelPoint(nameFS, "RIGHT", uf, "RIGHT", 0, 0)
     else
-        nameFS:SetPoint("CENTER", uf, "CENTER", 0, 0)
+        PixelPoint(nameFS, "CENTER", uf, "CENTER", 0, 0)
     end
 end
 
-local function GetFriendlyLevelNameWidth(name)
-    if name and name.GetStringWidth then
-        local ok, width = pcall(name.GetStringWidth, name)
-        if ok and IsAccessible(width) and type(width) == "number" then
-            return math.max(0, width)
-        end
-    end
-    return 0
-end
-
-local function AnchorFriendlyLevelBeforeName(level, name, alignment)
+local function AnchorFriendlyLevelBeforeName(level, name)
     if not (level and name) then return end
-    local width = GetFriendlyLevelNameWidth(name)
     level:ClearAllPoints()
-    if alignment == "left" then
-        level:SetPoint("RIGHT", name, "LEFT", -4, 0)
-    elseif alignment == "right" then
-        level:SetPoint("RIGHT", name, "RIGHT", -width - 4, 0)
-    else
-        level:SetPoint("RIGHT", name, "CENTER", -(width * 0.5) - 4, 0)
-    end
+    -- The FontString is auto-sized. Anchoring directly to its LEFT edge lets
+    -- WoW resolve the dependency when the text layout changes; measuring the
+    -- string width here races the renderer while the camera scale is moving.
+    PixelPoint(level, "RIGHT", name, "LEFT", -4, 0)
 end
-
 local function ApplyFriendlyPlayerLevelStyle(level)
     if ns.ApplyNameplateLevelTextStyle then
         ns.ApplyNameplateLevelTextStyle(level)
@@ -346,6 +503,100 @@ local function IsFriendlyPlayerUnit(unit)
     if not UnitIsPlayer(unit) then return false end
     if UnitIsUnit(unit, "player") then return false end
     return not UnitCanAttack("player", unit)
+end
+
+local friendlyPlayerPvPMarkers = {}
+local PVP_CLASSIFICATION_ATLASES = {}
+do
+    local classifications = Enum and Enum.PvPUnitClassification
+    if classifications then
+        local atlasByKey = {
+            FlagCarrierHorde = "nameplates-icon-flag-horde",
+            FlagCarrierAlliance = "nameplates-icon-flag-alliance",
+            FlagCarrierNeutral = "nameplates-icon-flag-neutral",
+            CartRunnerHorde = "nameplates-icon-cart-horde",
+            CartRunnerAlliance = "nameplates-icon-cart-alliance",
+            AssassinHorde = "nameplates-icon-bounty-horde",
+            AssassinAlliance = "nameplates-icon-bounty-alliance",
+            OrbCarrierBlue = "nameplates-icon-orb-blue",
+            OrbCarrierGreen = "nameplates-icon-orb-green",
+            OrbCarrierOrange = "nameplates-icon-orb-orange",
+            OrbCarrierPurple = "nameplates-icon-orb-purple",
+        }
+        for key, atlas in pairs(atlasByKey) do
+            local classification = classifications[key]
+            if classification ~= nil then
+                PVP_CLASSIFICATION_ATLASES[classification] = atlas
+            end
+        end
+    end
+end
+
+local function GetFriendlyPlayerPvPAtlas(unit)
+    if not IsFriendlyPlayerUnit(unit) or type(UnitPvpClassification) ~= "function" then
+        return nil
+    end
+    local ok, classification = pcall(UnitPvpClassification, unit)
+    if not ok or not IsAccessible(classification) or classification == nil then
+        return nil
+    end
+    return PVP_CLASSIFICATION_ATLASES[classification]
+end
+
+local function HideFriendlyPlayerPvPMarker(nameplate)
+    local marker = nameplate and friendlyPlayerPvPMarkers[nameplate]
+    if not marker then return end
+    marker:UnregisterAllEvents()
+    marker.unit = nil
+    marker.nameplate = nil
+    marker:Hide()
+end
+
+local function UpdateFriendlyPlayerPvPMarker(nameplate, unit)
+    local db = KullThranUINameplatesDB or {}
+    if db.friendlyNameOnly == false or db.showFriendlyPlayers == false
+        or not (nameplate and unit and IsFriendlyPlayerUnit(unit)) then
+        HideFriendlyPlayerPvPMarker(nameplate)
+        return
+    end
+
+    local uf = nameplate.UnitFrame
+    local name = uf and uf.name
+    if not name then
+        HideFriendlyPlayerPvPMarker(nameplate)
+        return
+    end
+
+    local marker = friendlyPlayerPvPMarkers[nameplate]
+    if not marker then
+        marker = CreateFrame("Frame", nil, uf)
+        marker:SetSize(24, 24)
+        marker.icon = marker:CreateTexture(nil, "OVERLAY")
+        marker.icon:SetAllPoints()
+        marker:SetScript("OnEvent", function(self, _, changedUnit)
+            if not changedUnit or changedUnit == self.unit then
+                UpdateFriendlyPlayerPvPMarker(self.nameplate, self.unit)
+            end
+        end)
+        friendlyPlayerPvPMarkers[nameplate] = marker
+    end
+
+    marker:SetParent(uf)
+    marker:SetFrameLevel(uf:GetFrameLevel() + 10)
+    marker:ClearAllPoints()
+    marker:SetPoint("LEFT", name, "RIGHT", 4, 0)
+    marker.unit = unit
+    marker.nameplate = nameplate
+    marker:UnregisterAllEvents()
+    pcall(marker.RegisterUnitEvent, marker, "UNIT_CLASSIFICATION_CHANGED", unit)
+
+    local atlas = GetFriendlyPlayerPvPAtlas(unit)
+    if not atlas then
+        marker:Hide()
+        return
+    end
+    local atlasSet = pcall(marker.icon.SetAtlas, marker.icon, atlas, false)
+    marker:SetShown(atlasSet)
 end
 
 local function UpdateFriendlyPlayerLevel(nameplate, unit)
@@ -382,8 +633,8 @@ local function UpdateFriendlyPlayerLevel(nameplate, unit)
 
     ApplyFriendlyPlayerLevelStyle(level)
     level:SetText(text)
-    level:SetWidth(math.max(24, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 10))
-    level:SetHeight(math.max(12, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 4))
+    PixelWidth(level, math.max(24, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 10))
+    PixelHeight(level, math.max(12, (tonumber(KullThranUINameplatesDB and KullThranUINameplatesDB.levelFontSize) or 11) + 4))
     AnchorFriendlyLevelBeforeName(level, name, GetFriendlyPlayerNameAlignment())
     level:Show()
 end
@@ -417,6 +668,7 @@ local function RestoreFriendlyPlayerNameText(nameplate, unit)
 
     ApplyFontToNameText(nameFS)
     ApplyFriendlyNameOnlyTextAnchors(nameplate)
+    UpdateFriendlyPlayerPvPMarker(nameplate, unit)
 end
 
 local function EnforceFriendlyPlayerNameOnly(nameplate, unit)
@@ -515,7 +767,6 @@ ApplyFontToNameText = function(nameText)
         nameText:SetShadowOffset(0, 0)
         nameText:SetShadowColor(0, 0, 0, 0)
     end
-    -- Removed SetSnapToPixelGrid(false) and SetTexelSnappingBias(0) to prevent blurry text when moving
     nameText._ktApplyingFont = nil
     styledNameTexts[nameText] = true
 end
@@ -553,175 +804,439 @@ function ns.RefreshFriendlyFontOverride()
 end
 
 -------------------------------------------------------------------------------
---  Name-only NPC overlay
---  In name-only mode, Blizzard's name FontString is restricted and can't be
---  resized.  Instead of trying to modify it, we fully suppress the Blizzard
---  UnitFrame (reparent to hidden frame) and render our own name FontString
---  on the nameplate.  This gives us full control over width, color, and font.
+--  Stable name-only friendly overlay
+--  Plater and Platynator both render friendly names in addon-owned regions.
+--  Keeping the Blizzard name FontString while attaching custom level/guild
+--  regions produces mixed layout passes as the projected plate scale changes.
 -------------------------------------------------------------------------------
-local npcOverlays = {}    -- nameplate → overlay frame
+local npcOverlays = {}    -- nameplate -> stable friendly overlay
 local npcOverlayPool = {} -- recycled overlay frames
 
--- Name-only mode: optional guild line below friendly player names.
-local playerGuildLines = {} -- nameplate → FontString
-local function HidePlayerGuildLine(nameplate)
-    local fs = nameplate and playerGuildLines[nameplate]
-    if fs and fs.Hide then fs:Hide() end
-end
-local function UpdatePlayerGuildLine(nameplate, unit)
-    if not (nameplate and unit) then return end
-    if not IsNameOnlyMode() then HidePlayerGuildLine(nameplate); return end
-    if not ShouldShowFriendlyGuild() then HidePlayerGuildLine(nameplate); return end
-    if UnitCanAttack("player", unit) then HidePlayerGuildLine(nameplate); return end
-    if UnitIsUnit(unit, "player") then HidePlayerGuildLine(nameplate); return end
-    if not UnitIsPlayer(unit) then HidePlayerGuildLine(nameplate); return end
-
-    local uf = nameplate.UnitFrame
-    local nameFS = uf and uf.name
-    if not (nameFS and nameFS.GetFont) then HidePlayerGuildLine(nameplate); return end
-
-    local guildName = GetGuildInfo and GetGuildInfo(unit)
-    if issecretvalue and issecretvalue(guildName) then
-        HidePlayerGuildLine(nameplate)
-        return
-    end
-    if not guildName or guildName == "" then HidePlayerGuildLine(nameplate); return end
-
-    local fs = playerGuildLines[nameplate]
-    if not fs then
-        fs = (uf or nameplate):CreateFontString(nil, "OVERLAY")
-        fs:SetWordWrap(false)
-        fs:SetMaxLines(1)
-        fs:SetTextColor(1, 1, 1, 1)
-        playerGuildLines[nameplate] = fs
-    end
-
-    fs:SetFont((ns and ns.GetFont and ns.GetFont()) or "Fonts\\FRIZQT__.TTF",
-        GetFriendlyGuildTextSize(),
-        (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
-    if KT and KT.EnableTextFontFallback then
-        KT:EnableTextFontFallback(fs, (ns and ns.GetFont and ns.GetFont()) or 'Fonts\\FRIZQT__.TTF')
-    end
-    local _, _, flags = nameFS:GetFont()
-    if not ns or not ns.GetNPUseShadow or ns.GetNPUseShadow() then
-        fs:SetShadowOffset(1, -1)
-        fs:SetShadowColor(0, 0, 0, 1)
-    else
-        fs:SetShadowOffset(0, 0)
-    end
-    -- Removed snapping bias to prevent blur
-
-    local align = GetFriendlyPlayerNameAlignment()
-    fs:ClearAllPoints()
-    fs:SetWidth(math.max(GetFriendlyHealthBarWidth(), 140))
-    fs:SetJustifyH(GetAlignmentJustify(align))
-    if align == "left" then
-        fs:SetPoint("TOPLEFT", nameFS, "BOTTOMLEFT", 0, -1)
-    elseif align == "right" then
-        fs:SetPoint("TOPRIGHT", nameFS, "BOTTOMRIGHT", 0, -1)
-    else
-        fs:SetPoint("TOP", nameFS, "BOTTOM", 0, -1)
-    end
-    local r, g, b = GetFriendlyGuildColor()
-    fs:SetTextColor(r, g, b, 1)
-    fs:SetText("<" .. guildName .. ">")
-    fs:Show()
-end
+local NPC_OVERLAY_FONT_SIZE = 9
+local NPC_OVERLAY_Y_OFFSET = 5
 
 local function GetNPCNameColor(unit)
-    -- UnitReaction: 1-3 = hostile, 4 = neutral, 5+ = friendly
     local reaction = RawUnitAPI.UnitReaction and RawUnitAPI.UnitReaction(unit, "player")
     if not IsAccessible(reaction) then reaction = nil end
     if reaction and reaction == 4 then
-        -- Neutral: yellow
         return 0.9, 0.7, 0.0
     end
-    -- Friendly NPC
     return GetFriendlyNPCNameColor()
 end
+
+local function StyleStableOverlayFont(fs, size)
+    if not fs then return end
+    SetFriendlyFSFont(fs, size, (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
+    -- Platynator only enables smooth scaling for SLUG fonts. The KUI font
+    -- does not use that flag, so forcing it here makes moving text softer.
+    if fs.SetSmoothScaling then
+        fs:SetSmoothScaling(false)
+    end
+end
+
+local function AnchorStableSecondLine(line, name, alignment)
+    if not (line and name) then return end
+    line:ClearAllPoints()
+    line:SetWidth(0)
+    line:SetHeight(0)
+    line:SetJustifyH(GetAlignmentJustify(alignment))
+    if alignment == "left" then
+        PixelPoint(line, "TOPLEFT", name, "BOTTOMLEFT", 0, -1)
+    elseif alignment == "right" then
+        PixelPoint(line, "TOPRIGHT", name, "BOTTOMRIGHT", 0, -1)
+    else
+        PixelPoint(line, "TOP", name, "BOTTOM", 0, -1)
+    end
+end
+
+local function ApplyStableOverlayLayout(overlay, includeRoot)
+    if not (overlay and overlay.name and overlay.unit and overlay.nameplate) then return end
+    local isPlayer = UnitIsPlayer(overlay.unit)
+    local alignment = isPlayer and GetFriendlyPlayerNameAlignment() or GetFriendlyNPCNameAlignment()
+
+    if includeRoot then
+        local db = KullThranUINameplatesDB or {}
+        local yOffset = isPlayer and (tonumber(db.friendlyNameOnlyYOffset) or 0) or -NPC_OVERLAY_Y_OFFSET
+        overlay:ClearAllPoints()
+        overlay:SetPoint("CENTER", overlay.nameplate, "CENTER", 0, yOffset)
+        overlay:SetSize(10, 10)
+    end
+
+    ApplyAlignedTextLayout(overlay.name, overlay, 0, alignment)
+
+    if overlay.level then
+        overlay.level:ClearAllPoints()
+        PixelPoint(overlay.level, "RIGHT", overlay.name, "LEFT", -4, 0)
+    end
+    if overlay.pvpFrame then
+        overlay.pvpFrame:ClearAllPoints()
+        PixelPoint(overlay.pvpFrame, "LEFT", overlay.name, "RIGHT", 4, 0)
+    end
+
+    AnchorStableSecondLine(overlay.guild, overlay.name, alignment)
+    AnchorStableSecondLine(overlay.description, overlay.name, alignment)
+end
+
+local function ScheduleStableOverlayLayout(overlay)
+    if not overlay then return end
+    overlay._ktLayoutFrames = 0
+    overlay:SetScript("OnUpdate", function(self)
+        self._ktLayoutFrames = (self._ktLayoutFrames or 0) + 1
+        if self._ktLayoutFrames < 2 then return end
+        self._ktLayoutFrames = nil
+        self:SetScript("OnUpdate", nil)
+        -- Match Platynator: wait two render frames after OnSizeChanged before
+        -- asking PixelUtil to resolve anchors at the new projected scale.
+        ApplyStableOverlayLayout(self, false)
+    end)
+end
+
+local UpdateStableOverlayContent
 
 local function AcquireOverlay()
     local overlay = table.remove(npcOverlayPool)
     if overlay then return overlay end
+
     overlay = CreateFrame("Frame", nil, UIParent)
-    overlay:SetSize(1, 1)
+    overlay:SetSize(10, 10)
+    overlay:SetFlattensRenderLayers(true)
+    if overlay.SetCollapsesLayout then
+        overlay:SetCollapsesLayout(true)
+    end
+    if overlay.SetIgnoreParentScale then
+        overlay:SetIgnoreParentScale(false)
+    end
+
     overlay.name = overlay:CreateFontString(nil, "OVERLAY")
-    SetFriendlyFSFont(overlay.name, 9, "")
-    ConfigureMovingFontRendering(overlay.name)
-    overlay.name:SetPoint("CENTER", overlay, "CENTER", 0, 0)
-    overlay.name:SetShadowOffset(1, -1)
-    overlay.name:SetShadowColor(0, 0, 0, 1)
-    -- Removed snapping bias to prevent blur
-    return overlay
-end
-
-local NPC_OVERLAY_FONT_SIZE = 13
-local NPC_OVERLAY_Y_OFFSET = 5 -- positive = lower on screen (closer to character)
-
-local function ApplyFriendlyNPCOverlayTextAnchors(overlay)
-    if not (overlay and overlay.name) then return end
-    ApplyAlignedTextLayout(overlay.name, overlay, 0, GetFriendlyNPCNameAlignment())
-end
-
-local function ShowNPCOverlay(nameplate, unit)
-    if npcOverlays[nameplate] then return end
-    local overlay = AcquireOverlay()
-    overlay:SetParent(nameplate)
-    overlay:ClearAllPoints()
-    overlay:SetPoint("CENTER", nameplate, "CENTER", 0, -NPC_OVERLAY_Y_OFFSET)
-    overlay:SetFrameLevel(nameplate:GetFrameLevel() + 5)
-    overlay:Show()
-    -- Set name text
-    local unitName = UnitName(unit) or ""
-    overlay.name:SetText(unitName)
-    overlay.name:SetWidth(0)
     overlay.name:SetWordWrap(false)
     overlay.name:SetNonSpaceWrap(false)
     overlay.name:SetMaxLines(1)
-    overlay.name:SetHeight(0)
-    -- Apply our font
-    local font = (ns and ns.GetFont and ns.GetFont()) or "Fonts\\FRIZQT__.TTF"
-    overlay.name:SetFont(font, GetFriendlyNPCNameTextSize() or NPC_OVERLAY_FONT_SIZE,
-        (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
-    ConfigureMovingFontRendering(overlay.name)
-    if not ns or not ns.GetNPUseShadow or ns.GetNPUseShadow() then
-        overlay.name:SetShadowOffset(1, -1)
-        overlay.name:SetShadowColor(0, 0, 0, 1)
-    else
-        overlay.name:SetShadowOffset(0, 0)
-    end
-    -- Removed snapping bias to prevent blur
-    -- Color based on reaction
-    local r, g, b = GetNPCNameColor(unit)
-    overlay.name:SetTextColor(r, g, b)
-    ApplyFriendlyNPCOverlayTextAnchors(overlay)
-    overlay.unit = unit
-    -- Listen for name updates (server may not have sent the name yet)
-    overlay:RegisterUnitEvent("UNIT_NAME_UPDATE", unit)
-    overlay:SetScript("OnEvent", function(self, event, ...)
-        if event == "UNIT_NAME_UPDATE" then
-            local updatedName = UnitName(self.unit) or ""
-            self.name:SetText(updatedName)
+
+    overlay.level = overlay:CreateFontString(nil, "OVERLAY")
+    overlay.level:SetWordWrap(false)
+    overlay.level:SetMaxLines(1)
+    overlay.level:Hide()
+
+    overlay.guild = overlay:CreateFontString(nil, "OVERLAY")
+    overlay.guild:SetWordWrap(false)
+    overlay.guild:SetNonSpaceWrap(false)
+    overlay.guild:SetMaxLines(1)
+    overlay.guild:Hide()
+
+    overlay.description = overlay:CreateFontString(nil, "OVERLAY")
+    overlay.description:SetWordWrap(false)
+    overlay.description:SetNonSpaceWrap(false)
+    overlay.description:SetMaxLines(1)
+    overlay.description:Hide()
+
+    -- Every pooled FontString receives a font before any SetText call. This
+    -- also protects NPC-only/player-only reuse paths from "Font not set".
+    StyleStableOverlayFont(overlay.name, NPC_OVERLAY_FONT_SIZE)
+    StyleStableOverlayFont(overlay.level, 11)
+    StyleStableOverlayFont(overlay.guild, GetFriendlyGuildTextSize())
+    StyleStableOverlayFont(overlay.description, GetFriendlyNPCDescriptionTextSize())
+    overlay.pvpFrame = CreateFrame("Frame", nil, overlay)
+    overlay.pvpFrame:SetSize(20, 20)
+    overlay.pvpFrame:Hide()
+    overlay.pvp = overlay.pvpFrame:CreateTexture(nil, "OVERLAY")
+    overlay.pvp:SetAllPoints()
+
+    overlay:SetScript("OnSizeChanged", function(self)
+        if not self._ktApplyingLayout then
+            ScheduleStableOverlayLayout(self)
         end
     end)
+    overlay:SetScript("OnEvent", function(self, _, changedUnit)
+        if not changedUnit or changedUnit == self.unit then
+            UpdateStableOverlayContent(self)
+            ApplyStableOverlayLayout(self, false)
+        end
+    end)
+    return overlay
+end
+
+UpdateStableOverlayContent = function(overlay)
+    local unit = overlay and overlay.unit
+    if not unit then return end
+
+    local isPlayer = UnitIsPlayer(unit)
+    local db = KullThranUINameplatesDB or {}
+    local nameSize = isPlayer and GetFriendlyPlayerNameTextSize()
+        or (GetFriendlyNPCNameTextSize() or NPC_OVERLAY_FONT_SIZE)
+
+    StyleStableOverlayFont(overlay.name, nameSize)
+    overlay.name:SetText(UnitName(unit) or "")
+
+    if isPlayer then
+        local classColor
+        if db.classColorFriendly ~= false then
+            local _, classToken = UnitClass(unit)
+            classColor = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+        end
+        if classColor then
+            overlay.name:SetTextColor(classColor.r, classColor.g, classColor.b, 1)
+        else
+            overlay.name:SetTextColor(GetFriendlyPlayerNameColor())
+        end
+
+        local levelText = db.showLevel ~= false and ns.GetNameplateLevelText
+            and ns.GetNameplateLevelText(unit) or nil
+        if levelText then
+            ApplyFriendlyPlayerLevelStyle(overlay.level)
+            overlay.level:SetText(levelText)
+            overlay.level:Show()
+        else
+            overlay.level:SetText("")
+            overlay.level:Hide()
+        end
+
+        local guildName = ShouldShowFriendlyGuild() and GetGuildInfo and GetGuildInfo(unit) or nil
+        if guildName and guildName ~= "" then
+            StyleStableOverlayFont(overlay.guild, GetFriendlyGuildTextSize())
+            local gr, gg, gb = GetFriendlyGuildColor()
+            overlay.guild:SetTextColor(gr, gg, gb, 1)
+            overlay.guild:SetText("<" .. guildName .. ">")
+            overlay.guild:Show()
+        else
+            overlay.guild:SetText("")
+            overlay.guild:Hide()
+        end
+
+        overlay.description:SetText("")
+        overlay.description:Hide()
+
+        local atlas = GetFriendlyPlayerPvPAtlas(unit)
+        if atlas and overlay.pvp and overlay.pvp.SetAtlas then
+            local atlasSet = pcall(overlay.pvp.SetAtlas, overlay.pvp, atlas, false)
+            overlay.pvpFrame:SetShown(atlasSet)
+        else
+            overlay.pvpFrame:Hide()
+        end
+    else
+        local r, g, b = GetNPCNameColor(unit)
+        overlay.name:SetTextColor(r, g, b, 1)
+        overlay.level:SetText("")
+        overlay.level:Hide()
+        overlay.guild:SetText("")
+        overlay.guild:Hide()
+        overlay.pvpFrame:Hide()
+
+        local descriptionText = GetFriendlyNPCDescription(unit)
+        StyleStableOverlayFont(overlay.description, GetFriendlyNPCDescriptionTextSize())
+        local dr, dg, dbColor = GetFriendlyNPCDescriptionColor()
+        overlay.description:SetTextColor(dr, dg, dbColor, 1)
+        overlay.description:SetText(descriptionText or "")
+        overlay.description:SetShown(descriptionText ~= nil and descriptionText ~= "")
+    end
+end
+
+local function ShowNPCOverlay(nameplate, unit)
+    if not (nameplate and unit) then return end
+    local existing = npcOverlays[nameplate]
+    if existing then
+        existing.unit = unit
+        existing.nameplate = nameplate
+        UpdateStableOverlayContent(existing)
+        ApplyStableOverlayLayout(existing, true)
+        return
+    end
+
+    local overlay = AcquireOverlay()
     npcOverlays[nameplate] = overlay
+    overlay.unit = unit
+    overlay.nameplate = nameplate
+    overlay:SetParent(nameplate)
+    overlay:SetFrameLevel(nameplate:GetFrameLevel() + 5)
+    overlay:Show()
+
+    overlay:UnregisterAllEvents()
+    pcall(overlay.RegisterUnitEvent, overlay, "UNIT_NAME_UPDATE", unit)
+    pcall(overlay.RegisterUnitEvent, overlay, "UNIT_GUILD_UPDATE", unit)
+    pcall(overlay.RegisterUnitEvent, overlay, "UNIT_CLASSIFICATION_CHANGED", unit)
+    pcall(overlay.RegisterUnitEvent, overlay, "UNIT_LEVEL", unit)
+
+    UpdateStableOverlayContent(overlay)
+    overlay._ktApplyingLayout = true
+    ApplyStableOverlayLayout(overlay, true)
+    overlay._ktApplyingLayout = nil
+
+    if not nameplate._ktStableOverlaySizeHook then
+        nameplate._ktStableOverlaySizeHook = true
+        nameplate:HookScript("OnSizeChanged", function(self)
+            local current = npcOverlays[self]
+            if current then
+                ScheduleStableOverlayLayout(current)
+            end
+        end)
+    end
+
+    if C_Timer and C_Timer.After then
+        for _, delay in ipairs({ 0, 0.1, 0.5 }) do
+            C_Timer.After(delay, function()
+                local current = npcOverlays[nameplate]
+                if current and current.unit == unit then
+                    UpdateStableOverlayContent(current)
+                    ApplyStableOverlayLayout(current, false)
+                end
+            end)
+        end
+    end
 end
 
 local function HideNPCOverlay(nameplate)
     local overlay = npcOverlays[nameplate]
     if not overlay then return end
-    -- Primero desvinculamos del registro para cortar eventos cuanto antes
     npcOverlays[nameplate] = nil
-    overlay.unit = nil
-    -- Limpieza visual: ocultar, desanclar y reparentar al contenedor neutro
     overlay:UnregisterAllEvents()
+    overlay:SetScript("OnUpdate", nil)
+    overlay._ktLayoutFrames = nil
+    overlay.unit = nil
+    overlay.nameplate = nil
+    overlay.name:SetText("")
+    overlay.level:SetText("")
+    overlay.level:Hide()
+    overlay.guild:SetText("")
+    overlay.guild:Hide()
+    overlay.description:SetText("")
+    overlay.description:Hide()
+    overlay.pvpFrame:Hide()
     overlay:ClearAllPoints()
     overlay:SetParent(UIParent)
     overlay:Hide()
-    -- Devolver al pool para reutilización
     npcOverlayPool[#npcOverlayPool + 1] = overlay
 end
+-------------------------------------------------------------------------------
+--  Runtime layout comparison
+--  /knpdebug [target|mouseover|nameplateN] prints the same scale, parent and
+--  font metrics for Blizzard, KUI, Plater and Platynator when present.
+-------------------------------------------------------------------------------
+local function DebugValue(frame, methodName)
+    local fn = frame and frame[methodName]
+    if type(fn) ~= "function" then return nil end
+    local ok, a, b, c, d, e = pcall(fn, frame)
+    if not ok or not IsAccessible(a) then return nil end
+    return a, b, c, d, e
+end
 
+local function DebugNumber(value)
+    return type(value) == "number" and string.format("%.4f", value) or "-"
+end
+
+local function DebugFrameName(frame)
+    if not frame then return "nil" end
+    local name = DebugValue(frame, "GetDebugName") or DebugValue(frame, "GetName")
+    return type(name) == "string" and name or tostring(frame)
+end
+
+local function PrintLayoutFrame(label, frame, fontString)
+    if not frame then
+        print("|cff66ccffKNP debug|r " .. label .. ": unavailable")
+        return
+    end
+
+    local width, height = DebugValue(frame, "GetSize")
+    local scale = DebugValue(frame, "GetScale")
+    local effectiveScale = DebugValue(frame, "GetEffectiveScale")
+    local parent = DebugValue(frame, "GetParent")
+    local point, relativeTo, relativePoint, x, y = DebugValue(frame, "GetPoint")
+    local flatten = DebugValue(frame, "GetFlattensRenderLayers")
+    local ignoreScale = DebugValue(frame, "GetIgnoreParentScale")
+
+    print(string.format(
+        "|cff66ccffKNP debug|r %s parent=%s size=%sx%s scale=%s effective=%s point=%s/%s x=%s y=%s flatten=%s ignoreParentScale=%s",
+        label,
+        DebugFrameName(parent),
+        DebugNumber(width), DebugNumber(height),
+        DebugNumber(scale), DebugNumber(effectiveScale),
+        tostring(point or "-"), tostring(relativePoint or "-"),
+        DebugNumber(x), DebugNumber(y),
+        tostring(flatten), tostring(ignoreScale)
+    ))
+
+    if fontString then
+        local font, fontSize, flags = DebugValue(fontString, "GetFont")
+        local textScale = DebugValue(fontString, "GetTextScale")
+        local fontScale = DebugValue(fontString, "GetScale")
+        local stringWidth = DebugValue(fontString, "GetStringWidth")
+        print(string.format(
+            "|cff66ccffKNP debug|r %s.font file=%s size=%s flags=%s scale=%s textScale=%s stringWidth=%s parent=%s",
+            label,
+            tostring(font or "-"), DebugNumber(fontSize), tostring(flags or ""),
+            DebugNumber(fontScale), DebugNumber(textScale), DebugNumber(stringWidth),
+            DebugFrameName(DebugValue(fontString, "GetParent"))
+        ))
+    end
+end
+
+local function FindPlatynatorDisplay(nameplate)
+    if not nameplate or not nameplate.GetChildren then return nil, nil end
+    local children = { nameplate:GetChildren() }
+    for _, child in ipairs(children) do
+        if type(child) == "table" and type(child.ApplyPixelPerfectSizing) == "function"
+            and type(child.widgets) == "table" then
+            local text
+            for _, widget in ipairs(child.widgets) do
+                if widget and widget.text and widget:IsShown() then
+                    text = widget.text
+                    break
+                end
+            end
+            return child, text
+        end
+    end
+    return nil, nil
+end
+
+local function FindDebugNameplate(requestedUnit)
+    if requestedUnit and requestedUnit ~= "" then
+        local requested = C_NamePlate.GetNamePlateForUnit(requestedUnit)
+        if requested then return requestedUnit, requested end
+    end
+
+    for _, unit in ipairs({ "target", "mouseover" }) do
+        local plate = UnitExists(unit) and C_NamePlate.GetNamePlateForUnit(unit)
+        if plate then return unit, plate end
+    end
+
+    for _, plate in ipairs(GetAccessibleNamePlates()) do
+        local unit = plate.namePlateUnitToken
+        if unit and not UnitCanAttack("player", unit) and not UnitIsUnit(unit, "player") then
+            return unit, plate
+        end
+    end
+end
+
+local function DumpFriendlyLayout(requestedUnit)
+    local unit, nameplate = FindDebugNameplate(requestedUnit)
+    if not nameplate then
+        print("|cff66ccffKNP debug|r Target or mouse over a visible nameplate first.")
+        return
+    end
+
+    print(string.format("|cff66ccffKNP debug|r unit=%s name=%s plate=%s",
+        tostring(unit), tostring(UnitName(unit) or "<secret>"), DebugFrameName(nameplate)))
+    PrintLayoutFrame("Blizzard", nameplate.UnitFrame,
+        nameplate.UnitFrame and nameplate.UnitFrame.name)
+
+    local kuiOverlay = npcOverlays[nameplate]
+    PrintLayoutFrame("KUI-overlay", kuiOverlay, kuiOverlay and kuiOverlay.name)
+
+    local kuiBar = ns.friendlyPlatesByNameplate and ns.friendlyPlatesByNameplate[nameplate]
+    PrintLayoutFrame("KUI-bar", kuiBar, kuiBar and kuiBar.name)
+
+    local platerFrame = nameplate.unitFrame
+    local platerFont = platerFrame and (platerFrame.ActorNameSpecial or platerFrame.unitName)
+    PrintLayoutFrame("Plater", platerFrame, platerFont)
+
+    local platynatorFrame, platynatorFont = FindPlatynatorDisplay(nameplate)
+    PrintLayoutFrame("Platynator", platynatorFrame, platynatorFont)
+end
+
+SLASH_KULLTHRANNAMEPLATEDEBUG1 = "/knpdebug"
+SlashCmdList.KULLTHRANNAMEPLATEDEBUG = function(message)
+    local requested = type(message) == "string" and message:match("^%s*(.-)%s*$") or nil
+    DumpFriendlyLayout(requested ~= "" and requested or nil)
+end
 -------------------------------------------------------------------------------
 --  Hidden frame — Blizzard sub-frames reparented here become invisible
 --  and stop receiving layout updates.  This suppresses the default frames.
@@ -863,69 +1378,13 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
         end
     end
 
-    -- Name-only mode (players): remove Blizzard's width constraint on the
-    -- name FontString so long names are never truncated with "...".
+    -- Name-only players use the same addon-owned overlay as friendly NPCs.
+    -- This avoids mixing Blizzard's projected FontString with KUI regions.
     if IsNameOnlyMode() and UnitIsPlayer(unit) then
-        if nameplate and nameplate.UnitFrame and nameplate.UnitFrame.name then
-            local nameFS = nameplate.UnitFrame.name
-            RestoreFriendlyPlayerNameText(nameplate, unit)
-            EnforceFriendlyPlayerNameOnly(nameplate, unit)
-            -- Hook SetWidth so Blizzard can't re-apply a constraint later
-            if not hookedNameFonts[nameFS] then
-                hookedNameFonts[nameFS] = true
-                local guard = false
-                local function KeepNameAutoSized(self)
-                    if guard then return end
-                    if not IsNameOnlyMode() then return end
-                    -- Do not inspect incoming dimensions: protected plates may
-                    -- supply secret values. Constants are safe display writes.
-                    guard = true
-                    self:SetWidth(0)
-                    self:SetHeight(0)
-                    guard = false
-                end
-                hooksecurefunc(nameFS, "SetWidth", KeepNameAutoSized)
-                if nameFS.SetSize then
-                    hooksecurefunc(nameFS, "SetSize", KeepNameAutoSized)
-                end
-                hooksecurefunc(nameFS, "SetFont", function(self)
-                    if self._ktApplyingFont or self._ktTextFontApplying or not IsNameOnlyMode() then return end
-                    ApplyFontToNameText(self)
-                end)
-                hooksecurefunc(nameFS, "SetFontObject", function(self)
-                    if self._ktApplyingFont or self._ktTextFontApplying or not IsNameOnlyMode() then return end
-                    ApplyFontToNameText(self)
-                end)
-            end
-
-            local showFriendly = KullThranUINameplatesDB and KullThranUINameplatesDB.showFriendlyPlayers ~= false
-            if showFriendly then
-                UpdatePlayerGuildLine(nameplate, unit)
-                C_Timer.After(0, function()
-                    local np = C_NamePlate.GetNamePlateForUnit(unit)
-                    if np then
-                        RestoreFriendlyPlayerNameText(np, unit)
-                        EnforceFriendlyPlayerNameOnly(np, unit)
-                        UpdatePlayerGuildLine(np, unit)
-                    end
-                end)
-                C_Timer.After(0.1, function()
-                    local np = C_NamePlate.GetNamePlateForUnit(unit)
-                    if np then
-                        RestoreFriendlyPlayerNameText(np, unit)
-                        EnforceFriendlyPlayerNameOnly(np, unit)
-                        UpdatePlayerGuildLine(np, unit)
-                    end
-                end)
-                C_Timer.After(0.5, function()
-                    local np = C_NamePlate.GetNamePlateForUnit(unit)
-                    if np then
-                        RestoreFriendlyPlayerNameText(np, unit)
-                        EnforceFriendlyPlayerNameOnly(np, unit)
-                        UpdatePlayerGuildLine(np, unit)
-                    end
-                end)
-            end
+        local showFriendly = KullThranUINameplatesDB
+            and KullThranUINameplatesDB.showFriendlyPlayers ~= false
+        if showFriendly and nameplate then
+            SuppressNPCNameplate(nameplate, unit)
         end
     end
 end)
@@ -938,8 +1397,8 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
     if nameplate then
         HideNPCOverlay(nameplate)
         nameOnlyNPCSuppressed[nameplate] = nil
-        HidePlayerGuildLine(nameplate)
         HideFriendlyPlayerLevel(nameplate)
+        HideFriendlyPlayerPvPMarker(nameplate)
     end
     if modifiedUFs[unit] then
         RestoreBlizzardUF(unit)
@@ -950,12 +1409,21 @@ end)
 --  Frame pool for custom friendly plates
 -------------------------------------------------------------------------------
 local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(plate)
+    -- Match Platynator's stable display root: a small, fixed-size child of
+    -- Blizzard's projected nameplate whose render layers are composed once.
+    plate:SetSize(10, 10)
     plate:SetFlattensRenderLayers(true)
+    if plate.SetCollapsesLayout then
+        plate:SetCollapsesLayout(true)
+    end
+    if plate.SetIgnoreParentScale then
+        plate:SetIgnoreParentScale(false)
+    end
 
     plate.health = CreateFrame("StatusBar", nil, plate)
     plate.health:SetFrameLevel(10)
-    plate.health:SetPoint("CENTER", plate, "CENTER", 0, FRIENDLY_PLATE_Y_OFFSET)
-    plate.health:SetSize(GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
+    PixelPoint(plate.health, "CENTER", plate, "CENTER", 0, FRIENDLY_PLATE_Y_OFFSET)
+    PixelSize(plate.health, GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
     plate.health:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
 
     plate.healthBG = plate.health:CreateTexture(nil, "BACKGROUND")
@@ -1050,6 +1518,17 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
         plate.guild:SetTextColor(r, g, b, 1)
     end
     plate.guild:Hide()
+
+    plate.description = plate:CreateFontString(nil, "OVERLAY")
+    SetFriendlyFSFont(plate.description, GetFriendlyNPCDescriptionTextSize(),
+        (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
+    plate.description:SetWordWrap(false)
+    plate.description:SetMaxLines(1)
+    do
+        local dr, dg, db = GetFriendlyNPCDescriptionColor()
+        plate.description:SetTextColor(dr, dg, db, 1)
+    end
+    plate.description:Hide()
     ApplyFriendlyBarTextAnchors(plate)
 
     plate.leftArrow = plate:CreateTexture(nil, "OVERLAY")
@@ -1072,6 +1551,13 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
     plate.raid:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
     plate.raid:SetTexCoord(0, 1, 0, 1)
 
+    plate.pvpFrame = CreateFrame("Frame", nil, plate)
+    plate.pvpFrame:SetSize(24, 24)
+    plate.pvpFrame:SetPoint("LEFT", plate.name, "RIGHT", 4, 0)
+    plate.pvpFrame:Hide()
+    plate.pvp = plate.pvpFrame:CreateTexture(nil, "OVERLAY")
+    plate.pvp:SetAllPoints()
+
     if CreateUnitHealPredictionCalculator then
         plate.hpCalculator = CreateUnitHealPredictionCalculator()
         if plate.hpCalculator.SetMaximumHealthMode then
@@ -1082,6 +1568,20 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
     plate:SetScript("OnEvent", function(self, event, ...)
         local handler = self[event]
         if handler then handler(self, ...) end
+    end)
+    plate:SetScript("OnSizeChanged", function(self)
+        if not self.unit or self._ktApplyingStableLayout then return end
+        self._ktStableLayoutFrames = 0
+        self:SetScript("OnUpdate", function(frame)
+            frame._ktStableLayoutFrames = (frame._ktStableLayoutFrames or 0) + 1
+            if frame._ktStableLayoutFrames < 2 then return end
+            frame:SetScript("OnUpdate", nil)
+            frame._ktStableLayoutFrames = nil
+            if not frame.unit or not frame.nameplate then return end
+            frame._ktApplyingStableLayout = true
+            frame:RefreshPixelPerfectLayout()
+            frame._ktApplyingStableLayout = nil
+        end)
     end)
 end)
 
@@ -1113,8 +1613,8 @@ local function UpdateFriendlyBarLevel(plate)
 
     ApplyFriendlyPlayerLevelStyle(level)
     level:SetText(text)
-    level:SetWidth(math.max(24, (tonumber(db.levelFontSize) or 11) + 10))
-    level:SetHeight(math.max(12, (tonumber(db.levelFontSize) or 11) + 4))
+    PixelWidth(level, math.max(24, (tonumber(db.levelFontSize) or 11) + 10))
+    PixelHeight(level, math.max(12, (tonumber(db.levelFontSize) or 11) + 4))
     AnchorFriendlyLevelBeforeName(level, name, GetFriendlyPlayerNameAlignment())
     level:Show()
 end
@@ -1127,15 +1627,17 @@ function FriendlyFrame:SetUnit(unit, nameplate)
     self.unit = unit
     self.nameplate = nameplate
     self:SetParent(nameplate)
+    if self.SetIgnoreParentScale then
+        self:SetIgnoreParentScale(false)
+    end
     self:ClearAllPoints()
-    -- Single center anchor to prevent pixel shimmer when nameplate bounces
     local yOff = KullThranUINameplatesDB and KullThranUINameplatesDB.friendlyPlateYOffset or 0
     self:SetPoint("CENTER", nameplate, "CENTER", 0, yOff)
-    self:SetSize(1, 1)
+    self:SetSize(10, 10)
     self:SetFrameLevel(nameplate:GetFrameLevel() + 1)
     self:Show()
 
-    self.health:SetSize(GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
+    PixelSize(self.health, GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
     ApplyFriendlyHealthAnchor(self)
 
     -- Suppress Blizzard UF via reparenting (immediate, no OnUpdate needed)
@@ -1143,6 +1645,7 @@ function FriendlyFrame:SetUnit(unit, nameplate)
 
     self:RegisterUnitEvent("UNIT_HEALTH", unit)
     self:RegisterUnitEvent("UNIT_NAME_UPDATE", unit)
+    pcall(self.RegisterUnitEvent, self, "UNIT_CLASSIFICATION_CHANGED", unit)
 
     local classColor
     local db = KullThranUINameplatesDB
@@ -1170,33 +1673,46 @@ function FriendlyFrame:SetUnit(unit, nameplate)
         (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
     SetFriendlyFSFont(self.guild, GetFriendlyGuildTextSize(),
         (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
+    SetFriendlyFSFont(self.description, GetFriendlyNPCDescriptionTextSize(),
+        (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
     ApplyFriendlyBarTextAnchors(self)
     do
         local hr, hg, hb = GetFriendlyHealthTextColor()
         self.hpText:SetTextColor(hr, hg, hb, 1)
         local gr, gg, gb = GetFriendlyGuildColor()
         self.guild:SetTextColor(gr, gg, gb, 1)
+        local dr, dg, db = GetFriendlyNPCDescriptionColor()
+        self.description:SetTextColor(dr, dg, db, 1)
     end
 
     self:UpdateHealth()
     self:UpdateName()
     self:UpdateRaidIcon()
+    self:UpdatePvPMarker()
     self:ApplyTarget()
     if ns.ApplyHealthBarTexture then ns.ApplyHealthBarTexture(self) end
 end
 
 function FriendlyFrame:ClearUnit()
+    self:SetScript("OnUpdate", nil)
+    self._ktStableLayoutFrames = nil
+    self._ktApplyingStableLayout = nil
     self:UnregisterAllEvents()
     self.name:SetText("")
     if self.level then self.level:SetText(""); self.level:Hide() end
     if self.guild then self.guild:SetText(""); self.guild:Hide() end
+    if self.description then self.description:SetText(""); self.description:Hide() end
     -- Restore Blizzard UF before clearing our reference
     if self.unit then RestoreBlizzardUF(self.unit) end
     self.unit = nil
     self.nameplate = nil
+    if self.SetIgnoreParentScale then
+        self:SetIgnoreParentScale(false)
+    end
     self.glow:Hide()
     self.highlight:Hide()
     self.raidFrame:Hide()
+    self.pvpFrame:Hide()
     self.leftArrow:Hide()
     self.rightArrow:Hide()
     self:Hide()
@@ -1299,6 +1815,16 @@ function FriendlyFrame:UpdateName()
             self.guild:Hide()
         end
     end
+    if self.description then
+        if not UnitIsPlayer(unit) then
+            local descriptionText = GetFriendlyNPCDescription(unit)
+            self.description:SetText(descriptionText or "")
+            self.description:SetShown(descriptionText ~= nil and descriptionText ~= "")
+        else
+            self.description:SetText("")
+            self.description:Hide()
+        end
+    end
     ApplyFriendlyHealthAnchor(self)
     ApplyFriendlyBarTextAnchors(self)
     self:UpdateLevel()
@@ -1339,6 +1865,22 @@ function FriendlyFrame:UpdateRaidIcon()
     self.raidFrame:Show()
 end
 
+function FriendlyFrame:UpdatePvPMarker()
+    if not self.unit or not self.pvpFrame or not self.pvp then
+        if self.pvpFrame then self.pvpFrame:Hide() end
+        return
+    end
+
+    local atlas = GetFriendlyPlayerPvPAtlas(self.unit)
+    if not atlas then
+        self.pvpFrame:Hide()
+        return
+    end
+
+    local atlasSet = pcall(self.pvp.SetAtlas, self.pvp, atlas, false)
+    self.pvpFrame:SetShown(atlasSet)
+end
+
 function FriendlyFrame:ApplyTarget()
     if not self.unit then return end
     local isTarget = UnitIsUnit(self.unit, "target")
@@ -1368,6 +1910,8 @@ end
 function FriendlyFrame:UNIT_HEALTH() self:UpdateHealth() end
 
 function FriendlyFrame:UNIT_NAME_UPDATE() self:UpdateName() end
+
+function FriendlyFrame:UNIT_CLASSIFICATION_CHANGED() self:UpdatePvPMarker() end
 
 -------------------------------------------------------------------------------
 --  Friendly event manager (target, mouseover, raid icons)
@@ -1468,9 +2012,11 @@ function ns.RemoveFriendlyPlateNoRestore(unit)
     plate.unit = nil
     plate.nameplate = nil
     plate.name:SetText("")
+    if plate.description then plate.description:SetText(""); plate.description:Hide() end
     plate.glow:Hide()
     plate.highlight:Hide()
     plate.raidFrame:Hide()
+    plate.pvpFrame:Hide()
     plate.leftArrow:Hide()
     plate.rightArrow:Hide()
 
@@ -1553,12 +2099,33 @@ function ns.RefreshFriendlyPlateSize()
     local h = GetFriendlyHealthBarHeight()
     local w = GetFriendlyHealthBarWidth()
     for _, plate in pairs(friendlyPlates) do
-        plate.health:SetSize(w, h)
+        PixelSize(plate.health, w, h)
         ApplyFriendlyHealthAnchor(plate)
         ApplyFriendlyBarTextAnchors(plate)
         if plate.UpdateHealthMarkers then
             plate:UpdateHealthMarkers()
         end
+    end
+end
+
+function FriendlyFrame:RefreshPixelPerfectLayout()
+    if not (self.unit and self.nameplate) then return end
+
+    local yOff = KullThranUINameplatesDB and KullThranUINameplatesDB.friendlyPlateYOffset or 0
+    self:ClearAllPoints()
+    self:SetPoint("CENTER", self.nameplate, "CENTER", 0, yOff)
+    self:SetSize(10, 10)
+    PixelSize(self.health, GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
+    ApplyFriendlyHealthAnchor(self)
+    ApplyFriendlyBarTextAnchors(self)
+    self:UpdateLevel()
+    self:UpdateRaidIcon()
+    self:UpdatePvPMarker()
+    self:UpdateHealthMarkers()
+end
+function ns.RefreshFriendlyPixelPerfectLayout()
+    for _, plate in pairs(friendlyPlates) do
+        plate:RefreshPixelPerfectLayout()
     end
 end
 
@@ -1577,10 +2144,10 @@ function ns.RefreshFriendlyPlayerLevels()
         return
     end
 
-    for _, nameplate in ipairs(GetAccessibleNamePlates(true)) do
-        local unit = nameplate.namePlateUnitToken
-        if unit then
-            UpdateFriendlyPlayerLevel(nameplate, unit)
+    for _, overlay in pairs(npcOverlays) do
+        if overlay and overlay.unit and UnitIsPlayer(overlay.unit) then
+            UpdateStableOverlayContent(overlay)
+            ApplyStableOverlayLayout(overlay, false)
         end
     end
 end
@@ -1604,50 +2171,37 @@ function ns.RefreshFriendlyTextStyle()
             local gr, gg, gb = GetFriendlyGuildColor()
             plate.guild:SetTextColor(gr, gg, gb, 1)
         end
+        if plate.description then
+            SetFriendlyFSFont(plate.description, GetFriendlyNPCDescriptionTextSize(),
+                (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
+            local dr, dg, db = GetFriendlyNPCDescriptionColor()
+            plate.description:SetTextColor(dr, dg, db, 1)
+        end
         ApplyFriendlyHealthAnchor(plate)
         ApplyFriendlyBarTextAnchors(plate)
         if plate.UpdateName then plate:UpdateName() end
         if plate.UpdateHealth then plate:UpdateHealth() end
     end
 
-    for nameplate, overlay in pairs(npcOverlays) do
-        if overlay and overlay.name then
-            overlay.name:SetFont((ns and ns.GetFont and ns.GetFont()) or "Fonts\\FRIZQT__.TTF",
-                GetFriendlyNPCNameTextSize() or NPC_OVERLAY_FONT_SIZE,
-                (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
-            ConfigureMovingFontRendering(overlay.name)
-            if not ns or not ns.GetNPUseShadow or ns.GetNPUseShadow() then
-                overlay.name:SetShadowOffset(1, -1)
-                overlay.name:SetShadowColor(0, 0, 0, 1)
-            else
-                overlay.name:SetShadowOffset(0, 0)
-            end
-            local r, g, b = GetFriendlyNPCNameColor()
-            overlay.name:SetTextColor(r, g, b, 1)
-            ApplyFriendlyNPCOverlayTextAnchors(overlay)
-        end
-        if nameplate and overlay and overlay.unit then
-            local updatedName = UnitName(overlay.unit) or ""
-            overlay.name:SetText(updatedName)
-        end
-    end
-
-    for nameplate, _ in pairs(playerGuildLines) do
-        if nameplate and nameplate.namePlateUnitToken then
-            UpdatePlayerGuildLine(nameplate, nameplate.namePlateUnitToken)
-        end
-    end
-
-    if IsNameOnlyMode() then
-        for _, nameplate in ipairs(GetAccessibleNamePlates(true)) do
-            local unit = nameplate.namePlateUnitToken
-            if unit and not UnitCanAttack("player", unit) and not UnitIsUnit(unit, "player") and UnitIsPlayer(unit) then
-                ApplyFontToNameplate(nameplate)
-            end
+    for _, overlay in pairs(npcOverlays) do
+        if overlay and overlay.unit then
+            UpdateStableOverlayContent(overlay)
+            ApplyStableOverlayLayout(overlay, true)
         end
     end
 end
 
+function ns.RefreshFriendlyNameOnlyOverlayLayout()
+    for _, overlay in pairs(npcOverlays) do
+        if overlay and overlay.unit then
+            UpdateStableOverlayContent(overlay)
+            ApplyStableOverlayLayout(overlay, true)
+        end
+    end
+end
+
+-- Options historically call this name after font changes.
+ns.RefreshFriendlyFontOverride = ns.RefreshFriendlyNameOnlyOverlayLayout
 -------------------------------------------------------------------------------
 --  System enable / disable  (called from toggle setValue and on login)
 -------------------------------------------------------------------------------
@@ -1656,6 +2210,14 @@ function ns.UpdateFriendlyNameplateSystem()
     local nameOnly     = IsNameOnlyMode()    -- name-only mode
     local showFriendly = KullThranUINameplatesDB and KullThranUINameplatesDB.showFriendlyPlayers ~= false
     SetFriendlyAuraCVars(shouldEnable or (nameOnly and showFriendly))
+
+    -- The name-only marker is attached to Blizzard's UnitFrame. Remove it
+    -- immediately when switching to bars or hiding friendly players.
+    if not (nameOnly and showFriendly) then
+        for nameplate in pairs(friendlyPlayerPvPMarkers) do
+            HideFriendlyPlayerPvPMarker(nameplate)
+        end
+    end
 
     if ns.QueueNameplateCVar then
         local db = KullThranUINameplatesDB
@@ -1718,61 +2280,40 @@ function ns.UpdateFriendlyNameplateSystem()
         end
     end
 
-    -- Name-only font override: apply when name-only AND friendly plates are shown
-    if nameOnly and showFriendly then
-        ApplyFriendlyFontOverride()
-        -- (nameplate sizing handled by Blizzard in name-only mode)
-        -- Set class-color CVar for Blizzard's name-only rendering
-        if ns.QueueNameplateCVar then
-            local db = KullThranUINameplatesDB
-            local cc = (db and db.classColorFriendly ~= false) and 1 or 0
-            ns.QueueNameplateCVar("nameplateUseClassColorForFriendlyPlayerUnitNames", cc)
-        end
-        -- Sweep NPC plates: suppress health bars and color names green
-        local npcEnabled = IsFriendlyNPCEnabled()
-        local function SweepNPCPlates()
-            local allPlates = GetAccessibleNamePlates()
-            if allPlates then
-                for _, nameplate in ipairs(allPlates) do
-                    local u = nameplate.namePlateUnitToken
-                    if u and not UnitCanAttack("player", u) and not UnitIsUnit(u, "player") and not UnitIsPlayer(u) then
-                        if npcEnabled then
-                            SuppressNPCNameplate(nameplate, u)
-                        else
-                            RestoreNPCNameplate(nameplate, u)
-                        end
-                    end
-                end
-            end
-        end
-        SweepNPCPlates()
-        -- Delayed sweep: Blizzard creates NPC plates asynchronously after
-        -- the CVar changes, so sweep again after a short delay.
-        C_Timer.After(0.1, SweepNPCPlates)
-        C_Timer.After(0.5, SweepNPCPlates)
-
-        local function SweepPlayerGuild()
-            if not ShouldShowFriendlyGuild() then
-                for np in pairs(playerGuildLines) do HidePlayerGuildLine(np) end
-                return
-            end
-            local allPlates = GetAccessibleNamePlates()
-            if allPlates then
-                for _, nameplate in ipairs(allPlates) do
-                    local u = nameplate.namePlateUnitToken
-                    if u and not UnitCanAttack("player", u) and not UnitIsUnit(u, "player") and UnitIsPlayer(u) then
-                        UpdatePlayerGuildLine(nameplate, u)
-                    end
-                end
-            end
-        end
-        SweepPlayerGuild()
-        C_Timer.After(0.1, SweepPlayerGuild)
-        C_Timer.After(0.5, SweepPlayerGuild)
-    elseif not shouldEnable then
-        -- Not in health-bar mode — restore fonts (covers disabled + name-only-off)
+    if nameOnly then
         RestoreFriendlyFontOverride()
-        for np in pairs(playerGuildLines) do HidePlayerGuildLine(np) end
+
+        local npcEnabled = IsFriendlyNPCEnabled()
+        local function SweepStableFriendlyOverlays()
+            local allPlates = GetAccessibleNamePlates()
+            if not allPlates then return end
+
+            for _, nameplate in ipairs(allPlates) do
+                local unit = nameplate.namePlateUnitToken
+                if unit and not UnitCanAttack("player", unit) and not UnitIsUnit(unit, "player") then
+                    if UnitIsPlayer(unit) then
+                        if showFriendly then
+                            SuppressNPCNameplate(nameplate, unit)
+                        else
+                            RestoreNPCNameplate(nameplate, unit)
+                        end
+                    elseif npcEnabled then
+                        SuppressNPCNameplate(nameplate, unit)
+                    else
+                        RestoreNPCNameplate(nameplate, unit)
+                    end
+                end
+            end
+        end
+
+        SweepStableFriendlyOverlays()
+        C_Timer.After(0.1, SweepStableFriendlyOverlays)
+        C_Timer.After(0.5, SweepStableFriendlyOverlays)
+    elseif not shouldEnable then
+        RestoreFriendlyFontOverride()
+        for nameplate in pairs(nameOnlyNPCSuppressed) do
+            RestoreNPCNameplate(nameplate, nameplate.namePlateUnitToken)
+        end
     end
 end
 
@@ -1840,6 +2381,16 @@ function ns.TrySuppressNPCHealthBar(unit, nameplate)
     SuppressNPCNameplate(nameplate, unit)
 end
 
+function ns.TrySuppressFriendlyPlayerNameplate(unit, nameplate)
+    if not (unit and nameplate and IsNameOnlyMode()) then return end
+    local db = KullThranUINameplatesDB or {}
+    if db.showFriendlyPlayers == false then return end
+    if not UnitIsPlayer(unit) or UnitIsUnit(unit, "player")
+        or UnitCanAttack("player", unit) then
+        return
+    end
+    SuppressNPCNameplate(nameplate, unit)
+end
 function ns.RestoreFriendlyNPCNameColor(nameplate)
     if not nameplate then return end
     local tok = nameplate.namePlateUnitToken

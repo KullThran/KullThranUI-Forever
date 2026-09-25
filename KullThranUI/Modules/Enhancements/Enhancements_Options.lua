@@ -2453,7 +2453,7 @@ KT:RegisterPage("enhancements", LText("Enhancements"), 52, function(sc, W)
         function() return db.enable ~= false end,
         function(v)
             db.enable = v and true or false
-            Refresh()
+            Reload()
         end)
     y = y + h
 

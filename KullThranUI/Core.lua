@@ -1961,29 +1961,8 @@ function KT:RestoreManagedPositions()
         end
     end
 
-    local blizzMove = self.GetModule and self:GetModule("BlizzMove", true)
-    if blizzMove and blizzMove.FrameData and blizzMove.AddToSetFramePointsQueue then
-        for frame, frameData in pairs(blizzMove.FrameData) do
-            local storage = frameData and frameData.storage
-            local points = storage and storage.points
-            local dragPoints = points and points.dragPoints
-            if
-                frame
-                and storage
-                and not storage.disabled
-                and points
-                and points.dragged
-                and dragPoints
-                and not (frameData.IgnoreSavedPositionWhenMaximized and frame.isMaximized)
-            then
-                if blizzMove.SetupPointStorage then
-                    pcall(blizzMove.SetupPointStorage, blizzMove, frame)
-                end
-                pcall(blizzMove.AddToSetFramePointsQueue, blizzMove, frame, dragPoints)
-            end
-        end
-    end
-
+    -- KUI Move/UnlockMode owns Blizzard-window restoration in Forever.
+    -- The UnlockElements pass below is the single canonical restore path.
     if not self.UnlockElements then
         return
     end
@@ -2241,6 +2220,7 @@ end)
 -- io, la fuente es solo la eventual carga del cliente via _G (merge+poll).
 local ktRawReadCache
 local ktRawReadPath
+local ktRawNameplatesCache
 local ktRawReadLogged = false
 local ktRawReadUnavailableLogged = false
 _G.KT_RAW_READ_FUNC = function()
@@ -2283,23 +2263,38 @@ _G.KT_RAW_READ_FUNC = function()
             if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=no-KullThranDB", tostring(p)) end
             return nil
         end
-        local chunk, compileError = loadChunk(content .. "\nreturn KullThranDB")
+        -- Forever may expose declared SavedVariables after addon Lua has run.
+        -- Read all KUI-owned tables declared in the core TOC, not only AceDB.
+        local chunk, compileError = loadChunk(content .. [[
+return {
+    core = KullThranDB,
+    nameplates = KullThranUINameplatesDB_Forever,
+    auraReminders = KUIAuraRemindersDB_Forever,
+    spellDuration = KUISpellDurationDB_Forever,
+}]])
         if not chunk then
             if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=compile error=%s", tostring(p), tostring(compileError)) end
             return nil
         end
-        local ok2, t = pcall(chunk)
-        if not (ok2 and type(t) == "table") then
-            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=execution ok=%s type=%s", tostring(p), tostring(ok2), type(t)) end
+        local ok2, bundle = pcall(chunk)
+        if not (ok2 and type(bundle) == "table") then
+            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=execution ok=%s type=%s", tostring(p), tostring(ok2), type(bundle)) end
             return nil
         end
-        ktRawReadCache = t
+        local core = bundle.core
+        if type(core) ~= "table" then
+            if KT.PersistDebug then KT:PersistDebug("RAWREAD rejected path=%s reason=missing-core type=%s", tostring(p), type(core)) end
+            return nil
+        end
+        ktRawReadCache = core
+        ktRawNameplatesCache = bundle.nameplates
+        _G.KT_RAW_NAMEPLATES_DB = ktRawNameplatesCache
         ktRawReadPath = p
         _G.KT_RAW_READ_PATH = p
         if KT.PersistDebug then
-            KT:PersistDebug("RAWREAD SUCCESS path=%s table=%s", tostring(p), tostring(t))
+            KT:PersistDebug("RAWREAD SUCCESS path=%s core=%s nameplates=%s", tostring(p), tostring(core), tostring(ktRawNameplatesCache))
         end
-        return t
+        return core
     end
 
     local roots = {
