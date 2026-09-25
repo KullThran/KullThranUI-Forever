@@ -36,16 +36,15 @@ jobs:
         run: |
           changelog_file="KullThranUI/CHANGELOG.md"
           changelog_tmp="$RUNNER_TEMP/kullthranui-latest-changelog.md"
-          awk '
-            /^## [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ {
-              if (found) exit
+          target_version="${GITHUB_REF_NAME#v}"
+          target_version="${target_version%-beta}"
+          awk -v target_version="$target_version" '
+            $0 ~ "^## " target_version "([[:space:]]|$)" {
               found=1
               print
               next
             }
-            /^- [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ {
-              if (found) exit
-            }
+            found && /^## [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ { exit }
             found && /^- (KullThranUI Changelog|Current addon version|Primary source|Secondary source)/ { next }
             found && /^- [0-9]+\.[0-9]+\.[0-9]+ \([0-9]+-[0-9]+-[0-9]+\)/ { next }
             found { print }
@@ -83,6 +82,14 @@ jobs:
           KUI_VERSION="${KUI_VERSION%-beta}"
           echo "KUI_VERSION=${KUI_VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Validar credenciales de publicación
+        shell: bash
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          test -n "$CF_API_KEY"
+          test -n "$WAGO_API_TOKEN"
       - name: Empaquetar y publicar KullThranUI Forever en Curse y Wago
         uses: BigWigsMods/packager@v2
         with:
