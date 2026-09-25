@@ -208,7 +208,7 @@ enable = true,
 threatModBorder = false,
 friendlyShowDefaultNames = false,
 textSlotRight = "healthPercent",
-topSlotSize = 40,
+topSlotSize = 30,
 focusColorEnabled = true,
 dispelGlowUseTypeColor = false,
 showFriendlyNPCs = true,
@@ -340,7 +340,7 @@ r = 0.92,
 textSlotRightYOffset = 0,
 textSlotLeft = "none",
 castNameSize = 10,
-bottomSlotSize = 40,
+bottomSlotSize = 30,
 targetIndicatorStyle = "arrow-double",
 castIconScale = 1,
 pandemicGlowStyle = 1,
@@ -422,7 +422,7 @@ b = 0.19,
 g = 0.72,
 r = 0.81,
 },
-debuffIconSize = 40,
+debuffIconSize = 30,
 unitTypeColoringNoOverrideThreat = true,
 buffSlot = "left",
 sideAuraXOffset = 2,
@@ -2433,10 +2433,10 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     -- Forever level text: independent of the four health/name text slots.
     plate.level = plate.topTextFrame:CreateFontString(nil, "OVERLAY")
     ApplyLevelTextStyle(plate.level)
-    plate.level:SetJustifyH("LEFT")
+    plate.level:SetJustifyH("RIGHT")
     plate.level:SetWordWrap(false)
     plate.level:SetMaxLines(1)
-    plate.level:SetWidth(120)
+    plate.level:SetWidth(0)
     plate.level:SetHeight(48)
     plate.level:SetPoint("BOTTOMLEFT", plate.health, "TOPLEFT",
         GetLevelConfigValue("levelXOffset") or 24,
@@ -5246,6 +5246,18 @@ function NameplateFrame:UpdateName()
 
     local displayName = UnitName(unit)
     self.name:SetText(type(displayName) == "string" and displayName or "")
+    if self.UpdateLevelAnchor then self:UpdateLevelAnchor() end
+end
+
+function NameplateFrame:UpdateLevelAnchor()
+    if not self.level or not self.level:IsShown() then return end
+    local nameW = self.name:GetStringWidth() or 0
+    local boxW = self.name:GetWidth() or 0
+    if nameW == 0 or boxW == 0 then return end
+    local textW = math.min(nameW, boxW)
+    local offset = (boxW - textW) / 2
+    self.level:ClearAllPoints()
+    PP.Point(self.level, "RIGHT", self.name, "LEFT", offset - 2, 0)
 end
 -- Muestra el nivel de la unidad con estilo y posición independientes.
 function NameplateFrame:UpdateLevel()
@@ -5267,13 +5279,9 @@ function NameplateFrame:UpdateLevel()
 
     ApplyLevelTextStyle(self.level)
     self.level:SetText(levelText)
-    PP.Width(self.level, math.max(60, GetHealthBarWidth() + 80))
     PP.Height(self.level, math.max(16, (tonumber(GetLevelConfigValue("levelFontSize")) or 11) + 6))
-    self.level:ClearAllPoints()
-    PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT",
-        tonumber(GetLevelConfigValue("levelXOffset")) or 24,
-        tonumber(GetLevelConfigValue("levelYOffset")) or 4)
     self.level:Show()
+    self:UpdateLevelAnchor()
 end
 -- Muestra/oculta el icono de clasificación (elite, worldboss, rareelite, rare)
 -- según el slot configurado. Dentro de instancia se oculta siempre.
@@ -5312,16 +5320,19 @@ function NameplateFrame:UpdateNameWidth()
 
     if nameSlot == "textSlotTop" then
         PP.Width(self.name, GetTopNameReservedWidth(self, barW))
+        if self.UpdateLevelAnchor then self:UpdateLevelAnchor() end
         return
     end
 
     if nameSlot then
         local remainingWidth = barW - GetInlineNameReservedWidth(nameSlot)
         PP.Width(self.name, math.max(remainingWidth, 20))
+        if self.UpdateLevelAnchor then self:UpdateLevelAnchor() end
         return
     end
 
     PP.Width(self.name, math.max(barW, 20))
+    if self.UpdateLevelAnchor then self:UpdateLevelAnchor() end
 end
 -- Re-ancla el nombre de la unidad según el slot actual y refresca
 -- auras y clasificación para mantener coherencia de layout.
