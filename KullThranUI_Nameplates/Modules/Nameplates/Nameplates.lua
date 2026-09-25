@@ -204,200 +204,427 @@ local HP_BAR_SLOTS = {
 }
 
 local defaults = {
-    enable = true,
-    hostile = { r = 0.39, g = 0.11, b = 0.09 },
-    neutral = { r = 0.81, g = 0.72, b = 0.19 },
-    friendly = { r = 0.20, g = 0.55, b = 0.90 },
-    tapped  = { r = 0.50, g = 0.50, b = 0.50 },
-    enemyOutOfCombat = { r = 0.34, g = 0.34, b = 0.34 },
-    focus = { r = 0.051, g = 0.820, b = 0.620 },
-    focusColorEnabled = true,
-    focusOverlayTexture = "striped-v2",
-    focusOverlayAlpha = 0.40,
-    focusOverlayColor = { r = 1.0, g = 1.0, b = 1.0 },
-    caster  = { r = 0.231, g = 0.510, b = 0.965 },
-    miniboss = { r = 0.518, g = 0.243, b = 0.984 },
-    enemyInCombat = { r = 0.800, g = 0.137, b = 0.137 },
-    tankHasAggro = { r = 0.05, g = 0.82, b = 0.62 },
-    tankHasAggroEnabled = true,
-    classicTankAggro = false,
-    tankLosingAggro = { r = 0.81, g = 0.72, b = 0.19 },
-    tankOtherTankHasAggro = { r = 0.26, g = 0.58, b = 0.95 },
-    tankNoAggro = { r = 1.00, g = 0.22, b = 0.17 },
-    dpsNearAggro = { r = 0.81, g = 0.72, b = 0.19 },
-    dpsNoAggro = { r = 0.39, g = 0.11, b = 0.09 },
-    dpsHasAggro = { r = 1.00, g = 0.50, b = 0.00 },
-    threatModHealth = true,
-    threatModBorder = false,
-    threatModName = false,
-    threatUseSoloColor = false,
-    threatSoloColor = { r = 0.39, g = 0.11, b = 0.09 },
-    interruptReady = { r = 0.92, g = 0.35, b = 0.20 },
-    interruptCooldown = { r = 0.45, g = 0.45, b = 0.45 },
-    castBar = { r = 0.70, g = 0.40, b = 0.90 },
-    castBarUninterruptible = { r = 0.80, g = 0.18, b = 0.16 },
-    healthBarHeight = 30,
-    friendlyNameOnly = true,
-    friendlyNameOnlyYOffset = -20,
-    friendlyPlateYOffset = 0,
-    friendlyHealthBarHeight = 17,
-    friendlyHealthBarWidth = 150,
-    showFriendlyNPCs = true,
-    showFriendlyPlayers = true,
-    friendlyShowDefaultNames = false,
-    classColorFriendly = true,
-    showEnemyPets = false,
-    showShieldPrediction = true,
-    animateHealthBar = false,
-    font = ns.DEFAULT_FONT_PATH,
-    textSlotTop = "enemyName",
-    textSlotRight = "healthPercent",
-    textSlotLeft = "none",
-    textSlotCenter = "none",
-    showTargetArrows = true,
-    targetIndicatorStyle = "arrow-double",
-    targetIndicatorReversed = true,
-    targetIndicatorGlow = true,
-    targetIndicatorGlowColor = { r = 0.00, g = 0.7686, b = 1.00 }, -- #00C4FF
-    targetArrowScale = 1.0,
-    showClassPower = false,
-    classPowerPos = "bottom",
-    classPowerYOffset = 3,
-    classPowerXOffset = 0,
-    classPowerScale = 1.0,
-    classPowerClassColors = true,
-    classPowerCustomColor = { r = 1.00, g = 0.84, b = 0.30 },
-    classPowerBgColor = { r = 0.082, g = 0.082, b = 0.082, a = 1.0 },
-    classPowerEmptyColor = { r = 0.2, g = 0.2, b = 0.2, a = 1.0 },
-    classPowerGap = 2,
-    healthBarWidth = 45,
-    nameplateOverlapV = 1.05,
-    stackSpacingScale = 50,
-    stackingEnabled = true,
-    hitboxScaleX = 100,
-    hitboxScaleY = 100,
-    nameplateYOffset = 0,
-    enemyNameTextSize = 12,
-    showLevel = true,
-    levelFont = ns.DEFAULT_FONT_PATH,
-    levelFontSize = 11,
-    levelFontOutline = "OUTLINE",
-    levelShadow = true,
-    levelColor = { r = 1, g = 0.82, b = 0.20, a = 1 },
-    -- La clasificación ocupa el extremo izquierdo superior por defecto;
-    -- el nivel empieza después del icono para evitar solapamiento.
-    levelXOffset = 24,
-    levelYOffset = 4,
-    debuffTimerColor = { r = 1, g = 1, b = 1 },
-    auraTextPosition = "topleft",
-    debuffTimerPosition = "topleft",
-    buffTimerPosition = "topleft",
-    ccTimerPosition = "topleft",
-    auraDurationTextSize = 15,
-    auraDurationTextColor = { r = 1, g = 1, b = 1 },
-    auraStackTextSize = 11,
-    auraStackTextColor = { r = 1, g = 1, b = 1 },
-    debuffSlot = "top",
-    topDebuffAlign = "center",
-    topDebuffOffsetX = 0,
-    buffSlot = "left",
-    ccSlot = "right",
-    debuffYOffset = 2,
-    sideAuraXOffset = 2,
-    nameYOffset = 0,
-    auraSpacing = 2,
-    debuffIconSize = 40,
-    buffIconSize = 36,
-    buffTextSize = 12,
-    buffTextColor = { r = 1, g = 1, b = 1 },
-    ccIconSize = 36,
-    ccTextSize = 12,
-    ccTextColor = { r = 1, g = 1, b = 1 },
-    targetGlowStyle = "kullthranui",
-    targetGlowColor = { r = 0.00, g = 0.6157, b = 1.00 }, -- #009DFF
-    raidMarkerPos = "topright",
-    raidMarkerSize = 24,
-    classificationSlot = "topleft",
-    rareEliteIconSize = 20,
-    castBarHeight = 17,
-    castNameSize = 10,
-    castNameColor = { r = 1, g = 1, b = 1 },
-    castTargetSize = 10,
-    castTargetClassColor = true,
-    castTargetColor = { r = 1, g = 1, b = 1 },
-    -- Show every debuff cast by the player on hostile nameplates. Restricting
-    -- this to Blizzard's nameplateShowPersonal flag hides many ordinary DoTs.
-    showAllDebuffs = true,
-    borderStyle = "kullthran",
-    borderColor = { r = 0.067, g = 0.067, b = 0.067 },
-    pandemicGlow = false,
-    pandemicGlowStyle = 1,
-    pandemicGlowColor = { r = 1.0, g = 0.800, b = 0.329 },
-    pandemicGlowLines = 8,
-    pandemicGlowThickness = 1,
-    pandemicGlowSpeed = 4,
-    debuffExpiryGlow = true,
-    debuffExpiryGlowThreshold = 3,
-    debuffExpiryGlowUseTypeColor = true,
-    debuffExpiryGlowColor = { r = 1.0, g = 0.82, b = 0.20 },
-    dispelGlow = false,
-    dispelGlowStyle = 2,
-    dispelGlowColor = { r = 1.0, g = 1.0, b = 1.0 },
-    dispelGlowUseTypeColor = false,
-    castScale = 100,
-    focusCastHeight = 100,
-    questMobColorEnabled = false,
-    questMobColor = { r = 0.157, g = 0.855, b = 0.475 },
-    colorOverrideEnabled = false,
-    showAggroFlash = false,
-    showAggroGlow = false,
-    unitTypeColoringEnabled = true,
-    unitTypeColoringNoOverrideThreat = true,
-    unitTypeColoringEnableElite = false,
-    unitTypeColoringEnableTrivial = false,
-    boss = { r = 0.80, g = 0.18, b = 0.16 },
-    elite = { r = 0.90, g = 0.58, b = 0.16 },
-    trivial = { r = 0.45, g = 0.45, b = 0.45 },
-    priorityTargetsEnabled = false,
-    priorityTargetsInput = "",
-    priorityTargetsCompiled = nil,
-    priorityTargetsColor = { r = 0.90, g = 0.20, b = 0.20 },
-    priorityTargetsTexture = "Melli Reforged",
-    auraPriorityEnabled = false,
-    auraPriorityInput = "",
-    auraPriorityCompiled = nil,
-    auraPriorityColor = { r = 0.55, g = 0.35, b = 1.00 },
-    auraPriorityTexture = "Melli Reforged",
-    auraPriorityMatchMode = "all",
-    showCastIcon = true,
-    castIconScale = 1,
-    hashLineEnabled = false,
-    hashLinePercent = 30,
-    hashLineColor = { r = 1, g = 1, b = 1 },
-    kickTickEnabled = true,
-    kickTickColor = { r = 1, g = 1, b = 1 },
-    -- Core Positions: slot-based size + XY offsets
-    topSlotSize = 40,        topSlotXOffset = 0,      topSlotYOffset = 0,
-    rightSlotSize = 36,      rightSlotXOffset = 0,    rightSlotYOffset = 0,
-    leftSlotSize = 36,       leftSlotXOffset = 0,     leftSlotYOffset = 0,
-    toprightSlotSize = 36,   toprightSlotXOffset = 0, toprightSlotYOffset = 0, toprightSlotGrowth = "right",
-    topleftSlotSize = 36,    topleftSlotXOffset = 0,  topleftSlotYOffset = 0,  topleftSlotGrowth = "left",
-    bottomSlotSize = 40,     bottomSlotXOffset = 0,   bottomSlotYOffset = 0,
-    -- Posiciones de texto: tamaño y offsets XY por slot
-    textSlotTopSize = 12,    textSlotTopXOffset = 0,  textSlotTopYOffset = 0,
-    textSlotRightSize = 10,  textSlotRightXOffset = 0, textSlotRightYOffset = 0,
-    textSlotLeftSize = 10,   textSlotLeftXOffset = 0,  textSlotLeftYOffset = 0,
-    textSlotCenterSize = 10, textSlotCenterXOffset = 0, textSlotCenterYOffset = 0,
-    -- Posiciones de texto: colores por slot
-    textSlotTopColor = { r = 1, g = 1, b = 1 },
-    textSlotRightColor = { r = 1, g = 1, b = 1 },
-    textSlotLeftColor = { r = 1, g = 1, b = 1 },
-    textSlotCenterColor = { r = 1, g = 1, b = 1 },
-    -- Textura overlay de barra de vida
-    healthBarTexture = "Melli Reforged",
-    castBarTexture = "Melli Reforged",
-    friendlyPlayerHealthTexture = "Melli Reforged",
-    friendlyNPCHealthTexture = "Melli Reforged",
+enable = true,
+threatModBorder = false,
+friendlyShowDefaultNames = false,
+textSlotRight = "healthPercent",
+topSlotSize = 40,
+focusColorEnabled = true,
+dispelGlowUseTypeColor = false,
+showFriendlyNPCs = true,
+castBarUninterruptible = {
+b = 0.16,
+g = 0.18,
+r = 0.8,
+},
+leftSlotXOffset = 0,
+toprightSlotXOffset = 0,
+castBarHeight = 17,
+textSlotTop = "enemyName",
+threatModHealth = true,
+debuffExpiryGlow = true,
+debuffTimerPosition = "topleft",
+tapped = {
+b = 0.5,
+g = 0.5,
+r = 0.5,
+},
+friendlyNameOnlyYOffset = -20,
+showAggroGlow = false,
+healthBarTexture = "Melli Reforged",
+raidMarkerSize = 24,
+topDebuffAlign = "center",
+nameYOffset = 0,
+textSlotRightColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+auraDurationTextColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+elite = {
+b = 0.16,
+g = 0.58,
+r = 0.9,
+},
+priorityTargetsEnabled = false,
+classPowerCustomColor = {
+b = 0.3,
+g = 0.84,
+r = 1,
+},
+enemyOutOfCombat = {
+b = 0.34,
+g = 0.34,
+r = 0.34,
+},
+topSlotYOffset = 0,
+pandemicGlowSpeed = 4,
+buffIconSize = 36,
+caster = {
+b = 0.965,
+g = 0.51,
+r = 0.231,
+},
+_auraIconScaleMigrated_v2 = true,
+friendlyNPCHealthTexture = "Melli Reforged",
+targetGlowStyle = "kullthranui",
+levelColor = {
+b = 0.2,
+g = 0.82,
+r = 1,
+},
+_castBarStateColorsMigrated_v2 = true,
+topleftSlotXOffset = 0,
+rightSlotSize = 36,
+levelXOffset = 24,
+hitboxScaleX = 100,
+classPowerEmptyColor = {
+b = 0.2,
+g = 0.2,
+r = 0.2,
+},
+miniboss = {
+b = 0.984,
+g = 0.243,
+r = 0.518,
+},
+buffTimerPosition = "topleft",
+targetGlowColor = {
+b = 1,
+g = 0.6157,
+r = 0,
+},
+auraStackTextColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+hashLinePercent = 30,
+bottomSlotXOffset = 0,
+raidMarkerPos = "topright",
+showAggroFlash = false,
+enemyInCombat = {
+b = 0.137,
+g = 0.137,
+r = 0.8,
+},
+dispelGlowStyle = 2,
+auraStackTextSize = 11,
+topSlotXOffset = 0,
+toprightSlotSize = 36,
+_friendlyPlateDefaultsMigrated_v2 = true,
+tankHasAggro = {
+b = 0.62,
+g = 0.82,
+r = 0.05,
+},
+ccIconSize = 36,
+classicTankAggro = false,
+topleftSlotSize = 36,
+_auraIconScaleMigrated_v1 = true,
+debuffExpiryGlowUseTypeColor = true,
+dispelGlowColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+interruptReady = {
+b = 0.2,
+g = 0.35,
+r = 0.92,
+},
+textSlotRightYOffset = 0,
+textSlotLeft = "none",
+castNameSize = 10,
+bottomSlotSize = 40,
+targetIndicatorStyle = "arrow-double",
+castIconScale = 1,
+pandemicGlowStyle = 1,
+levelShadow = true,
+rareEliteIconSize = 20,
+threatModName = false,
+textSlotCenterColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+auraPriorityEnabled = false,
+ccSlot = "right",
+focusOverlayAlpha = 0.4,
+friendly = {
+b = 0.9,
+g = 0.55,
+r = 0.2,
+},
+dispelGlow = false,
+textSlotRightSize = 10,
+ccTimerPosition = "topleft",
+unitTypeColoringEnableElite = false,
+friendlyPlateYOffset = 0,
+kickTickEnabled = true,
+castNameColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+classPowerXOffset = 0,
+textSlotLeftSize = 10,
+interruptCooldown = {
+b = 0.45,
+g = 0.45,
+r = 0.45,
+},
+debuffSlot = "top",
+leftSlotSize = 36,
+showTargetArrows = true,
+_castBarStateColorsMigrated_v1 = true,
+threatUseSoloColor = false,
+targetIndicatorGlowColor = {
+b = 1,
+g = 0.7686,
+r = 0,
+},
+threatSoloColor = {
+b = 0.09,
+g = 0.11,
+r = 0.39,
+},
+castBar = {
+b = 0.9,
+g = 0.4,
+r = 0.7,
+},
+friendlyHealthBarWidth = 150,
+enemyNameTextSize = 12,
+borderColor = {
+b = 0.067,
+g = 0.067,
+r = 0.067,
+},
+classPowerBgColor = {
+b = 0.082,
+g = 0.082,
+r = 0.082,
+},
+_barSizeDefaultsMigrated_v1 = true,
+dpsNoAggro = {
+b = 0.09,
+g = 0.11,
+r = 0.39,
+},
+levelFontOutline = "OUTLINE",
+tankLosingAggro = {
+b = 0.19,
+g = 0.72,
+r = 0.81,
+},
+debuffIconSize = 40,
+unitTypeColoringNoOverrideThreat = true,
+buffSlot = "left",
+sideAuraXOffset = 2,
+friendlyNameOnly = true,
+_healthBarTextureMediaMigrated_v1 = true,
+hashLineColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+classPowerClassColors = true,
+showShieldPrediction = true,
+borderStyle = "kullthran",
+pandemicGlow = false,
+classPowerGap = 2,
+tankHasAggroEnabled = true,
+kickTickColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+animateHealthBar = false,
+debuffExpiryGlowColor = {
+b = 0.2,
+g = 0.82,
+r = 1,
+},
+buffTextSize = 12,
+auraPriorityColor = {
+b = 1,
+g = 0.35,
+r = 0.55,
+},
+rightSlotXOffset = 0,
+neutral = {
+b = 0.19,
+g = 0.72,
+r = 0.81,
+},
+castBarTexture = "Melli Reforged",
+showFriendlyPlayers = true,
+dpsNearAggro = {
+b = 0.19,
+g = 0.72,
+r = 0.81,
+},
+castTargetClassColor = true,
+auraDurationTextSize = 15,
+textSlotLeftYOffset = 0,
+focus = {
+b = 0.62,
+g = 0.82,
+r = 0.051,
+},
+toprightSlotGrowth = "right",
+_tankHasAggroEnabledMigrated_v1 = true,
+showClassPower = false,
+textSlotCenterSize = 10,
+textSlotTopYOffset = 0,
+nameplateYOffset = 0,
+levelYOffset = 4,
+classPowerPos = "bottom",
+dpsHasAggro = {
+b = 0,
+g = 0.5,
+r = 1,
+},
+pandemicGlowColor = {
+b = 0.329,
+g = 0.8,
+r = 1,
+},
+unitTypeColoringEnableTrivial = false,
+targetIndicatorGlow = true,
+topDebuffOffsetX = 0,
+textSlotTopXOffset = 0,
+buffTextColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+questMobColor = {
+b = 0.475,
+g = 0.855,
+r = 0.157,
+},
+debuffYOffset = 2,
+questMobColorEnabled = false,
+healthBarWidth = 45,
+debuffTimerColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+boss = {
+b = 0.16,
+g = 0.18,
+r = 0.8,
+},
+debuffExpiryGlowThreshold = 3,
+nameplateOverlapV = 1.05,
+classColorFriendly = true,
+ccTextColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+auraSpacing = 2,
+priorityTargetsInput = "",
+leftSlotYOffset = 0,
+classPowerYOffset = 3,
+castTargetColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+hitboxScaleY = 100,
+bottomSlotYOffset = 0,
+priorityTargetsColor = {
+b = 0.2,
+g = 0.2,
+r = 0.9,
+},
+topleftSlotYOffset = 0,
+castTargetSize = 10,
+friendlyPlayerHealthTexture = "Melli Reforged",
+classificationSlot = "topleft",
+textSlotTopSize = 12,
+textSlotLeftColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+showEnemyPets = false,
+font = "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf",
+textSlotCenterXOffset = 0,
+focusOverlayColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+focusOverlayTexture = "striped-v2",
+levelFontSize = 11,
+textSlotCenter = "none",
+colorOverrideEnabled = false,
+unitTypeColoringEnabled = true,
+healthBarHeight = 30,
+trivial = {
+b = 0.45,
+g = 0.45,
+r = 0.45,
+},
+friendlyHealthBarHeight = 17,
+showLevel = true,
+tankNoAggro = {
+b = 0.17,
+g = 0.22,
+r = 1,
+},
+ccTextSize = 12,
+classPowerScale = 1,
+castScale = 100,
+enable = true,
+auraPriorityMatchMode = "all",
+hashLineEnabled = false,
+auraTextPosition = "topleft",
+auraPriorityTexture = "Melli Reforged",
+topleftSlotGrowth = "left",
+hostile = {
+b = 0.09,
+g = 0.11,
+r = 0.39,
+},
+showCastIcon = true,
+levelFont = "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf",
+_showAllPlayerDebuffsMigrated_v1 = true,
+rightSlotYOffset = 0,
+pandemicGlowThickness = 1,
+targetArrowScale = 1,
+textSlotLeftXOffset = 0,
+stackingEnabled = true,
+_debuffExpiryGlowMigrated_v1 = true,
+textSlotTopColor = {
+b = 1,
+g = 1,
+r = 1,
+},
+auraPriorityInput = "",
+showAllDebuffs = true,
+toprightSlotYOffset = 0,
+tankOtherTankHasAggro = {
+b = 0.95,
+g = 0.58,
+r = 0.26,
+},
+focusCastHeight = 100,
+priorityTargetsTexture = "Melli Reforged",
+pandemicGlowLines = 8,
+textSlotRightXOffset = 0,
+stackSpacingScale = 50,
+textSlotCenterYOffset = 0,
+targetIndicatorReversed = true,
 }
 local BAR_W = 150
 ns.defaults = defaults
@@ -2034,7 +2261,13 @@ end
 
 local plateEventProfileLabels = {}
 local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(plate)
-    plate:SetFlattensRenderLayers(true)
+    -- Keep text and textures as independent regions. Flattening a 1x1
+    -- child frame can rasterize the whole nameplate and stretch it while
+    -- Blizzard changes the projected scale with camera movement.
+    plate:SetFlattensRenderLayers(false)
+    if plate.SetIgnoreParentScale then
+        plate:SetIgnoreParentScale(true)
+    end
     plate.health = CreateFrame("StatusBar", nil, plate)
     plate.health:SetFrameLevel(10)  
     plate.health:SetPoint("CENTER", plate, "CENTER", 0, GetNameplateYOffset())
@@ -2443,6 +2676,20 @@ end)
 -- (friendly plates v2, tankHasAggro v1, healthBarTexture media v1) y rellena
 -- cualquier clave faltante con los valores de `defaults`.
 local function InitDB()
+    -- Forever can expose the declared SavedVariable after this file has
+    -- created its compatibility table. Ask Core for the on-disk table before
+    -- applying defaults, otherwise the first session would hide persisted
+    -- nameplate settings behind an empty table.
+    local rawNameplates = _G.KT_RAW_NAMEPLATES_DB
+    if type(rawNameplates) ~= "table" and type(_G.KT_RAW_READ_FUNC) == "function" then
+        pcall(_G.KT_RAW_READ_FUNC)
+        rawNameplates = _G.KT_RAW_NAMEPLATES_DB
+    end
+    if type(rawNameplates) == "table"
+        and (type(KullThranUINameplatesDB) ~= "table" or next(KullThranUINameplatesDB) == nil) then
+        KullThranUINameplatesDB = rawNameplates
+        _G.KullThranUINameplatesDB_Forever = rawNameplates
+    end
     if not KullThranUINameplatesDB then
         KullThranUINameplatesDB = {}
     end
@@ -2554,6 +2801,15 @@ local function InitDB()
             end
         end
         KullThranUINameplatesDB._auraIconScaleMigrated_v2 = true
+    end
+    if not KullThranUINameplatesDB._classPowerDefaultMigrated_v1 then
+        -- Older Forever profiles stored the old false default explicitly,
+        -- which prevented the combo-point watcher from ever starting.
+        if KullThranUINameplatesDB.showClassPower == nil
+            or KullThranUINameplatesDB.showClassPower == false then
+            KullThranUINameplatesDB.showClassPower = true
+        end
+        KullThranUINameplatesDB._classPowerDefaultMigrated_v1 = true
     end
     if not KullThranUINameplatesDB._debuffExpiryGlowMigrated_v1 then
         if KullThranUINameplatesDB.debuffExpiryGlow == nil or KullThranUINameplatesDB.debuffExpiryGlow == false then
@@ -3162,8 +3418,8 @@ local function UpdateClassPowerOnPlate(plate)
         local scaledW = CP_PIP_W * cpScale * 6
         local scaledH = CP_PIP_H * cpScale
         bar:ClearAllPoints()
-        bar:SetSize(scaledW, scaledH)
-        bar:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, cpXOff, yDir * cpYOff)
+        PP.Size(bar, scaledW, scaledH)
+        PP.Point(bar, anchorPoint, anchorFrame, anchorRelPoint, cpXOff, yDir * cpYOff)
         bar:SetMinMaxValues(0, mx)
         bar:SetValue(cur)
 
@@ -3220,16 +3476,18 @@ local function UpdateClassPowerOnPlate(plate)
     end
 
     -- Layout de pips: calcular posiciones una vez y aplicar en un solo bucle
-    local scaledW   = PP.Scale(CP_PIP_W * cpScale)
-    local scaledH   = PP.Scale(CP_PIP_H * cpScale)
-    local scaledGap = PP.Scale(GetClassPowerGap() * cpScale)
+    local scaledW   = CP_PIP_W * cpScale
+    local scaledH   = CP_PIP_H * cpScale
+    local scaledGap = GetClassPowerGap() * cpScale
 
-    -- Precalcular borde izquierdo de cada pip en coordenadas de grupo
+    -- Precalcular borde izquierdo de cada pip en coordenadas de grupo.
+    -- PP.Point/PP.Size aplican el snap usando la escala efectiva de la
+    -- nameplate, que cambia con la distancia y el ángulo de la cámara.
     local pipPositions = {}
     for idx = 1, maxP do
-        pipPositions[idx] = PP.Scale((idx - 1) * (scaledW + scaledGap))
+        pipPositions[idx] = (idx - 1) * (scaledW + scaledGap)
     end
-    local halfGroup = PP.Scale((pipPositions[maxP] + scaledW) / 2)
+    local halfGroup = (pipPositions[maxP] + scaledW) / 2
 
     -- Resolver color de clase o personalizado
     local _, pClass = UnitClass("player")
@@ -3253,9 +3511,9 @@ local function UpdateClassPowerOnPlate(plate)
         else
             pip:ClearAllPoints()
             PP.Size(pip, scaledW, scaledH)
-            pip:SetPoint(leftAnchor, anchorFrame, anchorRelPoint,
-                PP.Scale(pipPositions[i] - halfGroup + cpXOff),
-                PP.Scale(yDir * cpYOff))
+            PP.Point(pip, leftAnchor, anchorFrame, anchorRelPoint,
+                pipPositions[i] - halfGroup + cpXOff,
+                yDir * cpYOff)
 
             -- Fondo detrás de cada pip
             local bg = pip._bg
@@ -3479,6 +3737,7 @@ local function EnableClassPowerWatcher()
     else
         -- Camino numeric-type: recurso nativo de WoW (combo points, chi, etc.)
         classPowerWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+        classPowerWatcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")
         classPowerWatcher:RegisterUnitEvent("UNIT_MAXPOWER", "player")
         classPowerWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
         classPowerWatcher:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
@@ -4112,8 +4371,8 @@ function NameplateFrame:RefreshStackBounds(nameplate)
     self._stackBounds:ClearAllPoints()
 
     local totalHeight = (4 + GetEnemyNameTextSize()) + GetHealthBarHeight() + GetCastBarHeight()
-    self._stackBounds:SetPoint("CENTER", nameplate, "CENTER", 0, GetNameplateYOffset())
-    self._stackBounds:SetSize(GetHealthBarWidth(), totalHeight * (GetStackSpacingScale() / 100))
+    PP.Point(self._stackBounds, "CENTER", nameplate, "CENTER", 0, GetNameplateYOffset())
+    PP.Size(self._stackBounds, GetHealthBarWidth(), totalHeight * (GetStackSpacingScale() / 100))
     self._stackBounds:Show()
     nameplate:SetStackingBoundsFrame(self._stackBounds)
 end
@@ -4138,19 +4397,19 @@ function NameplateFrame:LayoutCoreBars(unit)
 
     -- Barra de salud y absorb: mismas dimensiones, centradas en la placa
     self.health:ClearAllPoints()
-    self.health:SetPoint("CENTER", self, "CENTER", 0, yOffset)
-    self.health:SetSize(barW, barH)
-    self.absorb:SetSize(barW, barH)
+    PP.Point(self.health, "CENTER", self, "CENTER", 0, yOffset)
+    PP.Size(self.health, barW, barH)
+    PP.Size(self.absorb, barW, barH)
 
     -- Barra de casteo: anclada debajo de la barra de salud
     self.cast:ClearAllPoints()
-    self.cast:SetSize(barW, castH)
-    self.cast:SetPoint("TOPLEFT", self.health, "BOTTOMLEFT", 0, 0)
+    PP.Size(self.cast, barW, castH)
+    PP.Point(self.cast, "TOPLEFT", self.health, "BOTTOMLEFT", 0, 0)
 
     -- Icono de hechizo: cuadrado del tamaño del casteo, a la izquierda
     self.castIconFrame:ClearAllPoints()
-    self.castIconFrame:SetSize(castH, castH)
-    self.castIconFrame:SetPoint("TOPRIGHT", self.cast, "TOPLEFT", 0, 0)
+    PP.Size(self.castIconFrame, castH, castH)
+    PP.Point(self.castIconFrame, "TOPRIGHT", self.cast, "TOPLEFT", 0, 0)
     if GetShowCastIcon() then
         self.castIconFrame:SetScale(GetCastIconScale())
         self.castIconFrame:Show()
@@ -4159,12 +4418,12 @@ function NameplateFrame:LayoutCoreBars(unit)
     end
 
     -- Elementos secundarios del casteo que dependen de castH
-    self.castLeftBorder:SetWidth(1)
-    self.castSpark:SetHeight(castH)
-    self.kickMarker:SetSize(barW, castH)
+    PP.Width(self.castLeftBorder, 1)
+    PP.Height(self.castSpark, castH)
+    PP.Size(self.kickMarker, barW, castH)
 
     if self.absorbOverflow then
-        self.absorbOverflow:SetHeight(barH)
+        PP.Height(self.absorbOverflow, barH)
     end
 end
 
@@ -4336,6 +4595,43 @@ function NameplateFrame:RegisterTrackedEvents(unit)
     end
 end
 
+function NameplateFrame:RefreshCastTextAnchors()
+    if not (self.castName and self.cast and self.castTarget) then
+        return
+    end
+
+    self.castName:ClearAllPoints()
+    PP.Width(self.castName, 0)
+    PP.Point(self.castName, "LEFT", self.cast, "LEFT", 5, 0)
+    PP.Point(self.castName, "RIGHT", self.castTarget, "LEFT", -5, 0)
+end
+
+function NameplateFrame:RefreshPixelPerfectLayout()
+    if not (self.unit and self.nameplate) then
+        return
+    end
+
+    local scale = self.GetEffectiveScale and self:GetEffectiveScale()
+    if type(scale) ~= "number" or scale <= 0 then
+        return
+    end
+    if self._ktPixelScale and math.abs(self._ktPixelScale - scale) < 0.0001 then
+        return
+    end
+    self._ktPixelScale = scale
+
+    -- La escala efectiva de una nameplate cambia con la distancia/angulo de
+    -- la camara. Reaplicar la geometria con esa escala evita que el texto,
+    -- barras y pips caigan entre pixeles fisicos.
+    self:LayoutCoreBars(self.unit)
+    self:RefreshStackBounds(self.nameplate)
+    self:RefreshNamePosition()
+    self:UpdateRaidIcon()
+    self:RefreshTargetClassPowerPosition()
+    if self.isCasting then
+        self:RefreshCastTextAnchors()
+    end
+end
 -- Refresca todos los datos visuales de la placa en su estado actual.
 -- Se invoca una sola vez al final de SetUnit para evitar refrescos
 -- parciales durante la inicialización.
@@ -4367,9 +4663,14 @@ function NameplateFrame:SetUnit(unit, nameplate)
     self.nameplate = nameplate
     -- Paso 1: anclar al nameplate Blizzard
     self:SetParent(nameplate)
+    if self.SetIgnoreParentScale then
+        -- The world nameplate changes its parent scale with camera depth.
+        -- Keep our own geometry in screen space and update it explicitly.
+        self:SetIgnoreParentScale(true)
+    end
     self:ClearAllPoints()
-    self:SetPoint("CENTER", nameplate, "CENTER", 0, GetHitboxYShift())
-    self:SetSize(1, 1)
+    PP.Point(self, "CENTER", nameplate, "CENTER", 0, GetHitboxYShift())
+    PP.Size(self, 1, 1)
     self:SetFrameLevel(nameplate:GetFrameLevel() + 1)
     self:Show()
 
@@ -4460,6 +4761,10 @@ function NameplateFrame:ClearUnit()
     -- 4. Resetear estado de casteo visual
     self.unit = nil
     self.nameplate = nil
+    self._ktPixelScale = nil
+    if self.SetIgnoreParentScale then
+        self:SetIgnoreParentScale(false)
+    end
     self._shownAuras = nil
     self.cast:Hide()
     self.castShieldFrame:Hide()
@@ -4911,7 +5216,7 @@ local function ApplyNameAnchor(frame, slotKey)
         return true
     end
     if slotKey == "textSlotCenter" then
-        frame.name:SetPoint("CENTER", frame.health, "CENTER", offsetX, offsetY)
+        PP.Point(frame.name, "CENTER", frame.health, "CENTER", offsetX, offsetY)
         frame.name:SetJustifyH("CENTER")
         return true
     end
@@ -4964,10 +5269,10 @@ function NameplateFrame:UpdateLevel()
 
     ApplyLevelTextStyle(self.level)
     self.level:SetText(levelText)
-    self.level:SetWidth(math.max(60, GetHealthBarWidth() + 80))
-    self.level:SetHeight(math.max(16, (tonumber(GetLevelConfigValue("levelFontSize")) or 11) + 6))
+    PP.Width(self.level, math.max(60, GetHealthBarWidth() + 80))
+    PP.Height(self.level, math.max(16, (tonumber(GetLevelConfigValue("levelFontSize")) or 11) + 6))
     self.level:ClearAllPoints()
-    self.level:SetPoint("BOTTOMLEFT", self.health, "TOPLEFT",
+    PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT",
         tonumber(GetLevelConfigValue("levelXOffset")) or 24,
         tonumber(GetLevelConfigValue("levelYOffset")) or 4)
     self.level:Show()
@@ -5510,10 +5815,10 @@ function NameplateFrame:ApplyCastPresentation(castName, texture, kickProtected)
     self.castTarget:SetText(type(targetName) ~= "nil" and targetName or "")
     self:ApplyCastTargetColorFromToken(classToken)
 
-    self.castName:SetWidth(0)
+    PP.Width(self.castName, 0)
     self.castName:ClearAllPoints()
-    self.castName:SetPoint("LEFT", self.cast, "LEFT", 5, 0)
-    self.castName:SetPoint("RIGHT", self.castTarget, "LEFT", -5, 0)
+    PP.Point(self.castName, "LEFT", self.cast, "LEFT", 5, 0)
+    PP.Point(self.castName, "RIGHT", self.castTarget, "LEFT", -5, 0)
 
     if type(kickProtected) == "nil" then
         kickProtected = false
@@ -5842,10 +6147,10 @@ function NameplateFrame:ShowInterrupted(interrupterGUID)
     end
 
     -- Re-anclar nombre y objetivo de casteo para el texto de interrupción
-    self.castName:SetWidth(0)
+    PP.Width(self.castName, 0)
     self.castName:ClearAllPoints()
-    self.castName:SetPoint("LEFT", self.cast, "LEFT", 5, 0)
-    self.castName:SetPoint("RIGHT", self.castTarget, "LEFT", -5, 0)
+    PP.Point(self.castName, "LEFT", self.cast, "LEFT", 5, 0)
+    PP.Point(self.castName, "RIGHT", self.castTarget, "LEFT", -5, 0)
     self.castShieldFrame:Hide()
     self.castShieldFrame:SetAlpha(1)
     self.castBarOverlay:SetAlpha(0)
@@ -6201,7 +6506,10 @@ local function UpdateMouseover()
 end
 -- Refresh Y-offset on all visible friendly name-only plates
 function ns.RefreshFriendlyNameOnlyOffset()
-    local db = KullThranUINameplatesDB or defaults
+    if ns.RefreshFriendlyNameOnlyOverlayLayout then
+        ns.RefreshFriendlyNameOnlyOverlayLayout()
+        return
+    end    local db = KullThranUINameplatesDB or defaults
     local nameOnly = (db.friendlyNameOnly ~= false)
     local yOff = nameOnly and (db.friendlyNameOnlyYOffset or 0) or 0
     for unit, nameplate in pairs(transitionState.pendingUnits) do
@@ -6288,47 +6596,13 @@ manager:SetScript("OnEvent", function(self, event, unit)
             if ns.TryColorFriendlyNPCName then ns.TryColorFriendlyNPCName(unit, nameplate) end
             -- Ocultar barras de vida de NPC en modo name-only
             if ns.TrySuppressNPCHealthBar then ns.TrySuppressNPCHealthBar(unit, nameplate) end
-            -- Asegurar que el UF de Blizzard esté visible para placas friendly en
-            -- modo name-only. Los frames se reciclan: un UF usado para enemigo
-            -- puede tener alpha 0 o hijos reparentados offscreen.
-            local db = KullThranUINameplatesDB or defaults
-            -- Friendly players use Blizzard's name region in name-only mode.
-            -- Friendly NPCs use KUI's overlay and their complete Blizzard UF
-            -- must remain suppressed.
-            if db.friendlyNameOnly ~= false and ns.IsPlayerNameplateUnit(unit, nameplate) then
-                local uf = nameplate.UnitFrame
-                if uf then
-                    -- Restaurar alpha si el UF reciclado estaba suprimido
-                    -- Alpha on a recycled Blizzard plate can be protected.
-                    -- Restore the intended value without reading/comparing it.
-                    uf:SetAlpha(1)
-                    -- Restaurar FontString del nombre si fue movido offscreen
-                    if uf.name and uf.name:GetParent() ~= uf then
-                        uf.name:SetParent(uf)
-                    end
-                    -- Asegurar que el UF esté parented al nameplate (no al frame oculto)
-                    if uf:GetParent() ~= nameplate then
-                        uf:SetParent(nameplate)
-                        uf:SetAlpha(1)
-                        uf:Show()
-                    end
-                    if ns.EnforceFriendlyPlayerNameOnly then
-                        ns.EnforceFriendlyPlayerNameOnly(nameplate, unit)
-                    end
-                end
-                -- Aplicar offset Y
-                local yOff = db.friendlyNameOnlyYOffset or 0
-                if yOff ~= 0 and nameplate.UnitFrame then
-                    nameplate.UnitFrame:SetPoint("TOPLEFT", nameplate, "TOPLEFT", 0, yOff)
-                    nameplate.UnitFrame:SetPoint("BOTTOMRIGHT", nameplate, "BOTTOMRIGHT", 0, yOff)
-                    nameplate._enoYOffset = true
-                end
-                -- La fuente se aplica globalmente vía SystemFont_NamePlate override
-                if ns.UpdateFriendlyPlayerLevel then
-                    ns.UpdateFriendlyPlayerLevel(nameplate, unit)
-                end
-            end
-            return
+            -- Friendly players now use the same stable addon-owned overlay as
+            -- friendly NPCs. Do not restore Blizzard's native name FontString:
+            -- mixing both layout trees is what causes camera-dependent text
+            -- deformation.
+            if ns.TrySuppressFriendlyPlayerNameplate then
+                ns.TrySuppressFriendlyPlayerNameplate(unit, nameplate)
+            end            return
         end
         transitionState.pendingUnits[unit] = nil
         if ns.plates[unit] then
@@ -6432,10 +6706,7 @@ manager:SetScript("OnEvent", function(self, event, unit)
                 if plate.unit and UnitIsUnit(plate.unit, "focus") then
                     castH = math.floor(castH * focusPct / 100 + 0.5)
                 end
-                plate.cast:SetHeight(castH)
-                plate.castIconFrame:SetSize(castH, castH)
-                plate.castSpark:SetHeight(castH)
-                plate.kickMarker:SetHeight(castH)
+                plate:LayoutCoreBars(plate.unit)
             end
         end
         if ns.currentFocusPlate and ns.currentFocusPlate ~= newFocusPlate then
@@ -6507,6 +6778,33 @@ do
     end)
 end
 
+-- La escala efectiva de una nameplate cambia continuamente con la perspectiva.
+-- Reaplicar el layout sólo al detectar un cambio evita tanto la deformacion
+-- como un OnUpdate costoso por placa.
+do
+    local elapsedSinceRefresh = 0
+    manager:SetScript("OnUpdate", function(_, elapsed)
+        elapsedSinceRefresh = elapsedSinceRefresh + (elapsed or 0)
+        if elapsedSinceRefresh < 0.05 then
+            return
+        end
+        elapsedSinceRefresh = 0
+
+        if not IsNameplatesEnabled() then
+            return
+        end
+
+        SafeForEachPlate(function(_, plate)
+            if plate and plate.RefreshPixelPerfectLayout then
+                plate:RefreshPixelPerfectLayout()
+            end
+        end)
+
+        if ns.RefreshFriendlyPixelPerfectLayout then
+            pcall(ns.RefreshFriendlyPixelPerfectLayout)
+        end
+    end)
+end
 -------------------------------------------------------------------------------
 --  SPEC PRESET LOGIN HANDLER
 --  Applies the correct spec-assigned preset on login and on spec change,

@@ -5319,12 +5319,14 @@ function Mod:OpenDirectChannelTarget(channelTarget)
         if ok then
             editBox = openedEditBox or _G.ChatFrame1EditBox or (chatFrame and chatFrame.editBox) or nil
             if editBox then
+                if _G.ChatEdit_ParseText then
+                    _G.ChatEdit_ParseText(editBox, 0)
+                end
                 KT_ActivateChat(editBox)
                 if editBox.SetFocus then
                     editBox:SetFocus()
                 end
             end
-            self:SyncVisibleEditBoxTarget(true, true)
             return true
         end
     end
@@ -5335,11 +5337,13 @@ function Mod:OpenDirectChannelTarget(channelTarget)
     end
 
     editBox:SetText(command)
+    if _G.ChatEdit_ParseText then
+        _G.ChatEdit_ParseText(editBox, 0)
+    end
     KT_ActivateChat(editBox)
     if editBox.SetFocus then
         editBox:SetFocus()
     end
-    self:SyncVisibleEditBoxTarget(true, true)
     return true
 end
 
@@ -5362,8 +5366,8 @@ function Mod:HandleWhisperHyperlink(link)
         local target = KT_ResolveBNetWhisperTarget(bnetIDAccount) or KT_GetNonEmptyAccessibleString(playerName)
         return self:OpenDirectWhisperTarget(target, bnetIDAccount)
     elseif linkType == "channel" then
-        local _, channelTarget = strsplit(":", linkData)
-        return self:OpenDirectChannelTarget(channelTarget)
+        local arg1, arg2 = strsplit(":", linkData)
+        return self:OpenDirectChannelTarget(arg2 or arg1)
     end
 
     return false

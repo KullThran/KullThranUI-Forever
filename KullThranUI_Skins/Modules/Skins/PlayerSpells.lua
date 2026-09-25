@@ -32,15 +32,13 @@ end
 
 local function ApplyPlayerSpellsSatin(frame)
     if not frame then return end
-    if S.ApplySatinSurface then
-        S:ApplySatinSurface(frame, { inset = 10, baseAlpha = 0.18, sheenAlpha = 0.055, edgeAlpha = 0.12 })
+    if S.ApplyKuiSurface then
+        S:ApplyKuiSurface(frame)
     end
 
     for _, panel in ipairs({ frame.SpecFrame, frame.TalentsFrame }) do
         if panel then
-            if S.ApplySatinSurface then
-                S:ApplySatinSurface(panel, { inset = 2, baseAlpha = 0.13, sheenAlpha = 0.045, edgeAlpha = 0.10 })
-            end
+
             if panel._ktContentShade then panel._ktContentShade:SetAlpha(0.20) end
         end
     end

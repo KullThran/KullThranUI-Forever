@@ -373,5 +373,5 @@ KT:RegisterPage("objectivetracker", "Objective Tracker", 55, function(sc, W)
     -- Restore maxy logic but without Live Preview at bottom
     local maxy = math.max(ly, ry)
     maxy = maxy + 20
-    return maxy
+    return y + maxy
 end)

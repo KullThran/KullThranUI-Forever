@@ -901,10 +901,10 @@ end
 local FOREVER_DEFAULT_LAYOUT_VERSION = 20260921
 
 local FOREVER_UNIT_FRAME_DEFAULTS = {
-    focus = { point = "CENTER", x = -315, y = -257 },
-    pet = { point = "CENTER", x = -372.5, y = -36.5 },
-    targettarget = { point = "CENTER", x = 378, y = -42.5 },
-    focustarget = { point = "CENTER", x = -364.5, y = -306.5 },
+    focus = { point = "TOPLEFT", x = 952.8616333007812, y = -1066.000396728516 },
+    pet = { point = "TOPLEFT", x = 953.8617553710938, y = -869.2078247070312 },
+    targettarget = { point = "TOPLEFT", x = 1521.352294921875, y = -844.6795654296875 },
+    focustarget = { point = "TOPLEFT", x = 952.7691650390625, y = -1124.056945800781 },
 }
 
 local FOREVER_LAYOUT_FRAME_KEYS = {
@@ -937,11 +937,8 @@ local FOREVER_LAYOUT_TRACKER_KEYS = {
     potion = { x = 1, y = -4, side = "BOTTOMLEFT_OUT" },
 }
 
+-- Persistence guard: old migration code used to erase valid user positions.
 local function ClearForeverLayoutFrameKeys(frames)
-    if type(frames) ~= "table" then return end
-    for _, key in ipairs(FOREVER_LAYOUT_FRAME_KEYS) do
-        frames[key] = nil
-    end
 end
 
 local function ClearForeverLayoutShadow(shadow)
@@ -959,12 +956,19 @@ local FOREVER_DURABILITY_DEFAULT = {
 local function WriteForeverDurabilityCopies()
     local function writeFrame(frames)
         if type(frames) ~= "table" then return end
-        frames["durability_frame"] = {
-            point = FOREVER_DURABILITY_DEFAULT.point,
-            relativePoint = FOREVER_DURABILITY_DEFAULT.relativePoint,
-            x = FOREVER_DURABILITY_DEFAULT.x,
-            y = FOREVER_DURABILITY_DEFAULT.y,
-        }
+        local saved = frames["durability_frame"]
+        if type(saved) ~= "table"
+            or type(saved.point) ~= "string"
+            or type(saved.x) ~= "number"
+            or type(saved.y) ~= "number"
+        then
+            frames["durability_frame"] = {
+                point = FOREVER_DURABILITY_DEFAULT.point,
+                relativePoint = FOREVER_DURABILITY_DEFAULT.relativePoint,
+                x = FOREVER_DURABILITY_DEFAULT.x,
+                y = FOREVER_DURABILITY_DEFAULT.y,
+            }
+        end
     end
 
     local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
@@ -1020,8 +1024,8 @@ function UM:ApplyForeverDefaultLayoutReset()
     end
 
     -- The active profile, raw AceDB profile and the boot-time stash can all
-    -- contain a copy of a moved frame. Clear every copy before Unlock Mode's
-    -- delayed restore runs, otherwise an old retail position wins again.
+    -- contain a copy of a moved frame. Preserve valid copies while seeding
+    -- only entries that are genuinely absent or malformed.
     profile.editMode = profile.editMode or {}
     profile.editMode.frames = profile.editMode.frames or {}
     ClearForeverLayoutFrameKeys(profile.editMode.frames)
@@ -1056,60 +1060,50 @@ function UM:ApplyForeverDefaultLayoutReset()
         ClearForeverLayoutShadow(snapShadow)
     end
 
-    -- UnitFrames has a second native position store. Write the requested
-    -- Forever defaults explicitly instead of relying on AceDB's old values.
-    local unitFrames = profile.unitFrames
-    if type(unitFrames) == "table" then
+    -- UnitFrames has a second native position store. Seed only missing
+    -- entries; valid SavedVariables remain authoritative.
+    local function seedUnitPositions(unitFrames)
+        if type(unitFrames) ~= "table" then return end
         unitFrames.positions = unitFrames.positions or {}
         for key, pos in pairs(FOREVER_UNIT_FRAME_DEFAULTS) do
-            unitFrames.positions[key] = {
-                point = pos.point,
-                x = pos.x,
-                y = pos.y,
-            }
+            local saved = unitFrames.positions[key]
+            if type(saved) ~= "table"
+                or type(saved.point) ~= "string"
+                or type(saved.x) ~= "number"
+                or type(saved.y) ~= "number"
+            then
+                unitFrames.positions[key] = {
+                    point = pos.point,
+                    x = pos.x,
+                    y = pos.y,
+                }
+            end
         end
     end
-    if type(rawProfile) == "table" and type(rawProfile.unitFrames) == "table" then
-        rawProfile.unitFrames.positions = rawProfile.unitFrames.positions or {}
-        for key, pos in pairs(FOREVER_UNIT_FRAME_DEFAULTS) do
-            rawProfile.unitFrames.positions[key] = {
-                point = pos.point,
-                x = pos.x,
-                y = pos.y,
-            }
-        end
+    seedUnitPositions(profile.unitFrames)
+    if type(rawProfile) == "table" then
+        seedUnitPositions(rawProfile.unitFrames)
     end
 
     -- KUI Tracker also had a free-position store introduced during the
     -- retail-to-Forever transition. Remove it so its current Forever anchors
     -- are rebuilt instead of restoring a retail/free layout.
-    local cdm = profile.cooldownManager
-    if type(cdm) == "table" then
-        cdm.cdmBarPositions = cdm.cdmBarPositions or {}
+    local function seedTrackerPositions(cdm)
+        if type(cdm) ~= "table" then return end
+        local trackers = cdm.customTracker
+        if type(trackers) ~= "table" then return end
         for key, pos in pairs(FOREVER_LAYOUT_TRACKER_KEYS) do
-            cdm.cdmBarPositions["kui_" .. key] = nil
-            local tracker = cdm.customTracker and cdm.customTracker[key]
+            local tracker = trackers[key]
             if type(tracker) == "table" then
-                tracker.positionMode = nil
-                tracker.x = pos.x
-                tracker.y = pos.y
-                tracker.side = pos.side
+                if type(tracker.x) ~= "number" then tracker.x = pos.x end
+                if type(tracker.y) ~= "number" then tracker.y = pos.y end
+                if type(tracker.side) ~= "string" then tracker.side = pos.side end
             end
         end
     end
-    if type(rawProfile) == "table" and type(rawProfile.cooldownManager) == "table" then
-        local cdmRaw = rawProfile.cooldownManager
-        cdmRaw.cdmBarPositions = cdmRaw.cdmBarPositions or {}
-        for key, pos in pairs(FOREVER_LAYOUT_TRACKER_KEYS) do
-            cdmRaw.cdmBarPositions["kui_" .. key] = nil
-            local tracker = cdmRaw.customTracker and cdmRaw.customTracker[key]
-            if type(tracker) == "table" then
-                tracker.positionMode = nil
-                tracker.x = pos.x
-                tracker.y = pos.y
-                tracker.side = pos.side
-            end
-        end
+    seedTrackerPositions(profile.cooldownManager)
+    if type(rawProfile) == "table" then
+        seedTrackerPositions(rawProfile.cooldownManager)
     end
 
     WriteForeverDurabilityCopies()

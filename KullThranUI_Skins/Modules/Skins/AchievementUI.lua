@@ -23,11 +23,7 @@ local function SetNativeArtwork(texture, alpha, brightness, desaturation)
 end
 
 local function ApplyAchievementPanelSatin(frame, options)
-    if frame and S.ApplySatinSurface then
-        S:ApplySatinSurface(frame, options or {
-            inset = 1, baseAlpha = 0.11, sheenAlpha = 0.04, edgeAlpha = 0.09,
-        })
-    end
+    -- Disabled: using KUI Surface globally.
 end
 
 -- Helper for StatusBars
@@ -146,6 +142,15 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
         hooksecurefunc("AchievementFrameComparison_UpdateStatusBars", function(id)
             if id == "summary" then return end
         end)
+    end
+
+    -- [FIX] Blizzard Bug: AchievementFrame_GetOverridePoints crashes if achievementId is nil (TWW 11.0+)
+    if _G.AchievementFrame_GetOverridePoints then
+        local orig = _G.AchievementFrame_GetOverridePoints
+        _G.AchievementFrame_GetOverridePoints = function(points, achievementId, ...)
+            if not achievementId then return points or 0 end
+            return orig(points, achievementId, ...)
+        end
     end
 
     local AchievementFrame = _G.AchievementFrame

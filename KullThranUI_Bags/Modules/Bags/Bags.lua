@@ -53,7 +53,7 @@ local KT_BAGS_WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 local KT_BAGS_BACKGROUND_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\BagsBackground.png"
 
 local KT_BAGS_KUI_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\KUISettingsSurface.png"
-local KT_BAGS_TEXTURE_DARKENING = 0.62
+local KT_BAGS_TEXTURE_DARKENING = 0.38
 
 local function KT_Bags_ApplyKuiSurface(frame)
     if not (frame and frame.CreateTexture) then
@@ -64,23 +64,39 @@ local function KT_Bags_ApplyKuiSurface(frame)
     -- TexturedSurface BACKGROUND layer. Keep a dedicated ARTWORK layer so the
     -- KUI texture remains visible while child controls stay above it.
     local artwork = frame.KT_BagsKUIArtwork
+    local wash = frame.KT_BagsKUIWash
     if not artwork then
         artwork = frame:CreateTexture(nil, "ARTWORK", nil, -8)
-        artwork:SetAllPoints(frame)
         artwork:SetTexture(KT_BAGS_KUI_TEXTURE)
+        artwork:SetAllPoints(frame)
         frame.KT_BagsKUIArtwork = artwork
-    end
-    artwork:SetAlpha(0.86)
-    artwork:Show()
-
-    local wash = frame.KT_BagsKUIWash
-    if not wash then
+        
         wash = frame:CreateTexture(nil, "ARTWORK", nil, -7)
         wash:SetAllPoints(frame)
         frame.KT_BagsKUIWash = wash
+        
+        frame.KT_BagsKUIFit = function()
+            local width, height = frame:GetSize()
+            if not width or not height or width <= 0 or height <= 0 then return end
+            local aspect = width / height
+            if aspect > 1 then
+                local trim = (1 - 1 / aspect) / 2
+                artwork:SetTexCoord(0, 1, trim, 1 - trim)
+            else
+                local trim = (1 - aspect) / 2
+                artwork:SetTexCoord(trim, 1 - trim, 0, 1)
+            end
+        end
+        frame:HookScript("OnSizeChanged", frame.KT_BagsKUIFit)
     end
+    
+    artwork:SetAlpha(0.86)
+    artwork:Show()
+    
     wash:SetColorTexture(0, 0, 0, KT_BAGS_TEXTURE_DARKENING)
     wash:Show()
+    
+    if frame.KT_BagsKUIFit then frame.KT_BagsKUIFit() end
 end
 local function KT_Bags_GetAccentColor(alpha)
     local skin = KT and KT.db and KT.db.profile and KT.db.profile.skin or nil
@@ -3291,8 +3307,8 @@ local function KT_Bags_StripItemButtonArt(button)
     hideAndDetach(button.IconOverlay or button.iconOverlay)
     hideAndDetach(button.JunkIcon or button.junkIcon)
     hideAndDetach(button.UpgradeIcon or button.upgradeIcon)
-    hideAndDetach(button.QuestBorder or button.questBorder)
-    hideAndDetach(button.IconQuestTexture or button.iconQuestTexture or button.QuestIcon or button.questIcon)
+    -- hideAndDetach(button.QuestBorder or button.questBorder)
+    -- hideAndDetach(button.IconQuestTexture or button.iconQuestTexture or button.QuestIcon or button.questIcon)
     hideAndDetach(button.BattlepayItemTexture or button.battlepayItemTexture)
     hideAndDetach(button.ProfessionQualityOverlay or button.professionQualityOverlay)
 

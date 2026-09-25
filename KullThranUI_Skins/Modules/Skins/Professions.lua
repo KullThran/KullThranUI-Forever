@@ -590,10 +590,8 @@ local function SkinProfessionsBook()
     S:StripTextures(ProfessionsBookFrame)
     WhitenTextIn(ProfessionsBookFrame)
 
-    if S.ApplySatinSurface then
-        S:ApplySatinSurface(ProfessionsBookFrame, {
-            inset = 10, baseAlpha = 0.18, sheenAlpha = 0.055, edgeAlpha = 0.12,
-        })
+    if S.ApplyKuiSurface then
+        S:ApplyKuiSurface(ProfessionsBookFrame)
     end
 
     for _, bk in ipairs({ "BookBGLeft", "BookBGRight", "BookBGHalved", "bgLeft", "bgRight" }) do
@@ -638,11 +636,7 @@ local function SkinProfessionsBook()
         local professionsPanel = _G.PlayerSpellsFrame.ProfessionsFrame
         DarkenBackgrounds(professionsPanel)
         S:ApplyKuiSurface(professionsPanel)
-        if S.ApplySatinSurface then
-            S:ApplySatinSurface(professionsPanel, {
-                inset = 2, baseAlpha = 0.12, sheenAlpha = 0.045, edgeAlpha = 0.10,
-            })
-        end
+
     end
 
     local premiumData = S:GetFFD(ProfessionsBookFrame)
@@ -754,10 +748,8 @@ local function SkinCustomerOrders()
     if not frame then return end
 
     S:HandlePortraitFrame(frame)
-    if S.ApplySatinSurface then
-        S:ApplySatinSurface(frame, {
-            inset = 10, baseAlpha = 0.16, sheenAlpha = 0.05, edgeAlpha = 0.11,
-        })
+    if S.ApplyKuiSurface then
+        S:ApplyKuiSurface(frame)
     end
 
     if frame.MoneyFrameBorder then S:StripTextures(frame.MoneyFrameBorder) end
@@ -840,10 +832,8 @@ local function SkinProfessions()
     if not ProfessionsFrame then return end
 
     S:HandlePortraitFrame(ProfessionsFrame)
-    if S.ApplySatinSurface then
-        S:ApplySatinSurface(ProfessionsFrame, {
-            inset = 10, baseAlpha = 0.17, sheenAlpha = 0.055, edgeAlpha = 0.12,
-        })
+    if S.ApplyKuiSurface then
+        S:ApplyKuiSurface(ProfessionsFrame)
     end
 
     for i = 1, 20 do
@@ -856,11 +846,7 @@ local function SkinProfessions()
         S:ApplyKuiSurface(CraftingPage)
         if CraftingPage.TutorialButton then S:Kill(CraftingPage.TutorialButton) end
         SetNativeArtwork(CraftingPage.Background, 0.36, 0.74, 0.12)
-        if S.ApplySatinSurface then
-            S:ApplySatinSurface(CraftingPage, {
-                inset = 2, baseAlpha = 0.11, sheenAlpha = 0.04, edgeAlpha = 0.09,
-            })
-        end
+
 
         local RecipeList = CraftingPage.RecipeList
         if RecipeList then
@@ -882,11 +868,7 @@ local function SkinProfessions()
 
             SetNativeArtwork(SchematicForm.Background, 0.28, 0.72, 0.14)
             if SchematicForm.NineSlice then SchematicForm.NineSlice:Hide() end
-            if S.ApplySatinSurface then
-                S:ApplySatinSurface(SchematicForm, {
-                    inset = 2, baseAlpha = 0.10, sheenAlpha = 0.035, edgeAlpha = 0.08,
-                })
-            end
+
             
             if SchematicForm.TrackRecipeCheckBox then S:HandleCheckBox(SchematicForm.TrackRecipeCheckBox) end
             if SchematicForm.AllocateBestQualityCheckBox then S:HandleCheckBox(SchematicForm.AllocateBestQualityCheckBox) end
@@ -949,22 +931,14 @@ local function SkinProfessions()
             if DetailedView.SpendCurrencyButton then S:HandleButton(DetailedView.SpendCurrencyButton) end
             if DetailedView.Border then DetailedView.Border:Hide() end
             SetNativeArtwork(DetailedView.Background, 0.28, 0.72, 0.14)
-            if S.ApplySatinSurface then
-                S:ApplySatinSurface(DetailedView, {
-                    inset = 2, baseAlpha = 0.10, sheenAlpha = 0.035, edgeAlpha = 0.08,
-                })
-            end
+
         end
         
         if SpecPage.TreeView then 
             S:StripTextures(SpecPage.TreeView)
             InnerBackdrop(SpecPage.TreeView)
             SetNativeArtwork(SpecPage.TreeView.Background, 0.30, 0.74, 0.12)
-            if S.ApplySatinSurface then
-                S:ApplySatinSurface(SpecPage.TreeView, {
-                    inset = 2, baseAlpha = 0.10, sheenAlpha = 0.035, edgeAlpha = 0.08,
-                })
-            end
+
         end
     end
 end

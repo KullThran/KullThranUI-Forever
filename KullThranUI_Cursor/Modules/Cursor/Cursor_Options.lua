@@ -354,7 +354,7 @@ KT:RegisterPage("cursor", LText("Cursor"), 50, function(sc, W)
         y = y + h
         _, h = W:Toggle(sc, LText("Enable Module"), -y,
             function() return db.enable ~= false end,
-            function(v) db.enable = v; ApplyAndPreview() end)
+            function(v) db.enable = v; Reload() end)
         y = y + h
         _, h = W:Toggle(sc, LText("Show Only In Combat"), -y,
             function() return db.showOnlyInCombat == true end,

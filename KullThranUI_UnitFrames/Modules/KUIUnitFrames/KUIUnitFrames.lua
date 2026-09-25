@@ -55,26 +55,36 @@ end
 
 local function SafeUnitLevelText(unit)
     if not unit then return nil end
+    if type(UnitExists) == "function" then
+        local ok, exists = pcall(UnitExists, unit)
+        if not ok or exists == false then return nil end
+    end
 
     local level
-    if type(UnitLevel) == "function" then
-        local ok, value = pcall(UnitLevel, unit)
-        if ok and not IsForeverSecretValue(value) and type(value) == "number" then
-            level = value
-        end
-    end
+    local levelAPIRan = false
 
-    -- Forever follows the oUF level tag and may expose the effective level
-    -- even when UnitLevel is unavailable or returns an unknown sentinel.
-    if (type(level) ~= "number" or level <= 0) and type(UnitEffectiveLevel) == "function" then
+    -- Forever exposes the effective level through the same API used by oUF.
+    -- Prefer it because UnitLevel may return an unknown/legacy sentinel.
+    if type(UnitEffectiveLevel) == "function" then
         local ok, value = pcall(UnitEffectiveLevel, unit)
-        if ok and not IsForeverSecretValue(value) and type(value) == "number" then
-            level = value
+        if ok and not IsForeverSecretValue(value) then
+            levelAPIRan = true
+            if type(value) == "number" then level = value end
+        end
+    end
+    if (type(level) ~= "number" or level <= 0) and type(UnitLevel) == "function" then
+        local ok, value = pcall(UnitLevel, unit)
+        if ok and not IsForeverSecretValue(value) then
+            levelAPIRan = true
+            if type(value) == "number" then level = value end
         end
     end
 
-    if type(level) ~= "number" or level <= 0 then return nil end
-    return tostring(level)
+    if type(level) == "number" and level > 0 then return tostring(level) end
+    -- Keep the target indicator visible when the unit exists but Forever cannot
+    -- disclose a numeric level; this matches oUF's "??" level-tag behavior.
+    if levelAPIRan then return "??" end
+    return nil
 end
 
 local function SafeUnitClassificationAtlas(unit)
@@ -594,10 +604,10 @@ local defaults = {
         positions = {
             player = { point = "CENTER", x = -300, y = -145 },
             target = { point = "CENTER", x = 280, y = -145 },
-            focus = { point = "CENTER", x = -315, y = -257 },
-            pet = { point = "CENTER", x = -372.5, y = -36.5 },
-            targettarget = { point = "CENTER", x = 378, y = -42.5 },
-            focustarget = { point = "CENTER", x = -364.5, y = -306.5 },
+            focus = { point = "TOPLEFT", x = 952.8616333007812, y = -1066.000396728516 },
+            pet = { point = "TOPLEFT", x = 953.8617553710938, y = -869.2078247070312 },
+            targettarget = { point = "TOPLEFT", x = 1521.352294921875, y = -844.6795654296875 },
+            focustarget = { point = "TOPLEFT", x = 952.7691650390625, y = -1124.056945800781 },
             boss = { point = "RIGHT", x = -326, y = 251 },
             playerCastbar = { point = "CENTER", x = 0, y = -250 },
             classPower = { point = "CENTER", x = 0, y = -220 },
@@ -4315,10 +4325,17 @@ local function SetupUnitIndicators(frame, unit)
         local showLevel = not profile or profile.showCharacterLevel ~= false
         local showClassification = not profile or profile.showClassification ~= false
         ApplyForeverLevelTextStyle(frame._kuiLevelText, profile, portraitAnchor)
-        if (not profile or not OVERLAY_ANCHORS[profile.levelAnchor]) and u == "target" then
-            frame._kuiLevelText:ClearAllPoints()
+        local levelAnchor = profile and profile.levelAnchor
+        frame._kuiLevelText:ClearAllPoints()
+        if OVERLAY_ANCHORS[levelAnchor] then
+            frame._kuiLevelText:SetPoint(levelAnchor, portraitAnchor, levelAnchor,
+                tonumber(profile.levelX) or 0, tonumber(profile.levelY) or 0)
+        elseif u == "target" then
             frame._kuiLevelText:SetPoint("BOTTOMRIGHT", portraitAnchor, "TOPRIGHT",
                 -(tonumber(profile and profile.levelX) or 2), tonumber(profile and profile.levelY) or 2)
+        else
+            frame._kuiLevelText:SetPoint("BOTTOMLEFT", portraitAnchor, "TOPLEFT",
+                tonumber(profile and profile.levelX) or 2, tonumber(profile and profile.levelY) or 2)
         end
         frame._kuiClassificationIndicator:ClearAllPoints()
         if u == "target" then
@@ -8668,65 +8685,34 @@ end
 local FOREVER_UNIT_FRAME_LAYOUT_VERSION = 20260921
 
 local FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS = {
-    focus = { point = "CENTER", x = -315, y = -257 },
-    pet = { point = "CENTER", x = -372.5, y = -36.5 },
-    targettarget = { point = "CENTER", x = 378, y = -42.5 },
-    focustarget = { point = "CENTER", x = -364.5, y = -306.5 },
+    focus = { point = "TOPLEFT", x = 952.8616333007812, y = -1066.000396728516 },
+    pet = { point = "TOPLEFT", x = 953.8617553710938, y = -869.2078247070312 },
+    targettarget = { point = "TOPLEFT", x = 1521.352294921875, y = -844.6795654296875 },
+    focustarget = { point = "TOPLEFT", x = 952.7691650390625, y = -1124.056945800781 },
 }
 
+-- Persistence guard: old Forever builds used to delete the saved copies here.
+-- Keep this helper inert so no future rebind can erase user coordinates.
 local function ClearForeverUnitFrameLayoutCopies()
-    local frameKeys = {
-        "unitframes_focus",
-        "unitframes_pet",
-        "unitframes_targettarget",
-        "unitframes_focustarget",
-    }
-    local function clearFrames(frames)
-        if type(frames) ~= "table" then return end
-        for _, key in ipairs(frameKeys) do
-            frames[key] = nil
-        end
-    end
-
-    local profileName = (KT.db.GetCurrentProfile and KT.db:GetCurrentProfile())
-        or (KT.db.keys and KT.db.keys.profile)
-    clearFrames(KT.db.profile.editMode and KT.db.profile.editMode.frames)
-
-    local rawProfile = profileName and KT.db.sv and KT.db.sv.profiles
-        and KT.db.sv.profiles[profileName]
-    if type(rawProfile) == "table" then
-        clearFrames(rawProfile.editMode and rawProfile.editMode.frames)
-    end
-
-    clearFrames(KT.svPersistedUnlockFrames)
-
-    local globals = { KT.db.global, KT.db.sv and KT.db.sv.global }
-    for _, global in ipairs(globals) do
-        local byProfile = global and global.kuiUnlockPositions
-        clearFrames(profileName and byProfile and byProfile[profileName])
-    end
-
-    local snapshot = _G.KUI_BOOT_SNAPSHOT
-    if type(snapshot) == "table" then
-        local snapProfile = profileName and snapshot.profiles and snapshot.profiles[profileName]
-        clearFrames(snapProfile and snapProfile.editMode and snapProfile.editMode.frames)
-        local snapShadow = profileName and snapshot.global
-            and snapshot.global.kuiUnlockPositions
-            and snapshot.global.kuiUnlockPositions[profileName]
-        clearFrames(snapShadow)
-    end
 end
 
 local function WriteForeverUnitFrameLayoutCopies()
     local function writeFrames(frames)
         if type(frames) ~= "table" then return end
         for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
-            frames["unitframes_" .. key] = {
-                point = pos.point,
-                relativePoint = pos.point,
-                x = pos.x,
-                y = pos.y,
-            }
+            local saved = frames["unitframes_" .. key]
+            if type(saved) ~= "table"
+                or type(saved.point) ~= "string"
+                or type(saved.x) ~= "number"
+                or type(saved.y) ~= "number"
+            then
+                frames["unitframes_" .. key] = {
+                    point = pos.point,
+                    relativePoint = pos.point,
+                    x = pos.x,
+                    y = pos.y,
+                }
+            end
         end
     end
 
@@ -8749,11 +8735,18 @@ local function WriteForeverUnitFrameLayoutCopies()
         profile.unitFrames = profile.unitFrames or {}
         profile.unitFrames.positions = profile.unitFrames.positions or {}
         for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
-            profile.unitFrames.positions[key] = {
-                point = pos.point,
-                x = pos.x,
-                y = pos.y,
-            }
+            local saved = profile.unitFrames.positions[key]
+            if type(saved) ~= "table"
+                or type(saved.point) ~= "string"
+                or type(saved.x) ~= "number"
+                or type(saved.y) ~= "number"
+            then
+                profile.unitFrames.positions[key] = {
+                    point = pos.point,
+                    x = pos.x,
+                    y = pos.y,
+                }
+            end
         end
     end
 
@@ -8798,14 +8791,21 @@ local function ApplyForeverUnitFrameLayoutDefaults()
 
     profile.positions = profile.positions or {}
     for key, pos in pairs(FOREVER_UNIT_FRAME_LAYOUT_DEFAULTS) do
-        profile.positions[key] = {
-            point = pos.point,
-            x = pos.x,
-            y = pos.y,
-        }
+        local saved = profile.positions[key]
+        if type(saved) ~= "table"
+            or type(saved.point) ~= "string"
+            or type(saved.x) ~= "number"
+            or type(saved.y) ~= "number"
+        then
+            profile.positions[key] = {
+                point = pos.point,
+                x = pos.x,
+                y = pos.y,
+            }
+        end
     end
 
-    ClearForeverUnitFrameLayoutCopies()
+    -- Seed only missing entries. Existing SavedVariables are authoritative.
     WriteForeverUnitFrameLayoutCopies()
 
     -- Testing mode: apply the defaults to the live frames as well. This is
@@ -9032,9 +9032,8 @@ function Mod:OnEnable()
     end
     InitializeFrames()
 
-    -- SavedVariables/EditMode are currently unreliable in the Forever test
-    -- profile. Reapply the hard defaults now and after the delayed Blizzard
-    -- restore passes, so old coordinates cannot win after /reload.
+    -- Rebinds may happen more than once while Blizzard finishes loading its
+    -- layout, but ApplyForeverUnitFrameLayoutDefaults only seeds missing data.
     ApplyForeverUnitFrameLayoutDefaults()
     C_Timer.After(0.25, ApplyForeverUnitFrameLayoutDefaults)
     C_Timer.After(2.5, ApplyForeverUnitFrameLayoutDefaults)

@@ -435,7 +435,7 @@ local function SkinWorldMap()
 
     S:SkinPremiumWindow(WorldMapFrame)
     if S.ApplyKuiSurface then
-        S:ApplyKuiSurface(WorldMapFrame)
+        S:ApplyKuiSurface(WorldMapFrame, { washAlpha = 0.38 })
     end
     
     if WorldMapFrame.TitleText then
@@ -544,7 +544,7 @@ local function SkinWorldMap()
     S:StripTextures(QuestMapFrame)
     HideDecos(QuestMapFrame)
     -- Texture the quest sidebar, never the map canvas, tiles or pins.
-    S:ApplyKuiSurface(QuestMapFrame)
+    S:ApplyKuiSurface(QuestMapFrame, { washAlpha = 0.38 })
 
     if QuestMapFrame.VerticalSeparator then QuestMapFrame.VerticalSeparator:Hide() end
 

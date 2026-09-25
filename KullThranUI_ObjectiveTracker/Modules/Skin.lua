@@ -514,11 +514,11 @@ local function SetupBackgroundAndFading()
 
     local function EnsureBackgroundVisuals()
         if not bgFrame.tex then
-            bgFrame.tex = bgFrame:CreateTexture(nil, "BACKGROUND")
+            bgFrame.tex = bgFrame:CreateTexture(nil, "BACKGROUND", nil, -8)
             bgFrame.tex:SetAllPoints()
         end
         if not bgFrame.solidTex then
-            bgFrame.solidTex, bgFrame.solidWash = KT:ApplyTexturedSurface(bgFrame)
+            bgFrame.solidTex, bgFrame.solidWash = KT:ApplyTexturedSurface(bgFrame, nil, 0.38)
             bgFrame.solidTex:Hide()
             bgFrame.solidWash:Hide()
         end
@@ -548,8 +548,9 @@ local function SetupBackgroundAndFading()
 
         if db.solidBackground == true then
             -- Opaque KUI artwork: no gradient or world scene leaks through.
-            bgFrame.tex:Hide()
-            KT:ApplyTexturedSurface(bgFrame)
+            bgFrame.tex:SetColorTexture(0.05, 0.05, 0.05, 0.98)
+            bgFrame.tex:Show()
+            KT:ApplyTexturedSurface(bgFrame, nil, 0.38)
 
             local r, g, b = GetAccent()
             bgFrame.topBorder:SetColorTexture(r, g, b, 1)

@@ -7094,112 +7094,41 @@ end
 
 local function BuildKUIMoveTab(sc, W, y)
     local h = 0
-    local move = KT:GetModule("BlizzMove", true)
-    local api = KT.BlizzMoveAPI
-    local displayName = move and move.displayName or "KUI Move"
+    local move = KT:GetModule("UnlockMode", true)
 
-    _, h = W:SectionHeader(sc, displayName, -y); y = y + h
+    _, h = W:SectionHeader(sc, "KUI Move", -y); y = y + h
     _, h = W:Label(sc,
-        "Move and scale the Blizzard windows supported by KUI. Forever uses its own curated frame catalogue; Retail-only panels are not shown here.",
+        "KUI Move usa el catálogo seguro de Forever para mover y escalar ventanas compatibles de Blizzard y de KullThranUI.",
         -y, 11
     ); y = y + h + 8
 
-    if not (move and move.DB and api) then
+    if not move then
         _, h = W:Label(sc,
-            "KUI Move is not loaded. Enable KullThranUI Enhancements and reload the UI.",
+            "KUI Move no está disponible. Comprueba que KullThranUI está cargado y ejecuta /reload.",
             -y, 11, { r = 1, g = 0.35, b = 0.35 }
         )
         return y + h
     end
 
-    move.DB.requireMoveModifier = move.DB.requireMoveModifier == true and true or false
-    move.DB.savePosStrategy = move.DB.savePosStrategy or "session"
-    move.DB.saveScaleStrategy = move.DB.saveScaleStrategy or "session"
+    move:EnsureDB()
+    move:UpdateRegistry()
+    local count = #(move.registryOrder or {})
 
-    _, h = W:SectionHeader(sc, "Movement & Storage", -y); y = y + h
-    _, h = W:Toggle(sc, "Require SHIFT to move windows", -y,
-        function() return move.DB.requireMoveModifier == true end,
-        function(value) move.DB.requireMoveModifier = value and true or false end
-    ); y = y + h
+    _, h = W:Label(sc,
+        ("%d elementos registrados en KUI Move."):format(count),
+        -y, 11
+    ); y = y + h + 8
 
-    _, h = W:Dropdown(sc, "Remember window positions",
-        -y,
-        {
-            off = "Do not remember",
-            session = "Until UI reload",
-            permanent = "Remember permanently",
-        },
-        function() return move.DB.savePosStrategy end,
-        function(value)
-            if move.Config and move.Config.SetConfig then
-                move.Config:SetConfig("savePosStrategy", value)
-            else
-                move.DB.savePosStrategy = value
-            end
+    _, h = W:Button(sc, "Abrir KUI Move", -y, function()
+        if move.ToggleUnlockMode then
+            move:ToggleUnlockMode()
         end
-    ); y = y + h
-
-    _, h = W:Dropdown(sc, "Remember window scales",
-        -y,
-        {
-            session = "Until UI reload",
-            permanent = "Remember permanently",
-        },
-        function() return move.DB.saveScaleStrategy end,
-        function(value)
-            if move.Config and move.Config.SetConfig then
-                move.Config:SetConfig("saveScaleStrategy", value)
-            else
-                move.DB.saveScaleStrategy = value
-            end
-        end
-    ); y = y + h
-
-    _, h = W:Button(sc, "Reset Permanent Positions", -y, function()
-        move:ResetPointStorage()
-        Reload()
     end); y = y + h
 
-    _, h = W:Button(sc, "Reset Permanent Scales", -y, function()
-        move:ResetScaleStorage()
-        Reload()
-    end); y = y + h + 8
-
-    _, h = W:SectionHeader(sc, "Forever Windows", -y); y = y + h
     _, h = W:Label(sc,
-        "Enable or disable the windows that KUI Move can handle. The list is built from the Forever registry at runtime.",
+        "También puedes abrirlo con /ktunlock. Las posiciones se guardan en el perfil activo.",
         -y, 11
-    ); y = y + h + 6
-
-    local addOnNames = {}
-    for addOnName in pairs(api:GetRegisteredAddOns()) do
-        addOnNames[#addOnNames + 1] = addOnName
-    end
-    table.sort(addOnNames)
-
-    for _, addOnName in ipairs(addOnNames) do
-        local frameNames = {}
-        for frameName in pairs(api:GetRegisteredFrames(addOnName)) do
-            frameNames[#frameNames + 1] = frameName
-        end
-        table.sort(frameNames)
-
-        if #frameNames > 0 then
-            local groupLabel = addOnName == "KullThranUI" and "KUI / Blizzard Frames" or addOnName
-            _, h = W:SectionHeader(sc, groupLabel, -y); y = y + h
-            for _, frameName in ipairs(frameNames) do
-                _, h = W:Toggle(sc, frameName, -y,
-                    function()
-                        return not api:IsFrameDisabled(addOnName, frameName)
-                    end,
-                    function(enabled)
-                        api:SetFrameDisabled(addOnName, frameName, not enabled)
-                    end
-                )
-                y = y + h
-            end
-        end
-    end
+    ); y = y + h + 8
 
     return y
 end

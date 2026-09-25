@@ -2241,6 +2241,19 @@ local function InvokeOriginalTab(definition)
 
     runtime.selectedView = definition.key
 
+    if definition.key == "who" then
+        if ToggleWhoFrame then
+            ToggleWhoFrame()
+        elseif _G.WhoFrame then
+            if _G.WhoFrame:IsShown() then
+                HideUIPanel(_G.WhoFrame)
+            else
+                ShowUIPanel(_G.WhoFrame)
+            end
+        end
+        return
+    end
+
     -- Use Blizzard's original tab logic unchanged, then just hide the stock tabs again.
     local tab = _G[definition.tab]
     if tab then

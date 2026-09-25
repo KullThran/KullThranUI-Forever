@@ -7,7 +7,7 @@ local string_match = _G.string.match;
 local name = "BlizzMove";
 ---@type BlizzMove
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
-local BlizzMove = KT:GetModule(name)
+local BlizzMove = KT:GetModule(name, true)
 if not BlizzMove then return; end
 
 KT.BlizzMoveAPI = KT.BlizzMoveAPI or {};
