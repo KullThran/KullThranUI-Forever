@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Bags
 ## Notes: KullThranUI module: Bags
 ## Author: KullThran
-## Version: 0.0.7
+## Version: 0.0.5
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

@@ -26,8 +26,8 @@ jobs:
       - name: Require an explicit beta tag
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta$ ]]; then
-            echo "Forever releases require a vX.Y.Z-beta tag." >&2
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta)?$ ]]; then
+            echo "Forever releases require a vX.Y.Z or vX.Y.Z-beta tag." >&2
             exit 1
           fi
 
