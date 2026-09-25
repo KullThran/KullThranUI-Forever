@@ -1649,15 +1649,11 @@ initFrame:SetScript("OnEvent", function(self)
         local raidBufHdr
         raidBufHdr, h = W:SectionHeader(parent, LText(SECTION_RAID_BUFFS), y);  y = y - h
 
-        -- Show Others Missing | Show Buffs Outside Instances
+        -- Show Buffs Outside Instances
         local raidBufFirstRow
-        raidBufFirstRow, h = W:DualRow(parent, y,
-            { type="toggle", text=LText("Show Others Missing"),
-              getValue=function() local r = RDB(); return r and r.showOthersMissing end,
-              setValue=function(v) local r = RDB(); if r then r.showOthersMissing = v; RefreshAll() end end },
-            { type="toggle", text=LText("Show Buffs Outside Instances"),
-              getValue=function() local r = RDB(); return r and r.showNonInstanced end,
-              setValue=function(v) local r = RDB(); if r then r.showNonInstanced = v; RefreshAll() end end }
+        raidBufFirstRow, h = W:Toggle(parent, LText("Show Buffs Outside Instances"), y,
+            function() local r = RDB(); return r and r.showNonInstanced end,
+            function(v) local r = RDB(); if r then r.showNonInstanced = v; RefreshAll() end end
         );  y = y - h
 
         -- 4-column checkbox grid for individual raid buffs
