@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Teleport Menu
 ## Notes: KullThranUI module: Teleport Menu
 ## Author: KullThran
-## Version: 0.0.5
+## Version: 0.0.6
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

@@ -5,6 +5,15 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.6 BETA (2026-09-25)
+
+Forever beta maintenance release focused on Nameplates and Aura Reminders adjustments.
+
+- Reverted a scaling regression that caused Enemy Nameplates to stay excessively large at long distances instead of scaling normally.
+- Decreased the default size of Enemy Nameplate debuffs and upper/lower aura slots by 25%.
+- Implemented fully dynamic positioning for Nameplate level text; the level indicator now perfectly hugs the left edge of the unit's name, preventing overlap regardless of name length.
+- Refactored Aura Reminders: Removed group-wide logic (such as checking if party members are missing a buff). The module now operates on a strict personal basis, solely reminding you if your own character is missing the buff.
+
 ## 0.0.5 BETA (2026-09-25)
 
 Forever beta maintenance release focused on texture opacity coherence, chat input sync, and module toggles.
