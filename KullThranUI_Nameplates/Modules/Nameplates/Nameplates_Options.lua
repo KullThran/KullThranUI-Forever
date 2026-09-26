@@ -5736,7 +5736,13 @@ initFrame:SetScript("OnEvent", function(self)
 
         local function RefreshNameplateLevelSettings()
             for _, plate in pairs(plates) do
-                if plate.UpdateLevel then plate:UpdateLevel() end
+                if plate.RefreshNamePosition then
+                    plate:RefreshNamePosition()
+                elseif plate.UpdateLevel then
+                    plate:UpdateLevel()
+                end
+                if plate.UpdateClassification then plate:UpdateClassification() end
+                if plate.UpdateRaidIcon then plate:UpdateRaidIcon() end
             end
             if ns.RefreshFriendlyPlayerLevels then
                 ns.RefreshFriendlyPlayerLevels()
@@ -5788,6 +5794,17 @@ initFrame:SetScript("OnEvent", function(self)
                     RefreshNameplateLevelSettings()
                 end,
             }); y = y - h
+        _, h = W:DualRow(parent, y,
+            {
+                type = "toggle",
+                text = LText("Dynamic Level Layout"),
+                getValue = function() return DBVal("useDynamicNameplateLevelLayout") == true end,
+                setValue = function(v)
+                    DB().useDynamicNameplateLevelLayout = v and true or false
+                    RefreshNameplateLevelSettings()
+                end,
+            },
+            { type = "label", text = "" }); y = y - h
 
         _, h = W:DualRow(parent, y,
             {

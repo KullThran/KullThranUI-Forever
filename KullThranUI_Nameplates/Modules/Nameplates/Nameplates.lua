@@ -185,14 +185,35 @@ ns._IsSecretValue = ns._IsSecretValue or function(value)
 end
 
 local function SafeUnitLevelText(unit)
-    if not unit or type(UnitLevel) ~= "function" then return nil end
-
-    local ok, level = pcall(UnitLevel, unit)
-    if not ok or ns._IsSecretValue(level) or type(level) ~= "number" then
-        return nil
+    if not unit then return nil end
+    if type(UnitExists) == "function" then
+        local ok, exists = pcall(UnitExists, unit)
+        if not ok or exists == false then return nil end
     end
-    if level < 0 then return nil end
-    return tostring(level)
+
+    local level
+    local levelAPIRan = false
+
+    -- Match UnitFrames: prefer the effective level and fall back to the
+    -- legacy API used by older Forever unit tokens.
+    if type(UnitEffectiveLevel) == "function" then
+        local ok, value = pcall(UnitEffectiveLevel, unit)
+        if ok and not ns._IsSecretValue(value) then
+            levelAPIRan = true
+            if type(value) == "number" then level = value end
+        end
+    end
+    if (type(level) ~= "number" or level <= 0) and type(UnitLevel) == "function" then
+        local ok, value = pcall(UnitLevel, unit)
+        if ok and not ns._IsSecretValue(value) then
+            levelAPIRan = true
+            if type(value) == "number" then level = value end
+        end
+    end
+
+    if type(level) == "number" and level > 0 then return tostring(level) end
+    if levelAPIRan then return "??" end
+    return nil
 end
 
 -- Tabla constante de slots de texto sobre la barra de vida (elevada a file-scope
@@ -577,6 +598,10 @@ r = 0.45,
 },
 friendlyHealthBarHeight = 17,
 showLevel = true,
+-- Keep the level beside the rendered name when the top slot is used.
+-- Forever keeps level text enabled by default, unlike the Retail profile
+-- migration; this flag controls only the layout calculation.
+useDynamicNameplateLevelLayout = true,
 tankNoAggro = {
 b = 0.17,
 g = 0.22,
@@ -1192,6 +1217,11 @@ local function GetLevelConfigValue(key)
     local live = KullThranUINameplatesDB
     if live and live[key] ~= nil then return live[key] end
     return defaults[key]
+end
+
+local function UseDynamicNameplateLevelLayout()
+    local value = GetLevelConfigValue("useDynamicNameplateLevelLayout")
+    return value == true
 end
 
 local function ApplyLevelTextStyle(fontString)
@@ -5085,6 +5115,12 @@ function NameplateFrame:UpdateHealthColor()
 end
 
 local INLINE_NAME_SLOTS = { "textSlotRight", "textSlotLeft", "textSlotCenter" }
+local CLASSIFICATION_TEXTURE_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\Nemapltes-RareEliteIcons\\Untitled - 18 de agosto de 2026 a las 22.39.01.png"
+local CLASSIFICATION_TEXTURES = {
+    elite = CLASSIFICATION_TEXTURE_PATH,
+    worldboss = CLASSIFICATION_TEXTURE_PATH,
+}
+
 local CLASSIFICATION_ATLASES = {
     elite = "nameplates-icon-elite-gold",
     worldboss = "nameplates-icon-elite-gold",
@@ -5136,6 +5172,24 @@ local function AnchorPlateAdornment(frame, slot, xOffset, yOffset, topPush)
     return false
 end
 
+local LEVEL_NAME_GAP = 4
+
+local function AnchorClassificationAdornment(frame, slot, xOffset, yOffset, topPush)
+    local parent = frame:GetParent()
+    if slot == "topleft"
+        and UseDynamicNameplateLevelLayout()
+        and parent.level and parent.level:IsShown() then
+        local health = parent.health
+        local iconSize = GetRareEliteIconSize()
+        local levelX = parent._dynamicLevelXOffset
+            or tonumber(GetLevelConfigValue("levelXOffset")) or 24
+        local horizontal = levelX - iconSize - LEVEL_NAME_GAP + (xOffset or 0)
+        frame:ClearAllPoints()
+        PP.Point(frame, "BOTTOMLEFT", health, "TOPLEFT", horizontal, (topPush or 0) + (yOffset or 0))
+        return true
+    end
+    return AnchorPlateAdornment(frame, slot, xOffset, yOffset, topPush)
+end
 local function GetTopNameReservedWidth(frame, barWidth)
     local reservedWidth = 0
 
@@ -5240,47 +5294,92 @@ end
 function NameplateFrame:UpdateName()
     local unit = SyncPlateUnitToken(self)
     if not unit then
+        self._displayNameText = ""
         self.name:SetText("")
         return
     end
 
     local displayName = UnitName(unit)
-    self.name:SetText(type(displayName) == "string" and displayName or "")
-    if self.UpdateLevelAnchor then self:UpdateLevelAnchor() end
+    local nameText = type(displayName) == "string" and displayName or ""
+    self._displayNameText = nameText
+    self.name:SetText(nameText)
+end
+
+local function EstimateTextWidth(text, fontSize, barWidth)
+    if type(text) ~= "string" or text == "" then return 0 end
+
+    local size = math.max(6, tonumber(fontSize) or 11)
+    local width = math.max(0, tonumber(barWidth) or 0)
+    local estimated = string.len(text) * size * 0.65 + 6
+    return math.min(width, math.max(0, estimated))
+end
+
+local function ResolveLevelXOffset(frame, baseX)
+    if not UseDynamicNameplateLevelLayout() then
+        return baseX, nil
+    end
+
+    local nameText = frame._displayNameText
+    local levelText = frame._displayLevelText
+    local nameSlot = FindSlotForElement("enemyName")
+    if nameSlot ~= "textSlotTop"
+        or type(nameText) ~= "string" or nameText == ""
+        or type(levelText) ~= "string" or levelText == "" then
+        return baseX, nil
+    end
+
+    local barWidth = GetHealthBarWidth()
+    local nameSize = tonumber(GetTextSlotSize("textSlotTop")) or 12
+    local levelSize = tonumber(GetLevelConfigValue("levelFontSize")) or 11
+    local estimatedNameWidth = EstimateTextWidth(nameText, nameSize, barWidth)
+    local estimatedLevelWidth = EstimateTextWidth(levelText, levelSize, barWidth)
+    local safeLevelWidth = math.max(24, math.min(barWidth, estimatedLevelWidth))
+    local nameStart = math.max(0, (barWidth - estimatedNameWidth) * 0.5)
+    local candidate = nameStart - LEVEL_NAME_GAP - safeLevelWidth
+
+    return math.min(baseX, candidate), safeLevelWidth
 end
 
 function NameplateFrame:UpdateLevelAnchor()
     if not self.level or not self.health then return end
 
-    -- Nameplate FontStrings can expose secret geometry when the name is
-    -- supplied by the protected nameplate pipeline. Do not read or compare
-    -- GetStringWidth()/GetWidth() here: even a zero check taints this path.
-    -- The level position is user-configurable and intentionally independent
-    -- of the rendered name width.
+    local baseX = tonumber(GetLevelConfigValue("levelXOffset")) or 24
+    local y = tonumber(GetLevelConfigValue("levelYOffset")) or 4
+    local x, dynamicLevelWidth = ResolveLevelXOffset(self, baseX)
+
+    self._dynamicLevelXOffset = x
+    if UseDynamicNameplateLevelLayout() and dynamicLevelWidth then
+        PP.Width(self.level, dynamicLevelWidth)
+    else
+        PP.Width(self.level, 0)
+    end
     self.level:ClearAllPoints()
-    PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT",
-        tonumber(GetLevelConfigValue("levelXOffset")) or 24,
-        tonumber(GetLevelConfigValue("levelYOffset")) or 4)
+    PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT", x, y)
 end
--- Muestra el nivel de la unidad con estilo y posición independientes.
+-- Muestra/oculta el nivel de la unidad con estilo y posición independientes.
 function NameplateFrame:UpdateLevel()
     if not self.level then return end
 
     local unit = SyncPlateUnitToken(self)
     if not unit or GetLevelConfigValue("showLevel") == false then
+        self._displayLevelText = nil
         self.level:SetText("")
         self.level:Hide()
+        self:UpdateLevelAnchor()
         return
     end
 
     local levelText = SafeUnitLevelText(unit)
     if not levelText then
+        self._displayLevelText = nil
         self.level:SetText("")
         self.level:Hide()
+        self:UpdateLevelAnchor()
         return
     end
 
     ApplyLevelTextStyle(self.level)
+    self._displayLevelText = levelText
     self.level:SetText(levelText)
     PP.Height(self.level, math.max(16, (tonumber(GetLevelConfigValue("levelFontSize")) or 11) + 6))
     self.level:Show()
@@ -5303,17 +5402,24 @@ function NameplateFrame:UpdateClassification()
         return
     end
 
-    local atlas = CLASSIFICATION_ATLASES[UnitClassification(unit)]
-    if not atlas then
+    local classification = UnitClassification(unit)
+    local atlas = CLASSIFICATION_ATLASES[classification]
+    local texturePath = CLASSIFICATION_TEXTURES[classification]
+    if not atlas and not texturePath then
         self.classFrame:Hide()
         self:UpdateNameWidth()
         return
     end
 
-    self.class:SetAtlas(atlas)
+    if texturePath then
+        self.class:SetTexture(texturePath)
+        self.class:SetTexCoord(0, 1, 0, 1)
+    else
+        self.class:SetAtlas(atlas)
+    end
     PP.Size(self.classFrame, GetRareEliteIconSize(), GetRareEliteIconSize())
     local offsetX, offsetY = ns._AuraLayout.ResolveOffsets("classification")
-    AnchorPlateAdornment(self.classFrame, slot, offsetX, offsetY, GetClassPowerTopPush(self))
+    AnchorClassificationAdornment(self.classFrame, slot, offsetX, offsetY, GetClassPowerTopPush(self))
     self.classFrame:Show()
     self:UpdateNameWidth()
 end
@@ -5340,6 +5446,9 @@ end
 -- Re-ancla el nombre de la unidad según el slot actual y refresca
 -- auras y clasificación para mantener coherencia de layout.
 function NameplateFrame:RefreshNamePosition()
+    -- Resolve the accessible name first, then size it, place the level, and
+    -- finally place classification/auras from the resulting geometry.
+    self:UpdateName()
     local nameSlot = FindSlotForElement("enemyName")
     self:UpdateNameWidth()
     self.name:ClearAllPoints()
@@ -5352,9 +5461,9 @@ function NameplateFrame:RefreshNamePosition()
         self.name:Show()
     end
 
-    self:UpdateAuras()
-    self:UpdateClassification()
     self:UpdateLevel()
+    self:UpdateClassification()
+    self:UpdateAuras()
 end
 -- Muestra/oculta el icono de marca de raid en la posición configurada.
 function NameplateFrame:UpdateRaidIcon()
@@ -6204,6 +6313,15 @@ for _, group in ipairs(PLATE_HANDLER_GROUPS) do
     for i = 2, #group do
         NameplateFrame[group[i]] = function(self) self[method](self) end
     end
+end
+-- Name and level changes must re-run the dependent layout pass so the
+-- classification icon follows the actual level/name geometry.
+NameplateFrame.UNIT_NAME_UPDATE = function(self)
+    self:RefreshNamePosition()
+end
+NameplateFrame.UNIT_LEVEL = function(self)
+    self:UpdateLevel()
+    self:UpdateClassification()
 end
 -- Handlers con firma especial: reciben argumentos posicionales del dispatch.
 -- UNIT_AURA pasa updateInfo (arg2); UNIT_SPELLCAST_INTERRUPTED pasa

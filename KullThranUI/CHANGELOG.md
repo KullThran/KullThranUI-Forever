@@ -5,6 +5,15 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.7 (2026-09-26)
+
+Forever beta release focused on the latest Nameplates, Unit Frames, and Bags visual and compatibility improvements.
+
+- Added protected-value-safe dynamic Nameplate level placement that keeps the level beside the rendered name and repositions classification and aura icons consistently.
+- Added configurable Dynamic Level Layout support and refreshed Nameplate classification artwork and anchoring for enemy, NPC, and friendly plates.
+- Added custom Rare and Elite classification icons to Unit Frames, including portrait-ring rendering, no-portrait placement, side-aware mirroring, and delayed metadata refreshes.
+- Added a beige highlight frame for newly collected items in Bags, synchronized with Blizzard new-item state and cleared when the item is viewed.
+
 ## 0.0.6 (2026-09-26)
 
 Forever maintenance release focused on Bags, Nameplates, dungeon tracking, protected-value safety, and party frames.
