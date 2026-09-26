@@ -3,7 +3,7 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.0.7
+## Version: 0.0.6
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
