@@ -43,9 +43,11 @@ local function IsSameUnit(frameUnit, eventUnit)
 	if(not frameUnit or not eventUnit) then return false end
 	if(frameUnit == eventUnit) then return true end
 
-	local frameGUID = UnitGUID(frameUnit)
-	local eventGUID = UnitGUID(eventUnit)
-	return frameGUID and eventGUID and frameGUID == eventGUID
+	-- UnitGUID may return secret strings for restricted units.
+	-- Values are not compared directly; UnitIsUnit keeps identity checks
+	-- inside Blizzard code and avoids tainting this update path.
+
+	return UnitIsUnit(frameUnit, eventUnit)
 end
 
 local function Update(self, event, unit)
@@ -63,7 +65,11 @@ local function Update(self, event, unit)
 
 	local guid = UnitGUID(unit)
 	local isAvailable = UnitIsConnected(unit) and UnitIsVisible(unit)
-	local hasStateChanged = event ~= 'OnUpdate' or element.guid ~= guid or element.state ~= isAvailable
+	local guidChanged = false
+	if not (issecretvalue and (issecretvalue(element.guid) or issecretvalue(guid))) then
+		guidChanged = element.guid ~= guid
+	end
+	local hasStateChanged = event ~= 'OnUpdate' or guidChanged or element.state ~= isAvailable
 	if(hasStateChanged) then
 		if(element:IsObjectType('PlayerModel')) then
 			if(not isAvailable) then
