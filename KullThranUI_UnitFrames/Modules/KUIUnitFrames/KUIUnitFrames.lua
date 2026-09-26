@@ -23,12 +23,23 @@ local SetupPlayerStatusIndicators
 local KUI_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\UnitFramesIcons\\"
 local PVP_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\"
 
-local CLASSIFICATION_ATLASES = {
-    elite = "nameplates-icon-elite-gold",
-    worldboss = "nameplates-icon-elite-gold",
-    rareelite = "nameplates-icon-elite-silver",
-    rare = "nameplates-icon-star",
+local CLASSIFICATION_TEXTURES = {
+    elite = KUI_ICON_PATH .. "ELITE.png",
+    worldboss = KUI_ICON_PATH .. "ELITE.png",
+    rareelite = KUI_ICON_PATH .. "RARE.png",
+    rare = KUI_ICON_PATH .. "RARE.png",
 }
+local CLASSIFICATION_NAMEPLATE_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\Nemapltes-RareEliteIcons\\Untitled - 18 de agosto de 2026 a las 22.39.01.png"
+local CLASSIFICATION_NO_PORTRAIT_TEXTURES = {
+    elite = CLASSIFICATION_NAMEPLATE_ICON_PATH,
+    worldboss = CLASSIFICATION_NAMEPLATE_ICON_PATH,
+    rareelite = CLASSIFICATION_NAMEPLATE_ICON_PATH,
+    rare = CLASSIFICATION_NAMEPLATE_ICON_PATH,
+}
+local CLASSIFICATION_NO_PORTRAIT_SIZE = 20
+local CLASSIFICATION_PORTRAIT_SCALE = 1.18
+-- ELITE.png and RARE.png are square 512x512 textures.
+local CLASSIFICATION_TEXTURE_ASPECT = 1
 local OVERLAY_ANCHORS = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true,
     LEFT = true, CENTER = true, RIGHT = true,
@@ -87,13 +98,25 @@ local function SafeUnitLevelText(unit)
     return nil
 end
 
-local function SafeUnitClassificationAtlas(unit)
+local function SafeUnitClassification(unit)
     if not unit or type(UnitClassification) ~= "function" then return nil end
-    local ok, atlas = pcall(function()
-        return CLASSIFICATION_ATLASES[UnitClassification(unit)]
+    local ok, classification = pcall(function()
+        return UnitClassification(unit)
     end)
-    return ok and type(atlas) == "string" and atlas or nil
+    if not ok then return nil end
+    return classification
 end
+
+local function SafeUnitClassificationTexture(unit)
+    local classification = SafeUnitClassification(unit)
+    return CLASSIFICATION_TEXTURES[classification]
+end
+
+local function SafeUnitClassificationNoPortraitTexture(unit)
+    local classification = SafeUnitClassification(unit)
+    return CLASSIFICATION_NO_PORTRAIT_TEXTURES[classification]
+end
+
 local defaults = {
     profile = {
         enable = true,
@@ -1916,6 +1939,18 @@ local function GetPortraitFacing(unit, settings)
     return GetDefaultPortraitFacing(unit)
 end
 
+-- Classification artwork is directional: mirror it for the portrait side,
+-- then combine that with the portrait's own facing direction.
+local function GetClassificationTextureFlipped(unit, settings)
+    local facingFlipped = GetPortraitFacing(unit, settings) == "flipped"
+    local side = settings and settings.portraitSide
+    if not side then
+        side = (unit == "player" or unit == "pet") and "left" or "right"
+    end
+    local sideFlipped = side == "right"
+    return sideFlipped ~= facingFlipped
+end
+
 local function ApplyPortraitFacing(tex, unit, settings, fullTexture)
     if not tex then return end
 
@@ -2239,6 +2274,15 @@ local function UpdateCircularPortraitBorder(frame)
 
     local border = frame.Portrait.backdrop._shapeBorderTex
     if border then
+        -- The elite/rare ring replaces the generic portrait border. Keeping
+        -- both visible makes one unit look like two classifications at once.
+        if frame._kuiClassificationIndicator and frame._kuiClassificationIndicator:IsShown() then
+            border:Hide()
+            return
+        end
+        if frame._kuiClassificationPortraitActive then
+            return
+        end
         local unitKey = UnitToSettingsKey(frame.unit)
         local settings = unitKey and db.profile[unitKey]
         local r, g, b = ResolveCircularPortraitColor(frame, settings, frame.unit)
@@ -4274,6 +4318,21 @@ end
 --  Resurrect, Summon, RaidTarget, y overlay AFK/Dead/Ghost/Offline).
 --  Usa los iconos personalizados de KUI_ICON_PATH.
 -------------------------------------------------------------------------------
+local function AnchorNoPortraitClassificationIndicator(frame, indicator)
+    if not (frame and indicator) then return end
+    indicator:ClearAllPoints()
+    local size = CLASSIFICATION_NO_PORTRAIT_SIZE
+    local rightEdge = frame.GetRight and frame:GetRight()
+    local screenWidth = UIParent and UIParent.GetWidth and UIParent:GetWidth()
+    local canUseRight = not rightEdge or not screenWidth
+        or rightEdge + 4 + size <= screenWidth
+    if canUseRight then
+        indicator:SetPoint("LEFT", frame, "RIGHT", 4, 0)
+    else
+        indicator:SetPoint("RIGHT", frame, "LEFT", -4, 0)
+    end
+end
+
 local function SetupUnitIndicators(frame, unit)
     if not frame or not frame.Health then return end
     local health = frame.Health
@@ -4305,7 +4364,7 @@ local function SetupUnitIndicators(frame, unit)
     if not frame._kuiClassificationIndicator then
         local classification = iOvr:CreateTexture(nil, "OVERLAY", nil, 7)
         classification:SetSize(18, 18)
-        classification:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 40, 1)
+        classification:SetTexCoord(0, 1, 0, 1)
         classification:Hide()
         frame._kuiClassificationIndicator = classification
     end
@@ -4321,7 +4380,20 @@ local function SetupUnitIndicators(frame, unit)
     local function RefreshForeverMetadata()
         local u = frame.unit or (frame.GetAttribute and frame:GetAttribute("unit")) or unit
         local profile = db and db.profile
-        local portraitAnchor = (frame.Portrait and (frame.Portrait.backdrop or frame.Portrait)) or frame
+        local settings = GetSettingsForUnit(u)
+        local portraitBackdrop = frame.Portrait and frame.Portrait.backdrop
+        local portraitVisible = profile and profile.portraitStyle ~= "none"
+            and settings and settings.showPortrait ~= false
+            and portraitBackdrop and portraitBackdrop:IsShown() or false
+        local portraitAnchor = portraitVisible and portraitBackdrop or frame
+        local portraitRing = frame._kuiClassificationPortraitRing
+        if portraitBackdrop and not portraitRing then
+            -- Keep the normal portrait border and render classification outside it.
+            portraitRing = portraitBackdrop:CreateTexture(nil, "OVERLAY", nil, 7)
+            portraitRing:SetTexCoord(0, 1, 0, 1)
+            portraitRing:Hide()
+            frame._kuiClassificationPortraitRing = portraitRing
+        end
         local showLevel = not profile or profile.showCharacterLevel ~= false
         local showClassification = not profile or profile.showClassification ~= false
         ApplyForeverLevelTextStyle(frame._kuiLevelText, profile, portraitAnchor)
@@ -4338,10 +4410,20 @@ local function SetupUnitIndicators(frame, unit)
                 tonumber(profile and profile.levelX) or 2, tonumber(profile and profile.levelY) or 2)
         end
         frame._kuiClassificationIndicator:ClearAllPoints()
-        if u == "target" then
-            frame._kuiClassificationIndicator:SetPoint("BOTTOMRIGHT", portraitAnchor, "TOPRIGHT", -40, 1)
+        if portraitVisible then
+            -- The artwork has a transparent center; enlarge it so that
+            -- its inner opening surrounds the portrait instead of covering it.
+            local portraitSize = portraitBackdrop:GetWidth()
+            if portraitSize < 1 then portraitSize = 46 end
+            local ringWidth = math.max(24, portraitSize * CLASSIFICATION_PORTRAIT_SCALE)
+            local ringHeight = ringWidth * CLASSIFICATION_TEXTURE_ASPECT
+            frame._kuiClassificationIndicator:SetSize(ringWidth, ringHeight)
+            frame._kuiClassificationIndicator:SetPoint("CENTER", portraitBackdrop, "CENTER", 0, 0)
         else
-            frame._kuiClassificationIndicator:SetPoint("BOTTOMLEFT", portraitAnchor, "TOPLEFT", 40, 1)
+            -- Keep the indicator outside the health bar when portraits are off.
+            frame._kuiClassificationIndicator:SetSize(CLASSIFICATION_NO_PORTRAIT_SIZE, CLASSIFICATION_NO_PORTRAIT_SIZE)
+            -- Keep the icon outside the health bar and away from level text.
+            AnchorNoPortraitClassificationIndicator(frame, frame._kuiClassificationIndicator)
         end
         frame._kuiPvPIcon:ClearAllPoints()
         local pvpAnchor = profile and profile.pvpAnchor
@@ -4360,7 +4442,12 @@ local function SetupUnitIndicators(frame, unit)
         else
             frame._kuiLevelText:Hide()
         end
-        local atlas = showClassification and SafeUnitClassificationAtlas(u) or nil
+        local classificationTexture
+        if showClassification then
+            classificationTexture = portraitVisible
+                and SafeUnitClassificationTexture(u)
+                or SafeUnitClassificationNoPortraitTexture(u)
+        end
         local pvpFaction = (profile and profile.showPvPIcon ~= false
             and (u == "player" or u == "target"))
             and SafeUnitPvPFaction(u) or nil
@@ -4375,30 +4462,87 @@ local function SetupUnitIndicators(frame, unit)
         else
             frame._kuiPvPIcon:Hide()
         end
-        if atlas then
-            local applied = pcall(frame._kuiClassificationIndicator.SetAtlas, frame._kuiClassificationIndicator, atlas, true)
-            if not applied then
-                pcall(frame._kuiClassificationIndicator.SetAtlas, frame._kuiClassificationIndicator, atlas)
+        if classificationTexture then
+            local isFlipped = GetClassificationTextureFlipped(u, settings)
+            if portraitVisible and portraitBackdrop and portraitRing then
+                portraitRing:SetTexture(classificationTexture)
+                portraitRing:SetTexCoord(isFlipped and 1 or 0, isFlipped and 0 or 1, 0, 1)
+                local portraitSize = portraitBackdrop:GetWidth()
+                if portraitSize < 1 then portraitSize = 46 end
+                local ringWidth = math.max(24, portraitSize * CLASSIFICATION_PORTRAIT_SCALE)
+                local ringHeight = ringWidth * CLASSIFICATION_TEXTURE_ASPECT
+                portraitRing:SetSize(ringWidth, ringHeight)
+                portraitRing:ClearAllPoints()
+                local outwardOffset = 0
+                if settings and settings.portraitSide == "right" then
+                    outwardOffset = 3
+                elseif settings and settings.portraitSide == "left" then
+                    outwardOffset = -3
+                end
+                portraitRing:SetPoint("CENTER", portraitBackdrop, "CENTER", outwardOffset, 0)
+                portraitBackdrop:SetClipsChildren(false)
+                portraitRing:Show()
+                frame._kuiClassificationPortraitActive = true
+                frame._kuiClassificationIndicator:Hide()
+            else
+                frame._kuiClassificationPortraitActive = false
+                if portraitRing then portraitRing:Hide() end
+                if portraitBackdrop then portraitBackdrop:SetClipsChildren(true) end
+                frame._kuiClassificationIndicator:SetTexture(classificationTexture)
+                frame._kuiClassificationIndicator:SetTexCoord(isFlipped and 1 or 0, isFlipped and 0 or 1, 0, 1)
+                frame._kuiClassificationIndicator:Show()
             end
-            frame._kuiClassificationIndicator:Show()
         else
+            frame._kuiClassificationPortraitActive = false
             frame._kuiClassificationIndicator:Hide()
+            if portraitRing then portraitRing:Hide() end
+            if portraitBackdrop then portraitBackdrop:SetClipsChildren(true) end
+        end
+        -- Keep the normal border visible underneath the external classification ring.
+        local portraitBorder = portraitBackdrop and portraitBackdrop._shapeBorderTex
+        if portraitBorder and not frame._kuiClassificationPortraitActive then
+            if classificationTexture then
+                portraitBorder:Hide()
+            elseif profile and profile.portraitStyle == "detached" then
+                ApplyDetachedPortraitShape(portraitBackdrop, settings, u)
+            else
+                UpdateCircularPortraitBorder(frame)
+            end
+        end
+    end
+
+    local function QueueForeverMetadataRefresh()
+        RefreshForeverMetadata()
+        if not (C_Timer and C_Timer.After) then return end
+        if frame._kuiMetadataRefreshQueued then return end
+        frame._kuiMetadataRefreshQueued = true
+        local delays = { 0, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0, 1.5 }
+        for index, delay in ipairs(delays) do
+            C_Timer.After(delay, function()
+                if frame._refreshForeverMetadata then
+                    frame._refreshForeverMetadata()
+                end
+                if index == #delays then
+                    frame._kuiMetadataRefreshQueued = nil
+                end
+            end)
         end
     end
 
     frame._refreshForeverMetadata = RefreshForeverMetadata
+    frame._refreshForeverMetadataSoon = QueueForeverMetadataRefresh
     if not frame._kuiForeverMetadataEvents then
         frame._kuiForeverMetadataEvents = true
         for _, ev in ipairs({
             "PLAYER_ENTERING_WORLD", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED",
-            "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "UNIT_FLAGS", "UNIT_FACTION", "PLAYER_FLAGS_CHANGED",
+            "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED", "UNIT_FACTION", "PLAYER_FLAGS_CHANGED",
         }) do
             frame:RegisterEvent(ev, function()
-                RefreshForeverMetadata()
+                QueueForeverMetadataRefresh()
             end, true)
         end
     end
-    RefreshForeverMetadata()
+    QueueForeverMetadataRefresh()
     -- ── Leader ──────────────────────────────────────────────────
     if not frame.LeaderIndicator then
         local tex = iOvr:CreateTexture(nil, "OVERLAY", nil, 7)
@@ -7235,6 +7379,10 @@ local function ReloadFrames()
                 RefreshTargetDebuffDispelStyle(settings)
             end
 
+            if frame._refreshForeverMetadata then
+                frame._refreshForeverMetadata()
+            end
+
             end -- else (enabled frame processing)
         end
     end
@@ -7339,6 +7487,18 @@ RefreshPlayerStatusIndicators = function()
     if frames.target then
         ApplyFramePosition(frames.target, "target")
     end
+end
+
+local function RefreshAllForeverMetadata()
+    for key, frame in pairs(frames) do
+        if type(key) == "string" and (type(frame) == "table" or type(frame) == "userdata") and frame._refreshForeverMetadataSoon then
+            frame._refreshForeverMetadataSoon()
+        end
+    end
+end
+
+function Mod:RefreshClassificationMetadata()
+    RefreshAllForeverMetadata()
 end
 
 function Mod:UpdateRestingIndicator()
@@ -9031,6 +9191,15 @@ function Mod:OnEnable()
         return
     end
     InitializeFrames()
+
+    -- Refresh classification directly on target/focus changes. The oUF
+    -- frame events can run before Blizzard has populated UnitClassification().
+    if not self._classificationEventsRegistered then
+        self:RegisterEvent("PLAYER_TARGET_CHANGED", "RefreshClassificationMetadata")
+        self:RegisterEvent("PLAYER_FOCUS_CHANGED", "RefreshClassificationMetadata")
+        self:RegisterEvent("UNIT_CLASSIFICATION_CHANGED", "RefreshClassificationMetadata")
+        self._classificationEventsRegistered = true
+    end
 
     -- Rebinds may happen more than once while Blizzard finishes loading its
     -- layout, but ApplyForeverUnitFrameLayoutDefaults only seeds missing data.

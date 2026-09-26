@@ -45,6 +45,7 @@ local KT_FOOTER_CURRENCY_SPACING = 10
 local KT_GRID_PADDING = 4
 local KT_BRAND_COLOR = { r = KT.C_R or 1, g = KT.C_G or 0, b = KT.C_B or 0.333 }
 local KT_QUEST_ITEM_COLOR = { r = 1.0, g = 0.72, b = 0.08 }
+local KT_NEW_ITEM_COLOR = { r = 0.86, g = 0.72, b = 0.50 }
 local KT_DEFAULT_FONT = KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
 local KT_BAGS_ICON_TEXTURE = "Interface\\Buttons\\Button-Backpack-Up"
 local KT_WATCH_ICON = "|TInterface\\COMMON\\Indicator-Yellow:12:12:0:0|t"
@@ -3410,7 +3411,7 @@ function Mod:EnsureItemButton(index)
 
     holder.KT_NewItemBorder = CreateFrame("Frame", nil, holder)
     holder.KT_NewItemBorder:SetAllPoints(holder)
-    KT:AddBorder(holder.KT_NewItemBorder, 1.0, 0.82, 0.12, 0.95, 2)
+    KT:AddBorder(holder.KT_NewItemBorder, KT_NEW_ITEM_COLOR.r, KT_NEW_ITEM_COLOR.g, KT_NEW_ITEM_COLOR.b, 0.95, 2)
     holder.KT_NewItemBorder:Hide()
 
     local button
