@@ -81,6 +81,13 @@ jobs:
           KUI_VERSION="${GITHUB_REF_NAME#v}"
           KUI_VERSION="${KUI_VERSION%-beta}"
           echo "KUI_VERSION=${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_NAME" == *-beta ]]; then
+            echo "PACKAGE_NAME=KullThranUI_Forever_beta_${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "PACKAGE_TITLE=KullThranUI Forever BETA ${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "PACKAGE_NAME=KullThranUI_Forever_${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "PACKAGE_TITLE=KullThranUI Forever ${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validar credenciales de publicación
         shell: bash
@@ -93,7 +100,7 @@ jobs:
       - name: Empaquetar y publicar KullThranUI Forever en Curse y Wago
         uses: BigWigsMods/packager@v2
         with:
-          args: '-n "KullThranUI_Forever_beta_${{ steps.version.outputs.KUI_VERSION }}:KullThranUI Forever BETA ${{ steps.version.outputs.KUI_VERSION }}"'
+          args: '-n "${{ steps.version.outputs.PACKAGE_NAME }}:${{ steps.version.outputs.PACKAGE_TITLE }}"'
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

@@ -44,6 +44,7 @@ local KT_FOOTER_CURRENCY_SPACING = 10
 -- (borders/highlights) getting clipped at the container edges.
 local KT_GRID_PADDING = 4
 local KT_BRAND_COLOR = { r = KT.C_R or 1, g = KT.C_G or 0, b = KT.C_B or 0.333 }
+local KT_QUEST_ITEM_COLOR = { r = 1.0, g = 0.72, b = 0.08 }
 local KT_DEFAULT_FONT = KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
 local KT_BAGS_ICON_TEXTURE = "Interface\\Buttons\\Button-Backpack-Up"
 local KT_WATCH_ICON = "|TInterface\\COMMON\\Indicator-Yellow:12:12:0:0|t"
@@ -3114,12 +3115,13 @@ function Mod:GetSlotCategory(slotData)
         subclassID = subclassID or instantSubclassID
     end
 
-    if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP" then
-        return "Equipment"
-    end
+    local questClassID = LE_ITEM_CLASS_QUESTITEM
+        or (Enum and Enum.ItemClass and Enum.ItemClass.Questitem)
 
-    if classID == LE_ITEM_CLASS_QUESTITEM or itemType == ITEM_CLASS_QUESTITEM then
+    if slotData.isQuestItem == true or classID == questClassID or itemType == ITEM_CLASS_QUESTITEM then
         return "Quest"
+    elseif equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP" then
+        return "Equipment"
     elseif classID == LE_ITEM_CLASS_CONSUMABLE or itemType == ITEM_CLASS_CONSUMABLE then
         return "Consumables"
     elseif classID == LE_ITEM_CLASS_WEAPON or classID == LE_ITEM_CLASS_ARMOR then
@@ -3135,6 +3137,27 @@ function Mod:GetSlotCategory(slotData)
     end
 
     return "Miscellaneous"
+end
+
+local function KT_Bags_IsQuestItem(slotData)
+    if not slotData then
+        return false
+    end
+
+    local itemInfo = slotData.itemInfo
+    if itemInfo and itemInfo.isQuestItem == true then
+        return true
+    end
+
+    local classID = slotData.classID
+    if not classID and slotData.itemID and GetItemInfoInstant then
+        local _, _, _, _, _, instantClassID = GetItemInfoInstant(slotData.itemID)
+        classID = instantClassID
+    end
+
+    local questClassID = LE_ITEM_CLASS_QUESTITEM
+        or (Enum and Enum.ItemClass and Enum.ItemClass.Questitem)
+    return classID == questClassID
 end
 
 --- Check whether a live bag slot matches the active native search filter.
@@ -3222,6 +3245,9 @@ function Mod:CollectBagSlots()
                 classID = classID,
                 subclassID = subclassID,
                 equipLoc = equipLoc,
+                isQuestItem = itemInfo and itemInfo.isQuestItem == true
+                    or classID == (LE_ITEM_CLASS_QUESTITEM
+                        or (Enum and Enum.ItemClass and Enum.ItemClass.Questitem)),
                 itemLevel = (itemLink and KT_Bags_IsRealEquipment(classID, equipLoc)) and KT_Bags_GetItemLevel(itemLink) or nil,
                 quality = itemInfo and itemInfo.quality or nil,
             })
@@ -3307,8 +3333,8 @@ local function KT_Bags_StripItemButtonArt(button)
     hideAndDetach(button.IconOverlay or button.iconOverlay)
     hideAndDetach(button.JunkIcon or button.junkIcon)
     hideAndDetach(button.UpgradeIcon or button.upgradeIcon)
-    -- hideAndDetach(button.QuestBorder or button.questBorder)
-    -- hideAndDetach(button.IconQuestTexture or button.iconQuestTexture or button.QuestIcon or button.questIcon)
+    hideAndDetach(button.QuestBorder or button.questBorder)
+    hideAndDetach(button.IconQuestTexture or button.iconQuestTexture or button.QuestIcon or button.questIcon)
     hideAndDetach(button.BattlepayItemTexture or button.battlepayItemTexture)
     hideAndDetach(button.ProfessionQualityOverlay or button.professionQualityOverlay)
 
@@ -3503,6 +3529,21 @@ function Mod:EnsureItemButton(index)
     button.KT_ItemLevelText:SetJustifyH("LEFT")
     button.KT_ItemLevelText:SetTextColor(1.0, 0.82, 0.0, 1.0)
     button.KT_ItemLevelText:Hide()
+
+    -- Dedicated quest-item highlight. Blizzard and Baganator quest overlays are
+    -- removed above, so keep this border owned by KUI and above the item icon.
+    button.KT_QuestItemBorder = CreateFrame("Frame", nil, button)
+    button.KT_QuestItemBorder:SetAllPoints(button)
+    button.KT_QuestItemBorder:SetFrameLevel(button:GetFrameLevel() + 5)
+    KT:AddBorder(
+        button.KT_QuestItemBorder,
+        KT_QUEST_ITEM_COLOR.r,
+        KT_QUEST_ITEM_COLOR.g,
+        KT_QUEST_ITEM_COLOR.b,
+        0.98,
+        2
+    )
+    button.KT_QuestItemBorder:Hide()
 
     -- The Blizzard item-button template is not guaranteed to update its
     -- cooldown when the button is populated manually, so keep a dedicated
@@ -3850,6 +3891,7 @@ function Mod:UpdateItemButton(button, slotData)
     local itemInfo = slotData.itemInfo
     local itemLink = slotData.itemLink
     local isNewItem = slotData.isNewItem == true
+    local isQuestItem = KT_Bags_IsQuestItem(slotData)
     if C_NewItems and C_NewItems.IsNewItem and bagID and slotID then
         local ok, value = pcall(C_NewItems.IsNewItem, bagID, slotID)
         if ok and type(value) == "boolean" then
@@ -3857,6 +3899,7 @@ function Mod:UpdateItemButton(button, slotData)
         end
     end
     slotData.isNewItem = isNewItem
+    slotData.isQuestItem = isQuestItem
 
     -- Ensure no stale highlight state persists across refreshes.
     if button.UnlockHighlight then
@@ -3872,6 +3915,7 @@ function Mod:UpdateItemButton(button, slotData)
     button.KT_ItemName = slotData.itemName
     button.KT_ItemID = slotData.itemID
     button.KT_HasItem = (itemInfo ~= nil) or (itemLink ~= nil)
+    button.KT_IsQuestItem = isQuestItem
     if button.KT_IndexFrame then
         button.KT_IndexFrame:SetID(bagID or 0)
     end
@@ -3964,6 +4008,10 @@ function Mod:UpdateItemButton(button, slotData)
             button.KT_ItemLevelText:Hide()
 
         end
+    end
+
+    if button.KT_QuestItemBorder then
+        button.KT_QuestItemBorder:SetShown(isQuestItem and button.KT_HasItem)
     end
 
     if button.KT_Holder and button.KT_Holder.KT_NewItemBorder then
