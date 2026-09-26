@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Cooldown Manager
 ## Notes: KullThranUI module: Cooldown Manager
 ## Author: KullThran
-## Version: 0.0.7
+## Version: 0.0.6
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

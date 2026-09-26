@@ -5,21 +5,16 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
-## 0.0.7 (2026-09-26)
+## 0.0.6 (2026-09-26)
 
-Forever maintenance release focused on dungeon tracking, protected-value safety, and party frames.
+Forever maintenance release focused on Bags, Nameplates, dungeon tracking, protected-value safety, and party frames.
 
+- Added a visible gold highlight border to quest-item icons in Bags, including recycled slots and Forever item-classification fallbacks.
+- Fixed a Nameplates protected-value error by removing comparisons against secret text geometry while anchoring level text.
 - Added a dungeon Objective Tracker fallback that lists every detected boss and marks defeated bosses with [X], including delayed refreshes while entering or updating an instance.
 - Fixed the dungeon tracker fallback detection for Forever by supporting both IsInInstance() and GetInstanceInfo() and avoiding false suppression by an empty native scenario block.
 - Fixed an oUF portrait taint error caused by comparing secret GUID strings; unit identity now uses UnitIsUnit() and protected GUID changes are ignored safely.
 - Fixed distorted dead/offline icons in Party Frames after AFK status geometry changed the shared icon dimensions.
-
-## 0.0.6 (2026-09-26)
-
-Forever maintenance release focused on Bags and Nameplates.
-
-- Added a visible gold highlight border to quest-item icons in Bags, including recycled slots and Forever item-classification fallbacks.
-- Fixed a Nameplates protected-value error by removing comparisons against secret text geometry while anchoring level text.
 
 ## 0.0.5 (2026-09-25)
 
