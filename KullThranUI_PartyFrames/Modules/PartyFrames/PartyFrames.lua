@@ -5664,17 +5664,21 @@ function Mod:PositionFrame(frame, parent, index, count, mode, visibleCount, layo
     local isCenteredStatus = height >= 70 or (width < 140 and height >= 40)
     local isHorizontalCenteredStatus = isCenteredStatus and db.growDirection == "HORIZONTAL"
     if isRaidMode then
-        frame.statusIcon:SetSize(20, 20)
+        frame._ktStatusIconBaseWidth = 20
+        frame._ktStatusIconBaseHeight = 20
         frame.statusIcon:SetPoint("CENTER", frame.health, "CENTER", 0, 5)
         frame.statusIcon:SetAlpha(1)
     elseif isCenteredStatus then
-        local iconSize = height >= 70 and 22 or 18
-        frame.statusIcon:SetSize(iconSize, iconSize)
+        frame._ktStatusIconBaseWidth = height >= 70 and 22 or 18
+        frame._ktStatusIconBaseHeight = frame._ktStatusIconBaseWidth
         frame.statusIcon:SetAlpha(1)
     else
-        frame.statusIcon:SetSize(14, 14)
+        frame._ktStatusIconBaseWidth = 14
+        frame._ktStatusIconBaseHeight = 14
         frame.statusIcon:SetAlpha(1)
     end
+    frame.statusIcon:SetSize(frame._ktStatusIconBaseWidth, frame._ktStatusIconBaseHeight)
+    frame.statusIcon:SetTexCoord(0, 1, 0, 1)
     
     frame.statusText:ClearAllPoints()
     frame.statusText:SetJustifyH("CENTER")
@@ -5738,6 +5742,14 @@ function Mod:PositionFrame(frame, parent, index, count, mode, visibleCount, layo
     frame.absorb:SetPoint("TOPRIGHT", frame.health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
     frame.absorb:SetPoint("BOTTOMRIGHT", frame.health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
     frame.absorb:SetWidth(math.max(1, width - (padding * 2)))
+end
+
+function Mod:RestoreStatusIconGeometry(frame)
+    if not frame or not frame.statusIcon then return end
+    local width = tonumber(frame._ktStatusIconBaseWidth) or 14
+    local height = tonumber(frame._ktStatusIconBaseHeight) or width
+    frame.statusIcon:SetSize(width, height)
+    frame.statusIcon:SetTexCoord(0, 1, 0, 1)
 end
 
 function Mod:SetFrameUnit(frame, unit)
@@ -5870,10 +5882,12 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
         frame.absorb:SetShown(db.showAbsorbBar ~= false and (data.absorb or 0) > 0)
         local isRaidMode = (frame.mode == "raid" or frame.mode == "raid40")
         if data.status == "Dead" then
+            self:RestoreStatusIconGeometry(frame)
             frame.statusIcon:SetTexture(ICON_PATH .. "Dead.png")
             frame.statusIcon:Show()
             frame.nameText:SetAlpha(isRaidMode and 0.3 or 1)
         elseif data.status == "Offline" then
+            self:RestoreStatusIconGeometry(frame)
             frame.statusIcon:SetTexture(ICON_PATH .. "Offline.png")
             frame.statusIcon:Show()
             frame.nameText:SetAlpha(isRaidMode and 0.3 or 1)
@@ -6034,6 +6048,7 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
         frame.valueText:Hide()
         frame.statusText:SetText(LText("Dead"))
         frame.statusText:Show()
+        self:RestoreStatusIconGeometry(frame)
         frame.statusIcon:SetTexture(ICON_PATH .. "Dead.png")
         frame.statusIcon:Show()
         frame.nameText:SetAlpha((frame.mode == "raid" or frame.mode == "raid40") and 0.3 or 1)
@@ -6052,6 +6067,7 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
         frame.valueText:Hide()
         frame.statusText:SetText(LText("Offline"))
         frame.statusText:Show()
+        self:RestoreStatusIconGeometry(frame)
         frame.statusIcon:SetTexture(ICON_PATH .. "Offline.png")
         frame.statusIcon:Show()
         frame.nameText:SetAlpha((frame.mode == "raid" or frame.mode == "raid40") and 0.3 or 1)

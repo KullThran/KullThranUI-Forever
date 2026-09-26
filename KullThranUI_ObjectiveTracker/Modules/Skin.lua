@@ -368,6 +368,9 @@ end
 
 local SUB_TRACKERS = {
     "ScenarioObjectiveTracker",
+    "DungeonObjectiveTracker",
+    "ChallengeModeObjectiveTracker",
+    "QuestSessionObjectiveTracker",
     "UIWidgetObjectiveTracker",
     "CampaignQuestObjectiveTracker",
     "QuestObjectiveTracker",
@@ -379,6 +382,162 @@ local SUB_TRACKERS = {
     "WorldQuestObjectiveTracker",
     "InitiativeTasksObjectiveTracker",
 }
+
+function Skin:GetDungeonBossCriteria()
+    local inParty = false
+    if _G.IsInInstance then
+        local instanceOK, inInstance, instanceType = pcall(_G.IsInInstance)
+        inParty = instanceOK and inInstance and instanceType == "party"
+    end
+    if not inParty and _G.GetInstanceInfo then
+        local infoOK, _, instanceType = pcall(_G.GetInstanceInfo)
+        inParty = infoOK and instanceType == "party"
+    end
+    if not inParty then return nil end
+
+    local scenario = _G.C_Scenario
+    local scenarioInfo = _G.C_ScenarioInfo
+    if not scenario and not scenarioInfo then return nil end
+
+    local numCriteria
+    if scenario.GetStepInfo then
+        local stepOK, _, _, count = pcall(scenario.GetStepInfo)
+        if stepOK then
+            numCriteria = tonumber(count)
+        end
+    end
+    if not numCriteria and scenarioInfo.GetScenarioStepInfo then
+        local stepOK, step = pcall(scenarioInfo.GetScenarioStepInfo)
+        if stepOK and type(step) == "table" then
+            numCriteria = tonumber(step.numCriteria)
+        end
+    end
+    if not numCriteria or numCriteria <= 0 then return nil end
+
+    local bosses = {}
+    for index = 1, math.min(numCriteria, 20) do
+        local info
+        if scenarioInfo and scenarioInfo.GetCriteriaInfo then
+            local criteriaOK, criteria = pcall(scenarioInfo.GetCriteriaInfo, index)
+            if criteriaOK and type(criteria) == "table" then
+                info = criteria
+            end
+        end
+
+        if not info and scenario and scenario.GetCriteriaInfo then
+            local criteriaOK, description, criteriaType, completed, quantity, totalQuantity,
+                flags, assetID, quantityString, criteriaID, duration, elapsed,
+                criteriaFailed, isWeightedProgress = pcall(scenario.GetCriteriaInfo, index)
+            if criteriaOK and type(description) == "string" then
+                info = {
+                    description = description,
+                    criteriaType = criteriaType,
+                    completed = completed,
+                    quantity = quantity,
+                    totalQuantity = totalQuantity,
+                    flags = flags,
+                    assetID = assetID,
+                    quantityString = quantityString,
+                    criteriaID = criteriaID,
+                    duration = duration,
+                    elapsed = elapsed,
+                    failed = criteriaFailed,
+                    isWeightedProgress = isWeightedProgress,
+                }
+            end
+        end
+
+        if info and info.isWeightedProgress ~= true then
+            local name = info.description or info.criteriaString
+            if type(name) == "string" and name ~= "" then
+                bosses[#bosses + 1] = {
+                    name = name,
+                    completed = info.completed == true,
+                }
+            end
+        end
+    end
+
+    return #bosses > 0 and bosses or nil
+end
+
+function Skin:RefreshDungeonBossFallback()
+    local tracker = _G.ObjectiveTrackerFrame
+    if not tracker then return end
+
+    local bosses = self:GetDungeonBossCriteria()
+    local frame = self._ktDungeonBossFallback
+    if not bosses then
+        if frame then frame:Hide() end
+        return
+    end
+
+    local nativeScenario = _G.ScenarioObjectiveTracker
+    local nativeHasContent = false
+    if nativeScenario and nativeScenario.IsShown and nativeScenario:IsShown() then
+        local objectives = nativeScenario.ObjectivesBlock or nativeScenario.Objectives
+        local objectiveHeight = objectives and tonumber(objectives.height)
+        if objectiveHeight and objectiveHeight > 1 then
+            nativeHasContent = true
+        end
+    end
+    if nativeHasContent then
+        if frame then frame:Hide() end
+        return
+    end
+
+    if not frame then
+        frame = _G.KT_DungeonBossesFallback
+        if not frame then
+            frame = CreateFrame("Frame", "KT_DungeonBossesFallback", tracker)
+        else
+            frame:SetParent(tracker)
+        end
+        frame.header = frame:CreateFontString(nil, "OVERLAY")
+        frame.header:SetJustifyH("LEFT")
+        frame.header:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        frame.rows = {}
+        self._ktDungeonBossFallback = frame
+    end
+
+    local width = tracker.GetWidth and tracker:GetWidth() or 0
+    frame:SetWidth(math.max(180, width or 0))
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", tracker, "TOPLEFT", 0, 3)
+    frame:SetFrameLevel((tracker.GetFrameLevel and tracker:GetFrameLevel() or 0) + 5)
+    frame.header:SetText(LText("Dungeon Bosses"))
+    StyleFontString(frame.header, 13)
+    local ar, ag, ab = GetAccent()
+    frame.header:SetTextColor(ar, ag, ab, 1)
+    frame.header:Show()
+
+    local rowHeight = 17
+    for index, boss in ipairs(bosses) do
+        local row = frame.rows[index]
+        if not row then
+            row = frame:CreateFontString(nil, "OVERLAY")
+            row:SetJustifyH("LEFT")
+            frame.rows[index] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -18 - ((index - 1) * rowHeight))
+        row:SetWidth(math.max(160, (frame:GetWidth() or 180) - 4))
+        row:SetHeight(rowHeight)
+        StyleFontString(row, 12)
+        row:SetText((boss.completed and "[X] " or "[ ] ") .. boss.name)
+        if boss.completed then
+            row:SetTextColor(0.25, 1, 0.35, 1)
+        else
+            row:SetTextColor(0.90, 0.90, 0.90, 1)
+        end
+        row:Show()
+    end
+    for index = #bosses + 1, #frame.rows do
+        frame.rows[index]:Hide()
+    end
+    frame:SetHeight(18 + (#bosses * rowHeight))
+    frame:Show()
+end
 
     function KT.ObjectiveTrackerSkin_UpdateColors()
         for tracker in pairs(_hookedTrackers) do
@@ -489,6 +648,27 @@ local function InitTracker()
     -- Keep one fallback pass for the modern ScrollBox contents, but do not
     -- rescan the complete child tree continuously from OnUpdate.
     Skin11_0_Tracker()
+    Skin:RefreshDungeonBossFallback()
+
+    if not Skin._ktDungeonBossEvents then
+        local eventFrame = CreateFrame("Frame")
+        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        eventFrame:RegisterEvent("SCENARIO_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_CRITERIA_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_CRITERIA_SHOW_STATE_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_COMPLETED")
+        eventFrame:RegisterEvent("UPDATE_INSTANCE_INFO")
+        eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        eventFrame:SetScript("OnEvent", function()
+            Skin:RefreshDungeonBossFallback()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.15, function() Skin:RefreshDungeonBossFallback() end)
+                C_Timer.After(0.75, function() Skin:RefreshDungeonBossFallback() end)
+            end
+        end)
+        Skin._ktDungeonBossEvents = eventFrame
+    end
 end
 
 local function SetupBackgroundAndFading()
