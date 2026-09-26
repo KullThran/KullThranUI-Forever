@@ -5250,14 +5250,17 @@ function NameplateFrame:UpdateName()
 end
 
 function NameplateFrame:UpdateLevelAnchor()
-    if not self.level or not self.level:IsShown() then return end
-    local nameW = self.name:GetStringWidth() or 0
-    local boxW = self.name:GetWidth() or 0
-    if nameW == 0 or boxW == 0 then return end
-    local textW = math.min(nameW, boxW)
-    local offset = (boxW - textW) / 2
+    if not self.level or not self.health then return end
+
+    -- Nameplate FontStrings can expose secret geometry when the name is
+    -- supplied by the protected nameplate pipeline. Do not read or compare
+    -- GetStringWidth()/GetWidth() here: even a zero check taints this path.
+    -- The level position is user-configurable and intentionally independent
+    -- of the rendered name width.
     self.level:ClearAllPoints()
-    PP.Point(self.level, "RIGHT", self.name, "LEFT", offset - 2, 0)
+    PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT",
+        tonumber(GetLevelConfigValue("levelXOffset")) or 24,
+        tonumber(GetLevelConfigValue("levelYOffset")) or 4)
 end
 -- Muestra el nivel de la unidad con estilo y posición independientes.
 function NameplateFrame:UpdateLevel()
