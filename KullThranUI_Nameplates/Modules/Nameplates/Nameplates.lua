@@ -447,7 +447,9 @@ debuffIconSize = 30,
 unitTypeColoringNoOverrideThreat = true,
 buffSlot = "left",
 sideAuraXOffset = 2,
-friendlyNameOnly = true,
+friendlyNameOnly = true, -- legacy compatibility key
+friendlyPlayerNameOnly = true,
+friendlyNPCNameOnly = true,
 _healthBarTextureMediaMigrated_v1 = true,
 hashLineColor = {
 b = 1,
@@ -2745,6 +2747,14 @@ local function InitDB()
         KullThranUINameplatesDB._friendlyDefaultsMigrated_v1 = nil
         KullThranUINameplatesDB._friendlyPlateDefaultsMigrated_v2 = true
     end
+    -- Split the legacy friendly Name Only preference without changing existing profiles.
+    if KullThranUINameplatesDB.friendlyPlayerNameOnly == nil then
+        KullThranUINameplatesDB.friendlyPlayerNameOnly = KullThranUINameplatesDB.friendlyNameOnly ~= false
+    end
+    if KullThranUINameplatesDB.friendlyNPCNameOnly == nil then
+        KullThranUINameplatesDB.friendlyNPCNameOnly = KullThranUINameplatesDB.friendlyNameOnly ~= false
+    end
+
     if not KullThranUINameplatesDB._showAllPlayerDebuffsMigrated_v1 then
         -- The previous default only showed auras Blizzard labels as
         -- nameplateShowPersonal. Enable all player-owned debuffs so normal
@@ -3139,7 +3149,7 @@ local function SetupAuraCVars()
     -- 2) CVars: agrupados por propósito (friendly, color, geometría, distancia)
     if ns.QueueNameplateCVar then
         local db = KullThranUINameplatesDB or defaults
-        local nameOnly  = (db.friendlyNameOnly ~= false)
+        local playerNameOnly = (db.friendlyPlayerNameOnly ~= false)
         local showPly   = (db.showFriendlyPlayers ~= false)
         local showNpc   = (db.showFriendlyNPCs == true)
         local defNames  = (db.friendlyShowDefaultNames == true)
@@ -3147,7 +3157,7 @@ local function SetupAuraCVars()
 
         -- Visibilidad de nameplates aliados
         local friendlyVars = {
-            nameplateShowOnlyNameForFriendlyPlayerUnits = nameOnly and 1 or 0,
+            nameplateShowOnlyNameForFriendlyPlayerUnits = playerNameOnly and 1 or 0,
             nameplateShowFriendlyPlayers = showPly and 1 or 0,
             UnitNameFriendlyPlayerName   = (showPly or defNames) and 1 or 0,
             nameplateShowFriends         = showPly and 1 or 0,
@@ -5457,7 +5467,7 @@ function NameplateFrame:RefreshNamePosition()
     self.name:ClearAllPoints()
 
     local isFriendly = self.unit and not UnitCanAttack("player", self.unit) and not UnitIsUnit(self.unit, "player")
-    local nameOnly = isFriendly and ns and ns.IsNameOnlyMode and ns.IsNameOnlyMode()
+    local nameOnly = isFriendly and ns and ns.IsNameOnlyMode and ns.IsNameOnlyMode(self.unit)
     if nameOnly or not nameSlot or not ApplyNameAnchor(self, nameSlot) then
         self.name:Hide()
     else
@@ -6643,8 +6653,8 @@ function ns.RefreshFriendlyNameOnlyOffset()
         ns.RefreshFriendlyNameOnlyOverlayLayout()
         return
     end    local db = KullThranUINameplatesDB or defaults
-    local nameOnly = (db.friendlyNameOnly ~= false)
-    local yOff = nameOnly and (db.friendlyNameOnlyYOffset or 0) or 0
+    local playerNameOnly = (db.friendlyPlayerNameOnly ~= false)
+    local yOff = playerNameOnly and (db.friendlyNameOnlyYOffset or 0) or 0
     for unit, nameplate in pairs(transitionState.pendingUnits) do
         if nameplate.UnitFrame then
             local uf = nameplate.UnitFrame

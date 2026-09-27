@@ -13,6 +13,8 @@ Forever beta maintenance release carrying the latest tested addon state and refr
 - Prepared the release workflow and package for explicit GitHub, CurseForge, and Wago beta publication.
 
 - Restored Blizzard's special-NPC state so friendly quest givers retain their native overhead question-mark indicator.
+- Prevented friendly nameplate FontStrings from calling `SetText()` before a font is initialized during level updates and frame recycling.
+- Split Friendly Name Only into independent Player and NPC controls and moved them higher in the Friendly display page.
 
 ## 0.0.7 (2026-09-26)
 
