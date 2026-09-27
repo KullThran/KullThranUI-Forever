@@ -5,6 +5,13 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.8 (2026-09-27)
+
+Forever beta maintenance release carrying the latest tested addon state and refreshed package metadata.
+
+- Updated all Forever addon TOCs and MinimapStats metadata to version 0.0.8.
+- Prepared the release workflow and package for explicit GitHub, CurseForge, and Wago beta publication.
+
 ## 0.0.7 (2026-09-26)
 
 Forever beta release focused on the latest Nameplates, Unit Frames, and Bags visual and compatibility improvements.
