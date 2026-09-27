@@ -12,6 +12,8 @@ Forever beta maintenance release carrying the latest tested addon state and refr
 - Updated all Forever addon TOCs and MinimapStats metadata to version 0.0.8.
 - Prepared the release workflow and package for explicit GitHub, CurseForge, and Wago beta publication.
 
+- Restored Blizzard's special-NPC state so friendly quest givers retain their native overhead question-mark indicator.
+
 ## 0.0.7 (2026-09-26)
 
 Forever beta release focused on the latest Nameplates, Unit Frames, and Bags visual and compatibility improvements.
