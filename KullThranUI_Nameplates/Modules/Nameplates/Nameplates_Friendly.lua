@@ -75,6 +75,45 @@ local function SetFriendlyFSFont(fs, size, flags)
     end
 end
 
+local function FriendlyFontIsSet(fs)
+    if not (fs and fs.GetFont) then return false end
+    local ok, path = pcall(fs.GetFont, fs)
+    return ok and type(path) == "string" and path ~= ""
+end
+
+local function EnsureFriendlyFSFont(fs, size, flags)
+    if not fs then return false end
+    if not FriendlyFontIsSet(fs) then
+        SetFriendlyFSFont(fs, size, flags)
+    end
+    return FriendlyFontIsSet(fs)
+end
+
+local function ClearFriendlyText(fs, size)
+    if not fs then return end
+    if EnsureFriendlyFSFont(fs, size, "OUTLINE") then
+        fs:SetText("")
+    end
+    fs:Hide()
+end
+
+local function IsFriendlyPlayerNameOnly()
+    local db = KullThranUINameplatesDB
+    return not db or db.friendlyPlayerNameOnly ~= false
+end
+
+local function IsFriendlyNPCNameOnly()
+    local db = KullThranUINameplatesDB
+    return not db or db.friendlyNPCNameOnly ~= false
+end
+
+local function IsFriendlyUnitNameOnly(unit)
+    if unit and UnitIsPlayer(unit) then
+        return IsFriendlyPlayerNameOnly()
+    end
+    return IsFriendlyNPCNameOnly()
+end
+
 local pairs, ipairs = pairs, ipairs
 local unpack = unpack or table.unpack
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
@@ -493,8 +532,7 @@ end
 local function HideFriendlyPlayerLevel(nameplate)
     local level = nameplate and nameplate._kuiFriendlyPlayerLevel
     if level then
-        level:SetText("")
-        level:Hide()
+        ClearFriendlyText(level, 11)
     end
 end
 
@@ -554,7 +592,7 @@ end
 
 local function UpdateFriendlyPlayerPvPMarker(nameplate, unit)
     local db = KullThranUINameplatesDB or {}
-    if db.friendlyNameOnly == false or db.showFriendlyPlayers == false
+    if not IsFriendlyPlayerNameOnly() or db.showFriendlyPlayers == false
         or not (nameplate and unit and IsFriendlyPlayerUnit(unit)) then
         HideFriendlyPlayerPvPMarker(nameplate)
         return
@@ -601,7 +639,7 @@ end
 
 local function UpdateFriendlyPlayerLevel(nameplate, unit)
     local db = KullThranUINameplatesDB or {}
-    if not nameplate or not unit or db.friendlyNameOnly == false
+    if not nameplate or not unit or not IsFriendlyPlayerNameOnly()
         or db.showFriendlyPlayers == false or db.showLevel == false
         or not IsFriendlyPlayerUnit(unit) then
         HideFriendlyPlayerLevel(nameplate)
@@ -618,6 +656,7 @@ local function UpdateFriendlyPlayerLevel(nameplate, unit)
     local level = nameplate._kuiFriendlyPlayerLevel
     if not level then
         level = uf:CreateFontString(nil, "OVERLAY")
+        SetFriendlyFSFont(level, 11, "OUTLINE")
         level:SetJustifyH("RIGHT")
         level:SetWordWrap(false)
         level:SetMaxLines(1)
@@ -672,7 +711,7 @@ local function RestoreFriendlyPlayerNameText(nameplate, unit)
 end
 
 local function EnforceFriendlyPlayerNameOnly(nameplate, unit)
-    if not (nameplate and IsNameOnlyMode()) then return end
+    if not (nameplate and IsFriendlyPlayerNameOnly()) then return end
     local uf = nameplate.UnitFrame
     if not uf then return end
 
@@ -702,13 +741,16 @@ local function ShouldShowFriendlyGuild()
 end
 
 local function IsFriendlyEnabled()
-    return KullThranUINameplatesDB and (KullThranUINameplatesDB.friendlyNameOnly == false)
+    local db = KullThranUINameplatesDB
+    return db and (not IsFriendlyPlayerNameOnly() or not IsFriendlyNPCNameOnly())
 end
 
-IsNameOnlyMode = function()
-    local db = KullThranUINameplatesDB
-    return not db or (db.friendlyNameOnly ~= false)
+IsNameOnlyMode = function(unit)
+    if unit then return IsFriendlyUnitNameOnly(unit) end
+    return IsFriendlyPlayerNameOnly() or IsFriendlyNPCNameOnly()
 end
+ns.IsNameOnlyMode = IsNameOnlyMode
+ns.IsFriendlyUnitNameOnly = IsFriendlyUnitNameOnly
 
 local function IsFriendlyNPCEnabled()
     return KullThranUINameplatesDB and (KullThranUINameplatesDB.showFriendlyNPCs == true)
@@ -798,7 +840,7 @@ function ns.RefreshFriendlyFontOverride()
         local np = plates[idx]
         local tok = np.namePlateUnitToken
         if tok and not UnitIsUnit(tok, "player") and not UnitCanAttack("player", tok) then
-            ApplyFontToNameplate(np)
+            if IsFriendlyUnitNameOnly(tok) then ApplyFontToNameplate(np) end
         end
     end
 end
@@ -1361,7 +1403,7 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
     if UnitIsUnit(unit, "player") then return end
 
     -- Health-bar mode: full UF suppression for players (and NPCs if enabled)
-    if IsFriendlyEnabled() then
+    if IsFriendlyEnabled() and not IsFriendlyUnitNameOnly(unit) then
         if not UnitIsPlayer(unit) and not IsFriendlyNPCEnabled() then return end
         local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
         if nameplate then
@@ -1371,7 +1413,7 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
     end
 
     -- Name-only mode: suppress Blizzard UF and show our own name overlay for NPCs
-    if IsNameOnlyMode() and IsFriendlyNPCEnabled() and not UnitIsPlayer(unit) then
+    if IsFriendlyNPCNameOnly() and IsFriendlyNPCEnabled() and not UnitIsPlayer(unit) then
         local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
         if nameplate then
             SuppressNPCNameplate(nameplate, unit)
@@ -1380,7 +1422,7 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
 
     -- Name-only players use the same addon-owned overlay as friendly NPCs.
     -- This avoids mixing Blizzard's projected FontString with KUI regions.
-    if IsNameOnlyMode() and UnitIsPlayer(unit) then
+    if IsFriendlyPlayerNameOnly() and UnitIsPlayer(unit) then
         local showFriendly = KullThranUINameplatesDB
             and KullThranUINameplatesDB.showFriendlyPlayers ~= false
         if showFriendly and nameplate then
@@ -1503,6 +1545,8 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
     plate.name:SetMaxLines(1)
 
     plate.level = plate:CreateFontString(nil, "OVERLAY")
+    SetFriendlyFSFont(plate.level, 11,
+        (ns and ns.GetNPOutline and ns.GetNPOutline()) or "OUTLINE")
     plate.level:SetJustifyH("RIGHT")
     plate.level:SetWordWrap(false)
     plate.level:SetMaxLines(1)
@@ -1595,6 +1639,10 @@ local function UpdateFriendlyBarLevel(plate)
     local name = plate and plate.name
     local unit = plate and plate.unit
     local db = KullThranUINameplatesDB or {}
+    if level and not EnsureFriendlyFSFont(level, tonumber(db.levelFontSize) or 11, "OUTLINE") then
+        level:Hide()
+        return
+    end
     if not (level and name and unit) or db.showLevel == false
         or db.showFriendlyPlayers == false or not IsFriendlyPlayerUnit(unit) then
         if level then
@@ -1698,10 +1746,10 @@ function FriendlyFrame:ClearUnit()
     self._ktStableLayoutFrames = nil
     self._ktApplyingStableLayout = nil
     self:UnregisterAllEvents()
-    self.name:SetText("")
-    if self.level then self.level:SetText(""); self.level:Hide() end
-    if self.guild then self.guild:SetText(""); self.guild:Hide() end
-    if self.description then self.description:SetText(""); self.description:Hide() end
+    ClearFriendlyText(self.name, 11)
+    ClearFriendlyText(self.level, 11)
+    ClearFriendlyText(self.guild, 11)
+    ClearFriendlyText(self.description, 11)
     -- Restore Blizzard UF before clearing our reference
     if self.unit then RestoreBlizzardUF(self.unit) end
     self.unit = nil
@@ -1953,6 +2001,8 @@ local function TryAddFriendlyPlate(unit)
     end
     if UnitCanAttack("player", unit) then return end
     if UnitIsUnit(unit, "player") then return end
+    -- Name-only units use the stable overlay path, not the health-bar pool.
+    if IsFriendlyUnitNameOnly(unit) then return end
     -- Skip non-player units unless friendly NPC plates are enabled
     if not UnitIsPlayer(unit) and not IsFriendlyNPCEnabled() then return end
     local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
@@ -2011,8 +2061,8 @@ function ns.RemoveFriendlyPlateNoRestore(unit)
     plate:Hide()
     plate.unit = nil
     plate.nameplate = nil
-    plate.name:SetText("")
-    if plate.description then plate.description:SetText(""); plate.description:Hide() end
+    ClearFriendlyText(plate.name, 11)
+    ClearFriendlyText(plate.description, 11)
     plate.glow:Hide()
     plate.highlight:Hide()
     plate.raidFrame:Hide()
@@ -2137,7 +2187,7 @@ end
 
 function ns.RefreshFriendlyPlayerLevels()
     local db = KullThranUINameplatesDB or {}
-    if db.friendlyNameOnly == false then
+    if not IsFriendlyPlayerNameOnly() then
         for _, plate in pairs(friendlyPlates) do
             if plate.UpdateLevel then plate:UpdateLevel() end
         end
@@ -2206,49 +2256,42 @@ ns.RefreshFriendlyFontOverride = ns.RefreshFriendlyNameOnlyOverlayLayout
 --  System enable / disable  (called from toggle setValue and on login)
 -------------------------------------------------------------------------------
 function ns.UpdateFriendlyNameplateSystem()
-    local shouldEnable = IsFriendlyEnabled() -- health-bar mode
-    local nameOnly     = IsNameOnlyMode()    -- name-only mode
-    local showFriendly = KullThranUINameplatesDB and KullThranUINameplatesDB.showFriendlyPlayers ~= false
-    SetFriendlyAuraCVars(shouldEnable or (nameOnly and showFriendly))
+    local db = KullThranUINameplatesDB or {}
+    local playerNameOnly = IsFriendlyPlayerNameOnly()
+    local npcNameOnly = IsFriendlyNPCNameOnly()
+    local nameOnly = playerNameOnly or npcNameOnly
+    local shouldEnable = IsFriendlyEnabled() -- at least one friendly type uses health bars
+    local showFriendly = db.showFriendlyPlayers ~= false
+    local showNPC = db.showFriendlyNPCs == true
+    SetFriendlyAuraCVars(shouldEnable or (playerNameOnly and showFriendly) or (npcNameOnly and showNPC))
 
-    -- The name-only marker is attached to Blizzard's UnitFrame. Remove it
-    -- immediately when switching to bars or hiding friendly players.
-    if not (nameOnly and showFriendly) then
+    -- The PvP marker belongs to the player name-only overlay only.
+    if not (playerNameOnly and showFriendly) then
         for nameplate in pairs(friendlyPlayerPvPMarkers) do
             HideFriendlyPlayerPvPMarker(nameplate)
         end
     end
 
     if ns.QueueNameplateCVar then
-        local db = KullThranUINameplatesDB
-        if db then
-            local showPlayers = (db.showFriendlyPlayers ~= false)
-            local showNPCs = (db.showFriendlyNPCs == true)
-            ns.QueueNameplateCVar("nameplateShowFriendlyPlayers", showPlayers and 1 or 0)
-            ns.QueueNameplateCVar("nameplateShowFriends", showPlayers and 1 or 0)
-            ns.QueueNameplateCVar("nameplateShowFriendlyNPCs", showNPCs and 1 or 0)
-            ns.QueueNameplateCVar("nameplateShowFriendlyNpcs", showNPCs and 1 or 0)
-            -- Quest givers use Blizzard's special-NPC state for their native ? marker.
-            ns.QueueNameplateCVar("UnitNameFriendlySpecialNPCName", showNPCs and 1 or 0)
-        end
+        ns.QueueNameplateCVar("nameplateShowFriendlyPlayers", showFriendly and 1 or 0)
+        ns.QueueNameplateCVar("nameplateShowFriends", showFriendly and 1 or 0)
+        ns.QueueNameplateCVar("nameplateShowFriendlyNPCs", showNPC and 1 or 0)
+        ns.QueueNameplateCVar("nameplateShowFriendlyNpcs", showNPC and 1 or 0)
+        ns.QueueNameplateCVar("nameplateShowOnlyNameForFriendlyPlayerUnits", playerNameOnly and 1 or 0)
+        -- Quest givers use Blizzard's special-NPC state for their native ? marker.
+        ns.QueueNameplateCVar("UnitNameFriendlySpecialNPCName", showNPC and 1 or 0)
     end
 
     if shouldEnable and not friendlyEnabled then
-        -- Switching TO health-bar mode
-        RestoreFriendlyFontOverride() -- undo any font override
-        -- Clean up any name-only NPC overlays
+        RestoreFriendlyFontOverride()
         for np in pairs(nameOnlyNPCSuppressed) do
-            local u = np.namePlateUnitToken
-            RestoreNPCNameplate(np, u)
+            RestoreNPCNameplate(np, np.namePlateUnitToken)
         end
         friendlyEnabled = true
         RegisterFriendlyManager()
-        -- Pick up any nameplates already visible.
         local units = {}
         if ns.pendingUnits then
-            for unit, _ in pairs(ns.pendingUnits) do
-                units[unit] = true
-            end
+            for unit, _ in pairs(ns.pendingUnits) do units[unit] = true end
         end
         local allPlates = GetAccessibleNamePlates()
         if allPlates then
@@ -2257,12 +2300,8 @@ function ns.UpdateFriendlyNameplateSystem()
                 if unit then units[unit] = true end
             end
         end
-        for unit, _ in pairs(units) do
-            TryAddFriendlyPlate(unit)
-        end
+        for unit, _ in pairs(units) do TryAddFriendlyPlate(unit) end
     elseif shouldEnable and friendlyEnabled then
-        -- Already in health-bar mode — re-sweep to pick up NPC plates that
-        -- may have been skipped (e.g. user just toggled showFriendlyNPCs on)
         local allPlates = GetAccessibleNamePlates()
         if allPlates then
             for _, nameplate in ipairs(allPlates) do
@@ -2271,35 +2310,38 @@ function ns.UpdateFriendlyNameplateSystem()
             end
         end
     elseif not shouldEnable and friendlyEnabled then
-        -- Switching FROM health-bar mode
         friendlyEnabled = false
         UnregisterFriendlyManager()
         ClearAllFriendlyPlates()
-        -- Clean up any leftover NPC overlays from name-only mode
         for np in pairs(nameOnlyNPCSuppressed) do
-            local u = np.namePlateUnitToken
-            RestoreNPCNameplate(np, u)
+            RestoreNPCNameplate(np, np.namePlateUnitToken)
+        end
+    end
+
+    -- If only one type changed to Name Only, release its old health-bar plate.
+    if shouldEnable then
+        for unit in pairs(friendlyPlates) do
+            if IsFriendlyUnitNameOnly(unit) then
+                ns.RemoveFriendlyPlate(unit)
+            end
         end
     end
 
     if nameOnly then
         RestoreFriendlyFontOverride()
-
-        local npcEnabled = IsFriendlyNPCEnabled()
         local function SweepStableFriendlyOverlays()
             local allPlates = GetAccessibleNamePlates()
             if not allPlates then return end
-
             for _, nameplate in ipairs(allPlates) do
                 local unit = nameplate.namePlateUnitToken
                 if unit and not UnitCanAttack("player", unit) and not UnitIsUnit(unit, "player") then
                     if UnitIsPlayer(unit) then
-                        if showFriendly then
+                        if showFriendly and playerNameOnly then
                             SuppressNPCNameplate(nameplate, unit)
                         else
                             RestoreNPCNameplate(nameplate, unit)
                         end
-                    elseif npcEnabled then
+                    elseif showNPC and npcNameOnly then
                         SuppressNPCNameplate(nameplate, unit)
                     else
                         RestoreNPCNameplate(nameplate, unit)
@@ -2307,7 +2349,6 @@ function ns.UpdateFriendlyNameplateSystem()
                 end
             end
         end
-
         SweepStableFriendlyOverlays()
         C_Timer.After(0.1, SweepStableFriendlyOverlays)
         C_Timer.After(0.5, SweepStableFriendlyOverlays)
@@ -2318,7 +2359,6 @@ function ns.UpdateFriendlyNameplateSystem()
         end
     end
 end
-
 -------------------------------------------------------------------------------
 --  Bootstrap — wait for DB then enable system
 --  PLAYER_LOGIN enables the system; PLAYER_ENTERING_WORLD does a follow-up
@@ -2348,7 +2388,7 @@ initFrame:SetScript("OnEvent", function(self, event)
                 end
             end
             -- Name-only NPC sweep: suppress health bars and color names
-            if IsNameOnlyMode() and IsFriendlyNPCEnabled() then
+            if IsFriendlyNPCNameOnly() and IsFriendlyNPCEnabled() then
                 local allPlates = GetAccessibleNamePlates()
                 if allPlates then
                     for _, nameplate in ipairs(allPlates) do
@@ -2378,13 +2418,13 @@ function ns.TrySuppressNPCHealthBar(unit, nameplate)
     -- recycled and the main handler may run after another addon restored the
     -- native UnitFrame.
     if not (unit and nameplate) then return end
-    if not IsNameOnlyMode() or not IsFriendlyNPCEnabled() then return end
+    if not IsFriendlyNPCNameOnly() or not IsFriendlyNPCEnabled() then return end
     if UnitIsPlayer(unit) or UnitCanAttack('player', unit) then return end
     SuppressNPCNameplate(nameplate, unit)
 end
 
 function ns.TrySuppressFriendlyPlayerNameplate(unit, nameplate)
-    if not (unit and nameplate and IsNameOnlyMode()) then return end
+    if not (unit and nameplate and IsFriendlyPlayerNameOnly()) then return end
     local db = KullThranUINameplatesDB or {}
     if db.showFriendlyPlayers == false then return end
     if not UnitIsPlayer(unit) or UnitIsUnit(unit, "player")

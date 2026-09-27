@@ -2819,7 +2819,8 @@ initFrame:SetScript("OnEvent", function(self)
             local width = DBVal("friendlyHealthBarWidth") or defaults.friendlyHealthBarWidth
             local barH = DBVal("friendlyHealthBarHeight") or defaults.friendlyHealthBarHeight
             local px = math.max(1 / previewScale, 1)
-            local nameOnly = DBVal("friendlyNameOnly") ~= false
+            local playerNameOnly = DBVal("friendlyPlayerNameOnly") ~= false
+            local npcNameOnly = DBVal("friendlyNPCNameOnly") ~= false
             local playerAlign = DBVal("friendlyPlayerNameAlignment") or defaults.friendlyPlayerNameAlignment
             local npcAlign = DBVal("friendlyNPCNameAlignment") or defaults.friendlyNPCNameAlignment
             local playerNameColor = FriendlyColor("friendlyPlayerNameColor", 1, 1, 1)
@@ -2848,12 +2849,10 @@ initFrame:SetScript("OnEvent", function(self)
             player.hpText:SetText("82%")
             npc.name:SetText(LText("Friendly NPC"))
 
-            if nameOnly then
+            if playerNameOnly then
                 player.health:Hide()
-                npc.health:Hide()
                 player.hpText:Hide()
                 player.guild:SetShown(guildEnabled)
-
                 player:SetSize(localParentW, 28)
                 player:ClearAllPoints()
                 player:SetPoint("TOP", self, "TOP", 0, -10)
@@ -2868,23 +2867,13 @@ initFrame:SetScript("OnEvent", function(self)
                 else
                     player.guild:SetPoint("TOP", player.name, "BOTTOM", 0, -1)
                 end
-
-                npc:SetSize(localParentW, 18)
-                npc:ClearAllPoints()
-                npc:SetPoint("TOP", player.guild:IsShown() and player.guild or player.name, "BOTTOM", 0, -10)
-                ApplyAlignment(npc.name, npc, npcAlign, 0, "name-only", 0)
-                self:SetSize(localParentW, 90)
             else
                 player.health:Show()
-                npc.health:Show()
                 player.hpText:Show()
                 player.guild:SetShown(guildEnabled)
-
                 local playerNameH = math.max(player.name:GetStringHeight() or 0, 14)
                 local guildH = player.guild:IsShown() and math.max(player.guild:GetStringHeight() or 0, 11) or 0
-                local npcNameH = math.max(npc.name:GetStringHeight() or 0, 14)
                 local playerTopBlockH = playerNameH + (player.guild:IsShown() and (guildH + 2) or 0)
-
                 player:SetSize(width, playerTopBlockH + barH + 14)
                 player:ClearAllPoints()
                 player:SetPoint("TOP", self, "TOP", 0, -6)
@@ -2910,10 +2899,21 @@ initFrame:SetScript("OnEvent", function(self)
                 LayoutBorder(player.health, px)
                 player.hpText:ClearAllPoints()
                 player.hpText:SetPoint("RIGHT", player.health, "RIGHT", -3, 0)
-
+            end
+            local playerBottom = playerNameOnly and player.name or player.health
+            if npcNameOnly then
+                npc.health:Hide()
+                npc:SetSize(localParentW, 18)
+                npc:ClearAllPoints()
+                npc:SetPoint("TOP", playerBottom, "BOTTOM", 0, -10)
+                ApplyAlignment(npc.name, npc, npcAlign, 0, "name-only", 0)
+                self:SetSize(localParentW, playerNameOnly and 72 or 90)
+            else
+                npc.health:Show()
+                local npcNameH = math.max(npc.name:GetStringHeight() or 0, 14)
                 npc:SetSize(width, npcNameH + barH + 14)
                 npc:ClearAllPoints()
-                npc:SetPoint("TOP", player.health, "BOTTOM", 0, -28)
+                npc:SetPoint("TOP", playerBottom, "BOTTOM", 0, -28)
                 ApplyTopAlignment(npc.name, npc, npcAlign, width, 0)
                 npc.health:ClearAllPoints()
                 npc.health:SetPoint("TOP", npc.name, "BOTTOM", 0, -8)
@@ -2922,7 +2922,7 @@ initFrame:SetScript("OnEvent", function(self)
                 npc.health:SetValue(100)
                 npc.health:SetStatusBarColor(0, 0.82, 0.62, 1)
                 LayoutBorder(npc.health, px)
-                self:SetSize(localParentW, playerTopBlockH + npcNameH + (barH * 2) + 70)
+                self:SetSize(localParentW, (playerNameOnly and 28 or 0) + npcNameH + barH + 60)
             end
         end
 
@@ -3080,8 +3080,8 @@ initFrame:SetScript("OnEvent", function(self)
 
         local function friendlyPlayersOff() return DBVal("showFriendlyPlayers") == false and
             DBVal("friendlyShowDefaultNames") ~= true end
-        local function friendlyPlateOff() return friendlyPlayersOff() or DBVal("friendlyNameOnly") ~= false end
-        local function nameOnlyOff() return friendlyPlayersOff() or DBVal("friendlyNameOnly") == false end
+        local function friendlyPlateOff() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end
+        local function nameOnlyOff() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") == false end
 
         local friendlyRow
         _, h = W:DualRow(parent, y,
@@ -3105,12 +3105,12 @@ initFrame:SetScript("OnEvent", function(self)
             },
             {
                 type = "toggle",
-                text = LText("Make Friendly Nameplates Name Only"),
+                text = LText("Make Friendly Players Name Only"),
                 tooltip =
                 "Hide friendly player health bars and instead only see their names.\n\nRequires 'Simplified Friendly Nameplates' to be disabled in Blizzard's Nameplate settings (Esc > Options > Nameplates).",
-                getValue = function() return DBVal("friendlyNameOnly") ~= false end,
+                getValue = function() return DBVal("friendlyPlayerNameOnly") ~= false end,
                 setValue = function(v)
-                    DB().friendlyNameOnly = v
+                    DB().friendlyPlayerNameOnly = v
                     if SetCVar then pcall(SetCVar, "nameplateShowOnlyNameForFriendlyPlayerUnits", v and 1 or 0) end
                     if ns.UpdateFriendlyNameplateSystem then ns.UpdateFriendlyNameplateSystem() end
                     KT:RefreshPage()
@@ -5184,6 +5184,7 @@ initFrame:SetScript("OnEvent", function(self)
         }
         local topDebuffAlignOrder = { "left", "center", "right" }
 
+        if displayMode ~= "friendly" then
         local enemyTextHeader
         local enemyNameTextRow
 
@@ -5242,6 +5243,8 @@ initFrame:SetScript("OnEvent", function(self)
             },
             { type = "label", text = LText("Fine tune top debuffs horizontally.") }); y = y - h
 
+        end
+
         if displayMode == "friendly" then
             local function friendlyPlayersOff()
                 return DBVal("showFriendlyPlayers") == false and DBVal("friendlyShowDefaultNames") ~= true
@@ -5274,10 +5277,10 @@ initFrame:SetScript("OnEvent", function(self)
                 },
                 {
                     type = "toggle",
-                    text = LText("Make Friendly Nameplates Name Only"),
-                    getValue = function() return DBVal("friendlyNameOnly") ~= false end,
+                    text = LText("Make Friendly Players Name Only"),
+                    getValue = function() return DBVal("friendlyPlayerNameOnly") ~= false end,
                     setValue = function(v)
-                        DB().friendlyNameOnly = v
+                        DB().friendlyPlayerNameOnly = v
                         if SetCVar then
                             pcall(SetCVar, "nameplateShowOnlyNameForFriendlyPlayerUnits", v and 1 or 0)
                         end
@@ -5287,6 +5290,8 @@ initFrame:SetScript("OnEvent", function(self)
                     disabled = friendlyPlayersOff,
                     disabledTooltip = "Show Friendly Player Nameplates",
                 }); y = y - h
+
+
 
             _, h = W:DualRow(parent, y,
                 {
@@ -5300,7 +5305,7 @@ initFrame:SetScript("OnEvent", function(self)
                         DB().friendlyPlateYOffset = v
                         if ns.RefreshFriendlyPlateYOffset then ns.RefreshFriendlyPlateYOffset() end
                     end,
-                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyNameOnly") ~= false end,
+                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
                     disabledTooltip = "Requires friendly health bars",
                 },
                 {
@@ -5314,7 +5319,7 @@ initFrame:SetScript("OnEvent", function(self)
                         DB().friendlyNameOnlyYOffset = v
                         if ns.RefreshFriendlyNameOnlyOffset then ns.RefreshFriendlyNameOnlyOffset() end
                     end,
-                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyNameOnly") == false end,
+                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") == false end,
                     disabledTooltip = "Requires Name Only mode",
                 }); y = y - h
 
@@ -5330,7 +5335,7 @@ initFrame:SetScript("OnEvent", function(self)
                         DB().friendlyHealthBarHeight = v
                         if ns.RefreshFriendlyPlateSize then ns.RefreshFriendlyPlateSize() end
                     end,
-                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyNameOnly") ~= false end,
+                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
                     disabledTooltip = "Requires friendly health bars",
                 },
                 {
@@ -5344,7 +5349,7 @@ initFrame:SetScript("OnEvent", function(self)
                         DB().friendlyHealthBarWidth = v
                         if ns.RefreshFriendlyPlateSize then ns.RefreshFriendlyPlateSize() end
                     end,
-                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyNameOnly") ~= false end,
+                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
                     disabledTooltip = "Requires friendly health bars",
                 }); y = y - h
 
@@ -5364,15 +5369,31 @@ initFrame:SetScript("OnEvent", function(self)
                 },
                 {
                     type = "toggle",
+                    text = LText("Make Friendly NPCs Name Only"),
+                    tooltip = "Hide friendly NPC health bars and show only their names.",
+                    getValue = function() return DBVal("friendlyNPCNameOnly") ~= false end,
+                    setValue = function(v)
+                        DB().friendlyNPCNameOnly = v
+                        if ns.UpdateFriendlyNameplateSystem then ns.UpdateFriendlyNameplateSystem() end
+                        KT:RefreshPage()
+                    end,
+                    disabled = function() return DBVal("showFriendlyNPCs") ~= true end,
+                    disabledTooltip = "Show Friendly NPC Nameplates",
+                }); y = y - h
+
+            _, h = W:DualRow(parent, y,
+                {
+                    type = "toggle",
                     text = LText("Show Friendly Health Percent"),
                     getValue = function() return not DBVal("friendlyHideHealthText") end,
                     setValue = function(v)
                         DB().friendlyHideHealthText = not v
                         if ns.RefreshFriendlyHealthText then ns.RefreshFriendlyHealthText() end
                     end,
-                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyNameOnly") ~= false end,
+                    disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
                     disabledTooltip = "Requires friendly health bars",
-                }); y = y - h
+                },
+                { type = "label", text = "" }); y = y - h
 
             _, h = W:Spacer(parent, y, 16); y = y - h
             friendlyTextHeader, h = W:SectionHeader(parent, "FRIENDLY TEXT", y); y = y - h
