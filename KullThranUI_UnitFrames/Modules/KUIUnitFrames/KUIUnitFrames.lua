@@ -4888,8 +4888,21 @@ local function SetupUnitIndicators(frame, unit)
             ovr._icon:SetTexture(iconPath)
             ovr._icon:SetTexCoord(0, 1, 0, 1)
             ovr:Show()
+            -- The status icon and the health value text both center on the
+            -- bar (confirmed live: centering the value text made it overlap
+            -- the always-centered AFK/Dead/Ghost/Offline icon into
+            -- unreadable mixed text). Real Blizzard shows one or the other,
+            -- never both. Never hides whichever FontString currently serves
+            -- as the name tab (frame._ktStockNameText), which lives above
+            -- the bar, not on it, and must stay visible regardless.
+            if frame.RightText and frame.RightText ~= frame._ktStockNameText then
+                frame.RightText:Hide()
+            end
         else
             ovr:Hide()
+            if frame.RightText and frame.RightText ~= frame._ktStockNameText then
+                frame.RightText:Show()
+            end
         end
     end
 
