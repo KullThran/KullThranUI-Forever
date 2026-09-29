@@ -3747,18 +3747,40 @@ end
 -- unidad), asi que todas las unidades siguen el mismo interruptor.
 local function ApplyClassicFrameArt(frame, unit)
     local VT = KT.VisualThemes
-    if not (VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder) then
-        return
-    end
-    local wantClassic = db and db.profile and db.profile.frameArtKit == "classic"
-    if wantClassic then
-        frame.classicBorder = frame.classicBorder or VT:CreateClassicBorder(frame)
-        if frame.classicBorder then
-            VT:SeatClassicBorder(frame.classicBorder, frame, 1)
-            VT:ShowClassicBorder(frame.classicBorder, true)
+    if VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder then
+        local wantClassic = db and db.profile and db.profile.frameArtKit == "classic"
+        if wantClassic then
+            frame.classicBorder = frame.classicBorder or VT:CreateClassicBorder(frame)
+            if frame.classicBorder then
+                VT:SeatClassicBorder(frame.classicBorder, frame, 1)
+                VT:ShowClassicBorder(frame.classicBorder, true)
+            end
+        elseif frame.classicBorder then
+            VT:ShowClassicBorder(frame.classicBorder, false)
         end
-    elseif frame.classicBorder then
-        VT:ShowClassicBorder(frame.classicBorder, false)
+    end
+
+    -- VisualThemes (real per-client art): Classic gets the real vanilla
+    -- portrait sheet + health bar texture, Forever gets a real native
+    -- portrait ring. Independent of the classic-border block above and of
+    -- each other -- exactly one of these two apply/clear pairs "applies"
+    -- on any given render pass, the other always "clears".
+    local renderedTheme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+
+    if VT and VT.ApplyClassicUnitFrameArt and VT.ClearClassicUnitFrameArt then
+        if renderedTheme == "classic" then
+            VT:ApplyClassicUnitFrameArt(frame, frame, frame.Health and frame.Health:GetStatusBarTexture())
+        else
+            VT:ClearClassicUnitFrameArt(frame)
+        end
+    end
+
+    if VT and VT.ApplyForeverUnitFrameArt and VT.ClearForeverUnitFrameArt then
+        if renderedTheme == "forever" then
+            VT:ApplyForeverUnitFrameArt(frame, frame)
+        else
+            VT:ClearForeverUnitFrameArt(frame)
+        end
     end
 end
 
