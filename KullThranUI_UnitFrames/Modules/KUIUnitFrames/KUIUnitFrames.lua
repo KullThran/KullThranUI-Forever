@@ -3761,15 +3761,19 @@ local function ApplyClassicFrameArt(frame, unit)
     end
 
     -- VisualThemes (real per-client art): Classic gets the real vanilla
-    -- portrait sheet + health bar texture, Forever gets a real native
-    -- portrait ring. Independent of the classic-border block above and of
-    -- each other -- exactly one of these two apply/clear pairs "applies"
-    -- on any given render pass, the other always "clears".
+    -- portrait sheet, Forever gets a real native portrait ring. Both are
+    -- anchored to the actual portrait region (falling back to the whole
+    -- frame only when this unit has no portrait region), matching the
+    -- portraitBackdrop-or-frame fallback this file already uses elsewhere.
+    -- Independent of the classic-border block above and of each other --
+    -- exactly one of these two apply/clear pairs "applies" on any given
+    -- render pass, the other always "clears".
     local renderedTheme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+    local portraitRegion = (frame.Portrait and frame.Portrait.backdrop) or frame
 
     if VT and VT.ApplyClassicUnitFrameArt and VT.ClearClassicUnitFrameArt then
         if renderedTheme == "classic" then
-            VT:ApplyClassicUnitFrameArt(frame, frame, frame.Health and frame.Health:GetStatusBarTexture())
+            VT:ApplyClassicUnitFrameArt(frame, portraitRegion)
         else
             VT:ClearClassicUnitFrameArt(frame)
         end
@@ -3777,7 +3781,7 @@ local function ApplyClassicFrameArt(frame, unit)
 
     if VT and VT.ApplyForeverUnitFrameArt and VT.ClearForeverUnitFrameArt then
         if renderedTheme == "forever" then
-            VT:ApplyForeverUnitFrameArt(frame, frame)
+            VT:ApplyForeverUnitFrameArt(frame, portraitRegion)
         else
             VT:ClearForeverUnitFrameArt(frame)
         end

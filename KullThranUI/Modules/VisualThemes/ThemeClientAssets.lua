@@ -11,9 +11,7 @@ KT.VisualThemes = KT.VisualThemes or {}
 
     Classic: a real, fixed-path (non-atlas) Blizzard-shipped sheet,
     Interface\TargetingFrame\UI-TargetingFrame, sliced for a portrait/frame
-    ring, plus Interface\TargetingFrame\UI-StatusBar for the health bar fill
-    (the same file already used elsewhere in this addon for the "Blizzard"
-    statusbar texture). Neither is an atlas name, so neither carries the
+    ring. This is not an atlas name, so it carries none of the
     atlas-substitution risk the Retail theme is blocked on.
 
     Texture-coordinate derivation for UI-TargetingFrame (PROVISIONAL -- see
@@ -29,9 +27,20 @@ KT.VisualThemes = KT.VisualThemes or {}
     throwaway unit frame, look at it, adjust PORTRAIT_ART_* below if the
     piece looks stretched, cut off, or shows the wrong part of the sheet)
     before this is considered visually correct.
+
+    Both this file's decorative pieces are seated on a dedicated child frame
+    (see EnsureArtHost below), not directly on the caller's outer `frame` --
+    a Frame's own textures always render behind its child frames, and the
+    portrait/health/border widgets this art is meant to sit over are all
+    child frames, so a texture created directly on the outer frame would be
+    invisible underneath them. The host frame matches the same STRATA
+    ("MEDIUM") and a comfortably higher LEVEL this codebase's own Portrait
+    widget already uses for the identical reason (see this file's own
+    "Portrait strata and level set at creation (MEDIUM/50) -- always above
+    LOW frame" comment in KUIUnitFrames.lua) -- a documented, existing fact
+    about this codebase, not a guess.
 ]]
 
-local HEALTHBAR_TEXTURE = [[Interface\TargetingFrame\UI-StatusBar]]
 local PORTRAIT_FRAME_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame]]
 
 -- Assumed source sheet dimensions, in pixels. See derivation note above.
@@ -51,25 +60,54 @@ local PORTRAIT_ART_TEXCOORD = {
     PORTRAIT_ART_CROP_H / PORTRAIT_ART_SHEET_HEIGHT,
 }
 
---- Applies the Classic theme's real per-client UnitFrame art: retextures
---- `healthBarTexture` with the real vanilla-era status bar fill, and
---- creates (once, cached on `frame`) a portrait/frame ring texture on
---- `unitRegion` from the real UI-TargetingFrame sheet. Safe to call every
---- refresh -- the ring texture is created once and repositioned/shown on
---- repeat calls, never recreated.
---- @param frame Frame|Region the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the portrait/backdrop region to frame
---- @param healthBarTexture Texture the health bar's fill texture object
-function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, healthBarTexture)
+-- Strata/level this file's decorative hosts use to draw above the
+-- Health/Portrait/border child frames. MEDIUM matches the Portrait widget's
+-- own documented strata; the level offset only needs to clear
+-- BuildBorderFrame's unifiedBorder (frame:GetFrameLevel() + 10) within that
+-- same strata, which +20 comfortably does.
+local ART_HOST_STRATA = "MEDIUM"
+local ART_HOST_LEVEL_OFFSET = 20
+
+--- Creates (once, cached on `frame[cacheKey]`) a child frame positioned to
+--- fully cover `frame` and elevated to ART_HOST_STRATA/ART_HOST_LEVEL_OFFSET
+--- so textures created on it draw above the outer frame's own child widgets.
+--- @param frame Frame the unit frame's outer frame (owns the cache)
+--- @param cacheKey string the field name this host is cached under on `frame`
+--- @return Frame|nil host
+local function EnsureArtHost(frame, cacheKey)
+    local host = frame[cacheKey]
+    if host then return host end
+
+    host = CreateFrame("Frame", nil, frame)
+    host:SetAllPoints(frame)
+    host:SetFrameStrata(ART_HOST_STRATA)
+    host:SetFrameLevel(frame:GetFrameLevel() + ART_HOST_LEVEL_OFFSET)
+    frame[cacheKey] = host
+    return host
+end
+
+--- Applies the Classic theme's real per-client UnitFrame art: creates (once,
+--- cached on `frame`) a portrait/frame ring texture anchored to `unitRegion`
+--- (the real portrait region -- pass `frame.Portrait.backdrop` when it
+--- exists, falling back to `frame` only when no portrait region exists for
+--- this unit) from the real UI-TargetingFrame sheet. Does not touch any
+--- health-bar texture choice -- the `classic` theme's own seed already sets
+--- a real, correct health bar texture, and retexturing it again here would
+--- silently override whatever a user picks while `classic` is active. Safe
+--- to call every refresh -- the ring texture is created once and
+--- repositioned/shown on repeat calls, never recreated.
+--- @param frame Frame the unit frame's outer frame (owns the cache)
+--- @param unitRegion Frame|Region the real portrait region to frame
+function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
-    if type(healthBarTexture) ~= "table" or type(healthBarTexture.SetTexture) ~= "function" then return end
 
-    healthBarTexture:SetTexture(HEALTHBAR_TEXTURE)
+    local host = EnsureArtHost(frame, "_ktClassicArtHost")
+    if not host then return end
 
     local art = frame._ktClassicPortraitArt
     if not art then
-        art = frame:CreateTexture(nil, "OVERLAY")
+        art = host:CreateTexture(nil, "OVERLAY")
         art:SetTexture(PORTRAIT_FRAME_TEXTURE)
         art:SetTexCoord(PORTRAIT_ART_TEXCOORD[1], PORTRAIT_ART_TEXCOORD[2], PORTRAIT_ART_TEXCOORD[3], PORTRAIT_ART_TEXCOORD[4])
         frame._ktClassicPortraitArt = art
@@ -119,13 +157,15 @@ end
 local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
 
 --- Applies the Forever theme's real per-client UnitFrame art: creates
---- (once, cached on `frame`) a portrait ring texture on `unitRegion` from a
---- real Forever-native atlas piece, gated on that atlas name actually
---- resolving in this client. Falls back to ClearForeverUnitFrameArt (i.e.
---- today's already-shipped fixed-accent-color look, with no ring) when the
---- atlas name doesn't resolve, rather than erroring or half-applying.
---- @param frame Frame|Region the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the portrait/backdrop region to frame
+--- (once, cached on `frame`) a portrait ring texture anchored to
+--- `unitRegion` (the real portrait region -- same convention as
+--- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, gated
+--- on that atlas name actually resolving in this client. Falls back to
+--- ClearForeverUnitFrameArt (i.e. today's already-shipped fixed-accent-color
+--- look, with no ring) when the atlas name doesn't resolve, rather than
+--- erroring or half-applying.
+--- @param frame Frame the unit frame's outer frame (owns the cache)
+--- @param unitRegion Frame|Region the real portrait region to frame
 function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
@@ -135,9 +175,12 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
         return
     end
 
+    local host = EnsureArtHost(frame, "_ktForeverArtHost")
+    if not host then return end
+
     local art = frame._ktForeverPortraitArt
     if not art then
-        art = frame:CreateTexture(nil, "OVERLAY")
+        art = host:CreateTexture(nil, "OVERLAY")
         frame._ktForeverPortraitArt = art
     end
     art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
