@@ -5000,7 +5000,12 @@ local function StyleFullFrame(frame, unit)
         end
         ApplyClassicFrameArt(frame, unit)
         -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
-        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+        -- -- skipped when Forever/Classic real stock geometry is active: this
+        -- unconditional dual TOPLEFT+RIGHT anchor is exactly what was
+        -- confirmed live (via /ktforevertab) to silently undo the real bar
+        -- width ApplyClassicFrameArt just set, immediately above.
+        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health
+            and not (frame._ktForeverLayoutActive or frame._ktClassicLayoutActive) then
             local snappedPortW = frame.Portrait.backdrop:GetWidth()
             local newXOff = (effectiveSide == "left") and snappedPortW or 0
             local newRI = (effectiveSide == "right") and snappedPortW or 0
@@ -5113,7 +5118,10 @@ local function StyleFullFrame(frame, unit)
         end
         ApplyClassicFrameArt(frame, unit)
         -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
-        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+        -- -- skipped when Forever/Classic real stock geometry is active: see
+        -- the identical player-branch comment above for why.
+        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health
+            and not (frame._ktForeverLayoutActive or frame._ktClassicLayoutActive) then
             local snappedPortW = frame.Portrait.backdrop:GetWidth()
             local newXOff = (effectiveSide == "left") and snappedPortW or 0
             local newRI = (effectiveSide == "right") and snappedPortW or 0
@@ -5389,7 +5397,8 @@ local function StyleFocusFrame(frame, unit)
         frame.Portrait.backdrop:Hide()
     end
     -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
-    if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health
+        and not (frame._ktForeverLayoutActive or frame._ktClassicLayoutActive) then
         local snappedPortW = frame.Portrait.backdrop:GetWidth()
         local newXOff = (effectiveSide == "left") and snappedPortW or 0
         local newRI = (effectiveSide == "right") and snappedPortW or 0
@@ -5638,7 +5647,8 @@ local function StylePetFrame(frame, unit)
     if frame.Portrait and not showPortrait then        frame.Portrait.backdrop:Hide()
     end
     -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
-    if frame.Portrait and frame.Portrait.backdrop and showPortrait then
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait
+        and not (frame._ktForeverLayoutActive or frame._ktClassicLayoutActive) then
         local snappedPortW = frame.Portrait.backdrop:GetWidth()
         health:ClearAllPoints()
         PP.Point(health, "TOPLEFT", frame, "TOPLEFT", snappedPortW, 0)
@@ -5735,7 +5745,8 @@ local function StyleBossFrame(frame, unit)
         frame.Portrait.backdrop:Hide()
     end
     -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
-    if frame.Portrait and frame.Portrait.backdrop and showPortrait and frame.Health then
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait and frame.Health
+        and not (frame._ktForeverLayoutActive or frame._ktClassicLayoutActive) then
         local snappedPortW = frame.Portrait.backdrop:GetWidth()
         local powerAboveOff = (bPpPos == "above") and (settings.powerHeight or 6) or 0
         frame.Health:ClearAllPoints()
