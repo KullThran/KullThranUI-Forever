@@ -1827,6 +1827,38 @@ end
 -- Tabla display → tag oUF (compartida por player, target, focus, boss).
 -- Una sola función ResolveHealthTag reemplaza las antiguas 3 funciones
 -- individuales, consultando HEALTH_TAG_CONTEXT para defaults por unidad.
+-- Aura rows belong to the visible health bar, not to the outer unit-frame
+-- box. This matters for every portrait style and especially for stock art,
+-- where the frame includes large transparent/chrome areas around Health.
+function KT:ResolveUFAuraBarGeometry(frame)
+    local bar = frame and (frame.Health or frame)
+    local width = bar and bar.GetWidth and bar:GetWidth() or 0
+    local height = bar and bar.GetHeight and bar:GetHeight() or 0
+    if width <= 0 then width = frame and frame.GetWidth and frame:GetWidth() or 22 end
+    if height <= 0 then height = 22 end
+
+    local gap = 1
+    local auraSize = math.max(8, height)
+    local perRow = math.max(1, math.floor((width + gap) / (auraSize + gap)))
+    return bar or frame, width, auraSize, gap, perRow
+end
+
+function KT:ApplyLegacyUFAuraBarGeometry(container, frame, framePoint, initialAnchor,
+        growthX, growthY, offsetX, offsetY)
+    if not (container and frame) then return end
+    local bar, width, auraSize, gap, perRow = KT:ResolveUFAuraBarGeometry(frame)
+    container:ClearAllPoints()
+    container:SetPoint(initialAnchor, bar, framePoint,
+        (offsetX or 0) * gap, (offsetY or 0) * gap)
+    container:SetSize(width, auraSize)
+    container.size = auraSize
+    container.spacing = gap
+    container["size-x"] = perRow
+    container.initialAnchor = initialAnchor
+    container.growthX = growthX
+    container.growthY = growthY
+    return width, auraSize, gap, perRow
+end
 local HEALTH_DISPLAY_TAGS = {
     curhpshort = "[curhpshort]",
     perhp      = "[perhp]%",
@@ -2259,10 +2291,12 @@ local function ApplyDetachedPortraitShape(backdrop, uSettings, unitToken)
         PP.Point(backdrop._3d, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
     end
 
-    if isCircular then
+    if isCircular and not backdrop._ktStockPortraitAnchor then
         AnchorCircularPortrait(backdrop, uSettings, unitToken)
         C_Timer.After(0, function()
-            if backdrop and db and db.profile and db.profile.portraitStyle == "circular" then
+            if backdrop and not backdrop._ktStockPortraitAnchor
+                and db and db.profile and db.profile.portraitStyle == "circular"
+            then
                 AnchorCircularPortrait(backdrop, uSettings, unitToken)
             end
         end)
@@ -2273,7 +2307,13 @@ local function UpdateCircularPortraitBorder(frame)
     if not (frame and frame.Health and frame.Portrait and frame.Portrait.backdrop) then return end
     if not (db and db.profile and db.profile.portraitStyle == "circular") then return end
 
-    local border = frame.Portrait.backdrop._shapeBorderTex
+    local backdrop = frame.Portrait.backdrop
+    if backdrop._ktStockPortraitAnchor then
+        if backdrop._shapeBorderTex then backdrop._shapeBorderTex:Hide() end
+        return
+    end
+
+    local border = backdrop._shapeBorderTex
     if border then
         -- The elite/rare ring replaces the generic portrait border. Keeping
         -- both visible makes one unit look like two classifications at once.
@@ -3740,11 +3780,43 @@ local function ApplyBorderAppearance(frame, unit)
     if size == 0 then border:Hide() end
 end
 
--- Fase 3 (VisualThemes): aplica o retira el marco clasico opcional del tema
--- "classic". Es puramente decorativo: se ancla justo fuera del propio frame
--- unificado (el mismo rectangulo que borderColor ya tinta arriba) sin tocar
--- su layout/tamano. db.profile.frameArtKit es un valor global (no por
--- unidad), asi que todas las unidades siguen el mismo interruptor.
+-- Phase 3 (VisualThemes): the provisional 8-piece Classic border remains a
+-- fallback for units without verified full-frame geometry. Player/target use
+-- their real Classic or Forever stock box below; those kits replace both the
+-- fallback and KUI's generic unified border.
+function KT:ApplyStockUFHealthTextGeometry(frame, unit)
+    local health = frame and frame.Health
+    if not health then return end
+
+    local settings = GetSettingsForUnit(unit)
+    local leftContent = settings.leftTextContent or "name"
+    local rightContent = settings.rightTextContent or "both"
+    local centerContent = settings.centerTextContent or "none"
+    local width = math.max(1, (health.GetWidth and health:GetWidth() or 0) - 4)
+
+    if centerContent ~= "none" then
+        if frame.CenterText then
+            frame.CenterText:ClearAllPoints()
+            frame.CenterText:SetPoint("CENTER", health, "CENTER", 0, 0)
+            frame.CenterText:SetWidth(width)
+            frame.CenterText:SetJustifyH("CENTER")
+        end
+        return
+    end
+
+    if frame.LeftText and leftContent ~= "none" and leftContent ~= "name" then
+        frame.LeftText:ClearAllPoints()
+        frame.LeftText:SetPoint("LEFT", health, "LEFT", 2, 0)
+        frame.LeftText:SetWidth(width)
+        frame.LeftText:SetJustifyH("LEFT")
+    end
+    if frame.RightText and rightContent ~= "none" then
+        frame.RightText:ClearAllPoints()
+        frame.RightText:SetPoint("RIGHT", health, "RIGHT", -2, 0)
+        frame.RightText:SetWidth(width)
+        frame.RightText:SetJustifyH("RIGHT")
+    end
+end
 local function ApplyClassicFrameArt(frame, unit)
     local VT = KT.VisualThemes
     if VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder then
@@ -3760,25 +3832,20 @@ local function ApplyClassicFrameArt(frame, unit)
         end
     end
 
-    -- VisualThemes (real per-client art): Classic gets the real vanilla
-    -- portrait sheet, Forever gets a real native portrait ring. Both are
-    -- anchored to the actual portrait region (falling back to the whole
-    -- frame only when this unit has no portrait region), matching the
-    -- portraitBackdrop-or-frame fallback this file already uses elsewhere.
-    -- Independent of the classic-border block above and of each other --
-    -- exactly one of these two apply/clear pairs "applies" on any given
-    -- render pass, the other always "clears".
+    -- Real per-client art. Player/target Classic and Forever both use a
+    -- stable stock-layout box; other Classic units retain portrait-only art,
+    -- while non-Forever units deliberately receive no guessed Forever box.
     local renderedTheme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
     local portraitRegion = (frame.Portrait and frame.Portrait.backdrop) or frame
 
+    local usingClassicRealArt = false
     if VT and VT.ApplyClassicUnitFrameArt and VT.ClearClassicUnitFrameArt then
         if renderedTheme == "classic" then
-            VT:ApplyClassicUnitFrameArt(frame, portraitRegion)
+            usingClassicRealArt = VT:ApplyClassicUnitFrameArt(frame, portraitRegion, unit) and true or false
         else
             VT:ClearClassicUnitFrameArt(frame)
         end
     end
-
     local usingForeverRealArt = false
     if VT and VT.ApplyForeverUnitFrameArt and VT.ClearForeverUnitFrameArt then
         if renderedTheme == "forever" then
@@ -3788,14 +3855,27 @@ local function ApplyClassicFrameArt(frame, unit)
         end
     end
 
-    -- The real Forever frame-art box already provides its own visual
-    -- framing around the portrait/bars, so KUI's own generic border
-    -- (ApplyBorderAppearance, above) becomes redundant clutter around it --
-    -- confirmed via a live screenshot showing both at once. Only ever
-    -- hidden here, never shown: a user-configured borderSize of 0 must stay
-    -- hidden regardless of theme.
-    if usingForeverRealArt and frame.unifiedBorder then
+    -- A verified full-frame kit already provides the complete frame chrome.
+    -- Hide both KUI's generic border and Classic's provisional 8-piece
+    -- fallback only for player/target, where real stock geometry was applied.
+    local usingThemedRealArt = usingClassicRealArt or usingForeverRealArt
+    if usingClassicRealArt and frame.classicBorder
+        and VT and VT.ShowClassicBorder then
+        VT:ShowClassicBorder(frame.classicBorder, false)
+    end
+    if usingThemedRealArt and frame.unifiedBorder then
         frame.unifiedBorder:Hide()
+    end
+    if usingThemedRealArt then
+        KT:ApplyStockUFHealthTextGeometry(frame, unit)
+    end
+    -- Forever's real stock box moves buffs into its own name/buffs tab
+    -- (ApplyForeverUnitFrameArt, above) instead of the generic Health-bar-
+    -- relative anchor -- skip the generic refresh so it doesn't immediately
+    -- undo that placement. Classic/Retail are untouched (explicit user
+    -- request: this tab treatment is Forever-only for now).
+    if frame._refreshAuraBarGeometry and not usingForeverRealArt then
+        frame._refreshAuraBarGeometry()
     end
 end
 
@@ -4055,10 +4135,23 @@ local function ApplyTargetAuraSettings(frame, settings)
         end
     end
 
+    local bar, width, auraSize, gap = KT:ResolveUFAuraBarGeometry(frame)
     container:ClearAllPoints()
-    container:SetPoint(dia, frame, dfp, dox, doy + cbOffset)
+    container:SetPoint(dia, bar, dfp, dox * gap, doy * gap + cbOffset)
+
     local AK = _G.KTAuraKit
-    if AK then AK.SetContainerAnchor(container, dia) end
+    if AK then
+        AK.SetContainerAnchor(container, dia)
+        if AK.SetContainerRowWidth then AK.SetContainerRowWidth(container, width) end
+
+        local style = AK.styles and AK.styles["kuiuf:target-debuffs"]
+        if style and (style.width ~= auraSize or style.height ~= auraSize) then
+            style.width = auraSize
+            style.height = auraSize
+            if AK.RestyleSoon then AK.RestyleSoon("kuiuf:target-debuffs") end
+        end
+    end
+
     local flow = AnchorUtil and AnchorUtil.FlowDirection
     if flow and AK then
         local h = dgx == "LEFT" and flow.Left or flow.Right
@@ -4067,8 +4160,8 @@ local function ApplyTargetAuraSettings(frame, settings)
     end
     if container.SetAuraGroupLayout then
         container:SetAuraGroupLayout("targetDebuffs", {
-            elementWidth = 22, elementHeight = 22,
-            elementSpacing = 1, lineSpacing = 1,
+            elementWidth = auraSize, elementHeight = auraSize,
+            elementSpacing = gap, lineSpacing = gap,
         })
     end
     container:Show()
@@ -4097,12 +4190,58 @@ local function CreateUnitDispelSlots(frame, unit)
     frame._ktDispelSlotsCreated = true
 end
 
+function KT:RefreshTargetUFAuraBarGeometry(frame)
+    if not frame then return end
+    local current = GetSettingsForUnit(frame.unit or "target")
+
+    if frame.Buffs then
+        local bfp, bia, bgx, bgy, box, boy = ResolveBuffLayout(
+            current.buffAnchor, current.buffGrowth
+        )
+        local buffOffset = 0
+        local buffAnchor = current.buffAnchor or "topleft"
+        if current.showCastbar ~= false
+            and (buffAnchor == "bottomleft" or buffAnchor == "bottomright")
+        then
+            local castHeight = current.castbarHeight or 14
+            if castHeight <= 0 then castHeight = 14 end
+            buffOffset = -castHeight
+        end
+        KT:ApplyLegacyUFAuraBarGeometry(frame.Buffs, frame, bfp, bia,
+            bgx, bgy, box, boy + buffOffset)
+        if frame.Buffs.ForceUpdate then frame.Buffs:ForceUpdate() end
+    end
+
+    if frame.KTDebuffs then
+        ApplyTargetAuraSettings(frame, current)
+    elseif frame.Debuffs then
+        local dfp, dia, dgx, dgy, dox, doy = ResolveBuffLayout(
+            current.debuffAnchor or "bottomleft",
+            current.debuffGrowth or "auto"
+        )
+        local debuffOffset = 0
+        local debuffAnchor = current.debuffAnchor or "bottomleft"
+        if current.showCastbar ~= false
+            and (debuffAnchor == "bottomleft" or debuffAnchor == "bottomright")
+        then
+            local castHeight = current.castbarHeight or 14
+            if castHeight <= 0 then castHeight = 14 end
+            debuffOffset = -castHeight
+        end
+        KT:ApplyLegacyUFAuraBarGeometry(frame.Debuffs, frame, dfp, dia,
+            dgx, dgy, dox, doy + debuffOffset)
+        if frame.Debuffs.ForceUpdate then frame.Debuffs:ForceUpdate() end
+    end
+end
 local function CreateTargetAuras(frame, unit)
     if frame._targetAurasCreated then
         SyncTargetAuraContainer(frame, unit or "target")
         return
     end
     frame._targetAurasCreated = true
+    frame._refreshAuraBarGeometry = function()
+        KT:RefreshTargetUFAuraBarGeometry(frame)
+    end
     local function SetupAuraIcon(_, button)
         if not button then return end
 
@@ -4124,10 +4263,7 @@ local function CreateTargetAuras(frame, unit)
         end
     end
 
-    local auraSize = 22
-    local gap = 1
-    local perRow = 7
-    local containerWidth = frame:GetWidth()
+    local auraAnchor, containerWidth, auraSize, gap, perRow = KT:ResolveUFAuraBarGeometry(frame)
 
     local settings = GetSettingsForUnit(unit or 'target')
 
@@ -4154,7 +4290,7 @@ local function CreateTargetAuras(frame, unit)
     if bAnc == "bottomleft" or bAnc == "bottomright" then
         buffCbOff = cbOffset
     end
-    buffs:SetPoint(bia, frame, bfp, box * gap, boy * gap + buffCbOff)
+    buffs:SetPoint(bia, auraAnchor, bfp, box * gap, boy * gap + buffCbOff)
     buffs:SetSize(containerWidth, auraSize)
     buffs.size = auraSize
     buffs.spacing = gap
@@ -4215,7 +4351,7 @@ local function CreateTargetAuras(frame, unit)
             }},
         })
         debuffs:ClearAllPoints()
-        debuffs:SetPoint(dia, frame, dfp, dox * gap, doy * gap + debuffCbOff)
+        debuffs:SetPoint(dia, auraAnchor, dfp, dox * gap, doy * gap + debuffCbOff)
         AK.SetContainerAnchor(debuffs, dia)
         local flow = AnchorUtil and AnchorUtil.FlowDirection
         if flow then
@@ -4237,7 +4373,7 @@ local function CreateTargetAuras(frame, unit)
         SyncTargetAuraContainer(frame, unit)
     else
         local debuffs = CreateFrame("Frame", nil, frame)
-        debuffs:SetPoint(dia, frame, dfp, dox * gap, doy * gap + debuffCbOff)
+        debuffs:SetPoint(dia, auraAnchor, dfp, dox * gap, doy * gap + debuffCbOff)
         debuffs:SetSize(containerWidth, auraSize)
         debuffs.size = auraSize
         debuffs.spacing = gap
@@ -4802,6 +4938,7 @@ local function StyleFullFrame(frame, unit)
         if frame.Portrait and not showPortrait then
             frame.Portrait.backdrop:Hide()
         end
+        ApplyClassicFrameArt(frame, unit)
         -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
         if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
             local snappedPortW = frame.Portrait.backdrop:GetWidth()
@@ -4824,9 +4961,7 @@ local function StyleFullFrame(frame, unit)
 
         -- Always create player buffs; oUF element disabled later if not wanted
         do
-            local auraSize = 22
-            local gap = 1
-            local perRow = 7
+            local auraAnchor, auraWidth, auraSize, gap, perRow = KT:ResolveUFAuraBarGeometry(frame)
             local bfp, bia, bgx, bgy, box, boy = ResolveBuffLayout(
                 settings.buffAnchor, settings.buffGrowth
             )
@@ -4840,8 +4975,8 @@ local function StyleFullFrame(frame, unit)
                 buffCbOffset = -cbH
             end
             local buffs = CreateFrame("Frame", nil, frame)
-            buffs:SetPoint(bia, frame, bfp, box * gap, boy * gap + buffCbOffset)
-            buffs:SetSize(frame:GetWidth(), auraSize)
+            buffs:SetPoint(bia, auraAnchor, bfp, box * gap, boy * gap + buffCbOffset)
+            buffs:SetSize(auraWidth, auraSize)
             buffs.size = auraSize
             buffs.spacing = gap
             buffs.num = settings.maxBuffs or 4
@@ -4866,6 +5001,25 @@ local function StyleFullFrame(frame, unit)
                 end
             end
             frame.Buffs = buffs
+            frame._refreshAuraBarGeometry = function()
+                local current = GetSettingsForUnit(frame.unit or unit or "player")
+                local bfp2, bia2, bgx2, bgy2, box2, boy2 = ResolveBuffLayout(
+                    current.buffAnchor, current.buffGrowth
+                )
+                local liveOffset = 0
+                local liveAnchor = current.buffAnchor or "topleft"
+                if current.showPlayerCastbar
+                    and (liveAnchor == "bottomleft" or liveAnchor == "bottomright"
+                        or liveAnchor == "left" or liveAnchor == "right")
+                then
+                    local castHeight = current.playerCastbarHeight or 0
+                    if castHeight <= 0 then castHeight = 14 end
+                    liveOffset = -castHeight
+                end
+                KT:ApplyLegacyUFAuraBarGeometry(frame.Buffs, frame, bfp2, bia2,
+                    bgx2, bgy2, box2, boy2 + liveOffset)
+                if frame.Buffs.ForceUpdate then frame.Buffs:ForceUpdate() end
+            end
             CreateUnitDispelSlots(frame, unit)
         end
     elseif unit == "target" then
@@ -4897,6 +5051,7 @@ local function StyleFullFrame(frame, unit)
         if frame.Portrait and not showPortrait then
             frame.Portrait.backdrop:Hide()
         end
+        ApplyClassicFrameArt(frame, unit)
         -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
         if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
             local snappedPortW = frame.Portrait.backdrop:GetWidth()
@@ -5011,6 +5166,9 @@ local function StyleFullFrame(frame, unit)
 
     -- Indicadores comunes a todas las unidades
     SetupUnitIndicators(frame, unit)
+    -- Text regions now exist; re-run the theme layout so the name tab and
+    -- text strata are seated in the same stock geometry as the bars.
+    ApplyClassicFrameArt(frame, unit)
 end
 
 SetupPlayerStatusIndicators = function(frame, settings)
@@ -7366,8 +7524,6 @@ local function ReloadFrames()
                     frame.unifiedBorder:Show()
                 end
             end
-            ApplyClassicFrameArt(frame, unit)
-
             -- Helper: set font on a FontString, using donor font for mini frames
             local function SetMiniFont(fs, sz)
                 if not fs or not fs.SetFont then return end
@@ -7410,6 +7566,8 @@ local function ReloadFrames()
             if isMiniFrame and frame._applyTextPositions then
                 frame._applyTextPositions(settings)
             end
+
+            ApplyClassicFrameArt(frame, unit)
 
             if frame.Castbar then
                 if frame.Castbar.Text then
