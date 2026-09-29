@@ -194,73 +194,81 @@ function KT.VisualThemes:ClearClassicUnitFrameArt(frame)
 end
 
 --[[
-    Forever portrait ring (PROVISIONAL -- see note below):
+    Forever real UnitFrame art (see ESTUDIO log entries 33-37 for the full
+    history -- 5 prior attempts at a "portrait ring" were all wrong, in two
+    different ways, before this version):
 
-    WoW Forever's client is already confirmed, by this session's own prior
-    research into how its atlas system behaves, to substitute a range of
-    modern unit-frame atlas names with its own bronze/ornate art under the
-    identical name -- i.e. calling SetAtlas with one of these names INSIDE
-    Forever draws Forever's own real art, not the neutral modern art the
-    same call would draw in an actual Retail client (that mismatch is
-    exactly why the Retail theme can't safely reuse these names -- see the
-    design spec's Non-goals). For the Forever theme specifically, that same
-    substitution is exactly what's wanted: a real, Forever-native portrait
-    ring, reached through a real Blizzard-defined atlas identifier.
-
-    "ui-hud-unitframe-player-portraiton" is chosen as a real, plausible name
-    from that same modern unit-frame atlas family. It has not been confirmed
-    live in this environment (no WoW client exists here) -- it is a
-    reasoned choice, not a measurement, exactly like the Classic crop above.
-    OUTSTANDING MANUAL QA ITEM: confirm in-game that this name actually
-    resolves via C_Texture.GetAtlasInfo inside this Forever client, and that
-    it reads as a portrait ring once applied. If it doesn't resolve, the
-    guard below already falls back to today's already-correct fixed-accent
-    look silently -- nothing breaks either way, but the ring simply won't
-    show until the name is corrected post-QA.
-
-    Sizing (settled after live testing -- do not re-shrink or re-grow this
-    without reading ESTUDIO log entries 33-36 first, all 4 prior attempts
-    are documented there):
-    1. An earlier version forced this piece into a square matching the
-       portrait container's own size, which visibly warped it -- an atlas
-       piece has its own real native pixel dimensions, reported by
-       C_Texture.GetAtlasInfo's `width`/`height` fields, and stretching it
-       to an unrelated external size distorts it.
-    2. Growing the surrounding portrait/frame to match the atlas's raw
-       native pixel size (with or without a fudge scale factor) was tried
-       and confirmed broken via live screenshots: this atlas was authored
-       for a full Retail-scale frame, so its native size (even scaled down
-       by a constant) still dwarfed a compact KUI frame and its health bar.
-    3. Per explicit user direction (ESTUDIO entry 36): the PORTRAIT stays at
-       its normal, existing, KUI-configured size -- nothing grows. The ring
-       is instead scaled DOWN, preserving its real aspect ratio (never
-       distorted into a square), to fit inside that existing portrait's own
-       size. This is the "copy Blizzard's default UI, adapted to a KUI
-       frame" approach: Blizzard's own default UnitFrame draws its portrait
-       art at the portrait's own size and positions health/mana bars
-       relative to it -- separately adapting bar geometry to that same
-       reference is tracked as its own follow-up (see ESTUDIO entry 36),
-       not handled by this function.
+    1-4. Earlier versions treated the atlas as if it were a small circular
+       "portrait ring" -- forcing it into a square, using its raw native
+       size, growing the portrait to match it, and a fudge-scaled version of
+       that growth. All four were confirmed broken via live screenshots.
+    5. The atlas name itself ("ui-hud-unitframe-player-portraiton") was
+       never actually wrong -- it's a real, case-insensitive match for
+       Blizzard's own `UI-HUD-UnitFrame-Player-PortraitOn`. What was wrong
+       was the ASSUMPTION about its shape: this atlas is not a ring at all,
+       it's the ENTIRE player-frame art box (232x100px native -- wide and
+       short, not square), with the portrait/health-bar/power-bar each
+       positioned at fixed offsets INSIDE that box. Fitting a 232x100 image
+       into a small square portrait region necessarily produces a thin
+       sliver -- confirmed exactly via a live screenshot.
+    6. This version uses the real box geometry (FOREVER_FRAME_GEOMETRY
+       below): real Blizzard-defined atlas names and their real native
+       pixel offsets, both facts about the game client (not anyone's
+       original work) identified by reading how these same real atlas
+       names and offsets are consumed elsewhere for exactly this purpose,
+       for technique/data only -- no code, comment, or identifier from that
+       source is reused here. The player/target boxes are the only ones
+       with confirmed real geometry; any other unit (focus, pet, boss) has
+       no entry in the table and gets no art (ClearForeverUnitFrameArt),
+       rather than guessing another wrong shape onto it.
+    The box is scaled UNIFORMLY (never distorted) so its own internal
+    portrait sub-rect lines up with `unitRegion`'s real on-screen position
+    and size -- the ratio between `unitRegion`'s size and the box's known
+    portrait sub-size IS the scale factor, applied to both the box's overall
+    size and its anchor offset.
+    OUTSTANDING, explicitly deferred (see ESTUDIO entry 37): this only
+    places the frame-art box correctly. It does not yet reposition the
+    actual health/power StatusBars to sit inside the box's own real
+    bar-track rectangles, nor draw the bar-track atlas pieces themselves --
+    that touches the same deeply-coupled shared layout code flagged as
+    risky back in entry 33, and needs its own verified step once this
+    box placement is confirmed to look right in-game.
 ]]
-local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
+local FOREVER_FRAME_GEOMETRY = {
+    player = {
+        w = 232, h = 100,
+        art = "UI-HUD-UnitFrame-Player-PortraitOn",
+        portrait = { point = "TOPLEFT", x = 24, y = -19, size = 60 },
+    },
+    target = {
+        w = 232, h = 100,
+        art = "UI-HUD-UnitFrame-Target-PortraitOn",
+        portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
+    },
+}
 
 --- Applies the Forever theme's real per-client UnitFrame art: creates
---- (once, cached on `frame`) a portrait ring texture centered on
---- `unitRegion` (the real portrait region -- same convention as
---- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, scaled
---- uniformly (aspect ratio preserved, never distorted, never grown past its
---- own native size) to FIT inside `unitRegion`'s own existing size, gated on
---- the atlas name actually resolving in this client.
---- Falls back to ClearForeverUnitFrameArt (i.e. today's already-shipped
---- fixed-accent-color look, with no ring) when the atlas name doesn't
---- resolve, rather than erroring or half-applying.
+--- (once, cached on `frame`) the real player/target frame-art box texture,
+--- scaled and anchored so its own known internal portrait sub-rect lines up
+--- with `unitRegion`'s real on-screen position and size, gated on both
+--- `unit` having a known real geometry entry and the atlas name actually
+--- resolving in this client. Falls back to ClearForeverUnitFrameArt (no
+--- art -- today's already-shipped fixed-accent-color look) for any other
+--- unit or when the atlas doesn't resolve, rather than guessing.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the real portrait region to center on and fit inside
-function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
+--- @param unitRegion Frame|Region the real portrait region to align the box's internal portrait to
+--- @param unit string|nil the unit key ("player"/"target"); any other value clears
+function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
 
-    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(FOREVER_PORTRAIT_ATLAS)
+    local geom = unit and FOREVER_FRAME_GEOMETRY[unit]
+    if not geom then
+        self:ClearForeverUnitFrameArt(frame)
+        return
+    end
+
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(geom.art)
     if not info then
         self:ClearForeverUnitFrameArt(frame)
         return
@@ -274,25 +282,20 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
         art = host:CreateTexture(nil, "OVERLAY")
         frame._ktForeverPortraitArt = art
     end
-    art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
+    art:SetAtlas(geom.art)
 
-    art:ClearAllPoints()
-    local nativeW, nativeH = info.width, info.height
     local targetSize = (unitRegion.GetHeight and unitRegion:GetHeight())
         or (unitRegion.GetWidth and unitRegion:GetWidth())
-    if nativeW and nativeH and nativeW > 0 and nativeH > 0 and targetSize and targetSize > 0 then
-        -- Fit inside the EXISTING portrait bounds, preserving the atlas's
-        -- own real aspect ratio -- never distorted, never grown past it.
-        local fitScale = targetSize / math.max(nativeW, nativeH)
-        art:SetSize(nativeW * fitScale, nativeH * fitScale)
-    elseif nativeW and nativeH then
-        art:SetSize(nativeW, nativeH)
-    end
-    art:SetPoint("CENTER", unitRegion, "CENTER", 0, 0)
+    local scale = (targetSize and targetSize > 0) and (targetSize / geom.portrait.size) or 1
+
+    art:ClearAllPoints()
+    art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
+    art:SetPoint(geom.portrait.point, unitRegion, geom.portrait.point,
+        -(geom.portrait.x * scale), -(geom.portrait.y * scale))
     art:Show()
 end
 
---- Hides (does not destroy) the Forever portrait ring created by
+--- Hides (does not destroy) the Forever frame-art box created by
 --- ApplyForeverUnitFrameArt, if any. Nil-safe if it was never created.
 --- @param frame Frame|Region the unit frame passed to ApplyForeverUnitFrameArt
 function KT.VisualThemes:ClearForeverUnitFrameArt(frame)
