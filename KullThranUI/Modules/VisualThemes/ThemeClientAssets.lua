@@ -267,6 +267,7 @@ local FOREVER_FRAME_GEOMETRY = {
         portrait = { point = "TOPLEFT", x = 24, y = -19, size = 60 },
         health = { x = 85, y = 40, w = 124, h = 20 },
         power = { x = 85, y = 61, w = 124, h = 10 },
+        name = { x = 88, y = -27, w = 96 },
     },
     target = {
         w = 232, h = 100,
@@ -274,8 +275,18 @@ local FOREVER_FRAME_GEOMETRY = {
         portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
         health = { x = 23, y = 40, w = 126, h = 20 },
         power = { x = 23, y = 61, w = 134, h = 10 },
+        name = { x = 30, y = -26, w = 120 },
     },
 }
+
+-- Uniform fudge factor on top of the real geometric scale: a live
+-- screenshot showed the ring sitting slightly loose around KUI's own
+-- portrait rather than hugging it tightly. Applied to the SAME `scale`
+-- used for the box, bars, and name text (never independently), so
+-- everything shrinks together and stays aligned -- a per-piece fudge would
+-- misalign the ring against the bars again. Tuned by eye, not derived;
+-- expect to adjust after the next in-game look.
+local FOREVER_BOX_FUDGE_SCALE = 0.92
 
 --- Converts a geometry entry's `portrait` rect (given corner-relative, as
 --- Blizzard's own reference data expresses it -- TOPLEFT for player,
@@ -331,6 +342,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     local targetSize = (unitRegion.GetHeight and unitRegion:GetHeight())
         or (unitRegion.GetWidth and unitRegion:GetWidth())
     local scale = (targetSize and targetSize > 0) and (targetSize / geom.portrait.size) or 1
+    scale = scale * FOREVER_BOX_FUDGE_SCALE
 
     -- CENTER-to-CENTER anchoring, not point-to-point: KUI's own portrait can
     -- sit on either side of the frame, on top, attached or detached --
@@ -382,6 +394,26 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
             power:SetPoint("TOPLEFT", frame, "TOPLEFT",
                 originX + geom.power.x * scale, originY - geom.power.y * scale)
             power:SetSize(geom.power.w * scale, geom.power.h * scale)
+        end
+
+        -- Real Blizzard UI gives the name its OWN tab above the portrait,
+        -- separate from the health bar entirely -- not crammed onto the bar
+        -- alongside the percentage, which is what was overlapping in a live
+        -- screenshot. Moves frame.LeftText (the name text in KUI's DEFAULT
+        -- text-content configuration -- leftTextContent = "name") out to
+        -- that real tab rect; frame.RightText (the value/percentage) stays
+        -- on the bar, which now has the bar's full width to itself. A user
+        -- who reassigned leftTextContent away from "name" keeps their own
+        -- layout unaffected, since this only ever moves frame.LeftText,
+        -- whatever content it currently holds.
+        local nameText = frame.LeftText
+        if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
+            nameText:ClearAllPoints()
+            nameText:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                originX + geom.name.x * scale, originY - geom.name.y * scale)
+            if nameText.SetWidth then
+                nameText:SetWidth(geom.name.w * scale)
+            end
         end
 
         -- The health bar's own name/value text (frame.LeftText/RightText/
