@@ -317,13 +317,26 @@ local function SyncArtLayers(frame, host, artAboveBars)
         textOverlay:SetFrameLevel(math.max(topBarLevel + 12, artLevel + 1))
     end
 end
+-- A font sized for the outer stock box's uniform scale can still be taller
+-- than the real bar it sits on: Classic's real health/power bars are only
+-- 12px tall (vs Forever's 20px), but both use the same 232x100 outer box, so
+-- the same scale factor leaves Classic's text sized for a bar nearly twice
+-- as tall as the one it actually renders on -- confirmed live via
+-- screenshot, text visibly overflowing a bar far shorter than it. A
+-- first-pass estimate (no client here to fine-tune it pixel-perfectly);
+-- adjust this single constant if manual QA finds it too much or too little.
+local STOCK_BAR_TEXT_HEIGHT_RATIO = 0.8
+
 --- Scales a health/power text FontString's font size by `scale`, from its
 --- OWN unscaled base size (cached on the FontString the first time this
 --- runs), never from its current size -- reapplying this on every render
 --- pass must never compound (shrinking further each time), and the base
 --- must survive `scale` changing between calls (e.g. the user adjusting
---- portrait size). Nil-safe; does nothing if `fs` has no font set yet.
-local function ScaleStockBarText(fs, scale)
+--- portrait size). Also caps the result to a fraction of the real bar's own
+--- pixel height (`maxHeightPx`), when given, so a font sized for the outer
+--- box's uniform scale never renders taller than the bar it actually sits
+--- on. Nil-safe; does nothing if `fs` has no font set yet.
+local function ScaleStockBarText(fs, scale, maxHeightPx)
     if type(fs) ~= "table" or type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
     local path, currentSize, flags = fs:GetFont()
     if not path or not currentSize then return end
@@ -332,7 +345,11 @@ local function ScaleStockBarText(fs, scale)
         base = currentSize
         fs._ktStockBaseFontSize = base
     end
-    fs:SetFont(path, base * scale, flags)
+    local size = base * scale
+    if maxHeightPx and maxHeightPx > 0 then
+        size = math.min(size, maxHeightPx * STOCK_BAR_TEXT_HEIGHT_RATIO)
+    end
+    fs:SetFont(path, size, flags)
 end
 
 --- Shrinks a FontString's font size further, on top of whatever it already
@@ -559,9 +576,10 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
         if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify) end
     end
 
-    ScaleStockBarText(frame.LeftText, scale)
-    ScaleStockBarText(frame.RightText, scale)
-    ScaleStockBarText(frame.CenterText, scale)
+    local barTextMaxHeight = geom.health.h * scale
+    ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight)
+    ScaleStockBarText(frame.RightText, scale, barTextMaxHeight)
+    ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight)
     frame._ktClassicLayoutActive = true
     return true
 end
@@ -815,9 +833,10 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
             tostring(nameText.GetText and nameText:GetText()))
     end
 
-    ScaleStockBarText(frame.LeftText, scale)
-    ScaleStockBarText(frame.RightText, scale)
-    ScaleStockBarText(frame.CenterText, scale)
+    local barTextMaxHeight = geom.health.h * scale
+    ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight)
+    ScaleStockBarText(frame.RightText, scale, barTextMaxHeight)
+    ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight)
     -- Explicit user rule: a name long enough to overflow the real tab's
     -- real width shrinks further, on top of the uniform theme scale above,
     -- rather than spilling past the tab or overlapping the buffs below it.
