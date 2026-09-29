@@ -33,12 +33,15 @@ KT.VisualThemes = KT.VisualThemes or {}
     a Frame's own textures always render behind its child frames, and the
     portrait/health/border widgets this art is meant to sit over are all
     child frames, so a texture created directly on the outer frame would be
-    invisible underneath them. The host frame matches the same STRATA
-    ("MEDIUM") and a comfortably higher LEVEL this codebase's own Portrait
-    widget already uses for the identical reason (see this file's own
-    "Portrait strata and level set at creation (MEDIUM/50) -- always above
-    LOW frame" comment in KUIUnitFrames.lua) -- a documented, existing fact
-    about this codebase, not a guess.
+    invisible underneath them. The host frame matches CreatePortrait's own
+    backdrop STRATA ("MEDIUM") and clears its fixed LEVEL (50, set literally
+    at creation in KUIUnitFrames.lua, not derived from the outer frame) with
+    an equally fixed, higher level of its own -- a relative offset from the
+    outer frame's own level was tried first and confirmed live, via /fstack,
+    to sit BELOW that fixed 50 whenever the outer frame's own level is low,
+    which let the portrait's own opaque background draw over this art and
+    left only its square corners peeking out past the portrait's circular
+    mask.
 ]]
 
 local PORTRAIT_FRAME_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame]]
@@ -61,16 +64,24 @@ local PORTRAIT_ART_TEXCOORD = {
 }
 
 -- Strata/level this file's decorative hosts use to draw above the
--- Health/Portrait/border child frames. MEDIUM matches the Portrait widget's
--- own documented strata; the level offset only needs to clear
--- BuildBorderFrame's unifiedBorder (frame:GetFrameLevel() + 10) within that
--- same strata, which +20 comfortably does.
+-- Health/Portrait/border child frames. MEDIUM matches CreatePortrait's own
+-- backdrop (KUIUnitFrames.lua: `backdrop:SetFrameStrata("MEDIUM")` /
+-- `backdrop:SetFrameLevel(50)`, both fixed absolute values set at creation,
+-- not derived from the outer frame) -- an EARLIER version of this file used
+-- `frame:GetFrameLevel() + 20`, a RELATIVE offset, which in-game testing
+-- showed lands below that fixed 50 whenever the outer frame's own level is
+-- low (as confirmed live via /fstack: the art rendered, correctly sized and
+-- anchored, but hidden behind the portrait's own opaque background/mask,
+-- only its square corners peeking out past the portrait's circular mask).
+-- ART_HOST_LEVEL is an absolute level for this same reason -- it must clear
+-- Portrait's fixed 50, not just whatever the outer frame's own level is.
 local ART_HOST_STRATA = "MEDIUM"
-local ART_HOST_LEVEL_OFFSET = 20
+local ART_HOST_LEVEL = 60
 
 --- Creates (once, cached on `frame[cacheKey]`) a child frame positioned to
---- fully cover `frame` and elevated to ART_HOST_STRATA/ART_HOST_LEVEL_OFFSET
---- so textures created on it draw above the outer frame's own child widgets.
+--- fully cover `frame` and elevated to ART_HOST_STRATA/ART_HOST_LEVEL so
+--- textures created on it draw above the outer frame's own child widgets,
+--- including the portrait's own fixed-level-50 backdrop.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
 --- @param cacheKey string the field name this host is cached under on `frame`
 --- @return Frame|nil host
@@ -81,7 +92,7 @@ local function EnsureArtHost(frame, cacheKey)
     host = CreateFrame("Frame", nil, frame)
     host:SetAllPoints(frame)
     host:SetFrameStrata(ART_HOST_STRATA)
-    host:SetFrameLevel(frame:GetFrameLevel() + ART_HOST_LEVEL_OFFSET)
+    host:SetFrameLevel(ART_HOST_LEVEL)
     frame[cacheKey] = host
     return host
 end
