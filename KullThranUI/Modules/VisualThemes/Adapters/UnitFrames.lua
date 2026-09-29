@@ -46,7 +46,13 @@ KT.VisualThemes:RegisterModule("unitframes", {
     end,
     seed = function(profile, themeKey, clientFlavor)
         if themeKey == "classic" then
-            profile.portraitStyle = "attached"
+            -- Classic's real stock box (ApplyClassicUnitFrameArt) assumes a
+            -- round-clipped portrait, same as Forever's -- Blizzard's real
+            -- TargetingFrame portrait is round too. "attached" takes
+            -- ApplyDetachedPortraitShape's fast path, which explicitly
+            -- REMOVES any mask -- confirmed live: the portrait rendered
+            -- fully unmasked and bled outside the ring.
+            profile.portraitStyle = "circular"
             profile.darkTheme = false
             profile.healthBarTexture = "Blizzard"
             SetUnitValues(profile, true, "Blizzard")
