@@ -226,7 +226,7 @@ local defaults = {
             showPortrait = true,
             portraitMode = "2d",
             classThemeStyle = "modern",
-            portraitFacing = "normal",
+            portraitFacing = "flipped",
             portraitSide = "left",
             portraitSize = 0,
             portraitX = 0,
@@ -319,7 +319,7 @@ local defaults = {
             showBuffs = true,
             showDebuffs = true,
             onlyPlayerDebuffs = false,
-            portraitFacing = "flipped",
+            portraitFacing = "normal",
             buffAnchor = "topleft",
             buffGrowth = "auto",
             debuffAnchor = "bottomleft",
@@ -9126,6 +9126,36 @@ local function ApplyTargetCastbarYellowDefault()
     profile._targetCastbarYellow20260803 = true
 end
 
+-- Player/target portraitFacing defaults were swapped (player normal->flipped,
+-- target flipped->normal) per explicit user direction after live QA -- they
+-- still want the two to face each other, just mirrored from before. Changing
+-- the defaults table alone only affects brand-new profiles; AceDB never
+-- overwrites a key an existing profile already has saved. This migrates
+-- existing profiles once, only when the saved value still exactly matches
+-- the OLD default (an explicit custom choice is left alone).
+-- Attached to KT (not a top-level `local function`): this file is already at
+-- Lua 5.1's 200-active-local ceiling for its main chunk -- confirmed live,
+-- adding one more `local function` here failed to compile with "Only 200
+-- active local variables and upvalues can be existed at the same time".
+-- Matches the same KT:/Mod: method pattern already used elsewhere in this
+-- file for exactly this reason.
+function KT:SwapPortraitFacingDefaults()
+    local profile = db.profile
+    if not profile or profile._portraitFacingSwap20260929 then return end
+
+    local player = profile.player
+    if player and player.portraitFacing == "normal" then
+        player.portraitFacing = "flipped"
+    end
+
+    local target = profile.target
+    if target and target.portraitFacing == "flipped" then
+        target.portraitFacing = "normal"
+    end
+
+    profile._portraitFacingSwap20260929 = true
+end
+
 local function ApplyReferenceLayoutDefaults()
     local profile = db.profile
     if not profile or profile._referenceLayout20260801 then return end
@@ -9373,6 +9403,7 @@ function Mod:OnInitialize()
     MigrateLegacyCrimsonAccent()
     ApplyUpdatedDefaultPreset()
     ApplyTargetCastbarYellowDefault()
+    KT:SwapPortraitFacingDefaults()
     ApplyReferenceLayoutDefaults()
     ApplyDebuffDefaultsMigration()
     ApplyForeverUnitFrameLayoutDefaults()
