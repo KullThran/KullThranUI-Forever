@@ -46,6 +46,13 @@ KT.VisualThemes = KT.VisualThemes or {}
 
 local PORTRAIT_FRAME_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame]]
 
+-- Real circular mask already shipped with (and already used elsewhere by)
+-- this addon for its own "circular" portraitStyle -- see KUIUnitFrames.lua's
+-- PORTRAIT_MASKS.circle. Reused here as-is so the classic/forever portrait
+-- art reads as a clean circle regardless of what its underlying crop/atlas
+-- actually contains, per explicit user request (round, not square).
+local PORTRAIT_MASK_TEXTURE = [[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\circle_mask.tga]]
+
 -- Assumed source sheet dimensions, in pixels. See derivation note above.
 local PORTRAIT_ART_SHEET_WIDTH = 256
 local PORTRAIT_ART_SHEET_HEIGHT = 128
@@ -124,6 +131,25 @@ local function SeatSquareArt(art, unitRegion)
     end
 end
 
+--- Creates (once, cached on `host[cacheKey]`) a circular mask matching
+--- PORTRAIT_MASK_TEXTURE and applies it to `art`, then keeps the mask
+--- anchored to `art`'s current rect (SetAllPoints tracks `art` live, so this
+--- is safe to call every refresh even after SeatSquareArt resizes `art`).
+--- @param art Texture the texture to mask circular
+--- @param host Frame the frame the mask texture is created on
+--- @param cacheKey string the field name this mask is cached under on `host`
+local function ApplyCircleMask(art, host, cacheKey)
+    local mask = host[cacheKey]
+    if not mask then
+        mask = host:CreateMaskTexture()
+        mask:SetTexture(PORTRAIT_MASK_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        host[cacheKey] = mask
+        art:AddMaskTexture(mask)
+    end
+    mask:ClearAllPoints()
+    mask:SetAllPoints(art)
+end
+
 --- Applies the Classic theme's real per-client UnitFrame art: creates (once,
 --- cached on `frame`) a portrait/frame ring texture anchored to `unitRegion`
 --- (the real portrait region -- pass `frame.Portrait.backdrop` when it
@@ -152,6 +178,7 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion)
     end
 
     SeatSquareArt(art, unitRegion)
+    ApplyCircleMask(art, host, "_ktClassicPortraitMask")
     art:Show()
 end
 
@@ -223,6 +250,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
 
     SeatSquareArt(art, unitRegion)
+    ApplyCircleMask(art, host, "_ktForeverPortraitMask")
     art:Show()
 end
 
