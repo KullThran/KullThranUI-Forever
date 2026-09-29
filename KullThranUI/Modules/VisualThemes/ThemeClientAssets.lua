@@ -104,6 +104,24 @@ local function EnsureArtHost(frame, cacheKey)
     return host
 end
 
+--- Scales a health/power text FontString's font size by `scale`, from its
+--- OWN unscaled base size (cached on the FontString the first time this
+--- runs), never from its current size -- reapplying this on every render
+--- pass must never compound (shrinking further each time), and the base
+--- must survive `scale` changing between calls (e.g. the user adjusting
+--- portrait size). Nil-safe; does nothing if `fs` has no font set yet.
+local function ScaleForeverBarText(fs, scale)
+    if type(fs) ~= "table" or type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
+    local path, currentSize, flags = fs:GetFont()
+    if not path or not currentSize then return end
+    local base = fs._ktForeverBaseFontSize
+    if not base then
+        base = currentSize
+        fs._ktForeverBaseFontSize = base
+    end
+    fs:SetFont(path, base * scale, flags)
+end
+
 --- Sizes and anchors `art` as a SQUARE centered on `unitRegion`, instead of
 --- stretching it to whatever rect `unitRegion` happens to have. A portrait
 --- ring/frame piece reads as distorted the moment its container isn't
@@ -340,6 +358,16 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
                 originX + geom.power.x * scale, originY - geom.power.y * scale)
             power:SetSize(geom.power.w * scale, geom.power.h * scale)
         end
+
+        -- The health bar's own name/value text (frame.LeftText/RightText/
+        -- CenterText) tracks frame.Health's new size live -- textOverlay is
+        -- SetAllPoints(frame.Health) -- but its FONT SIZE stays whatever the
+        -- user configured for the bar's OLD, usually wider, width, and
+        -- overlaps once the bar shrinks to the real bar-track's width.
+        -- Confirmed via a live screenshot. Scaled down by the same factor.
+        ScaleForeverBarText(frame.LeftText, scale)
+        ScaleForeverBarText(frame.RightText, scale)
+        ScaleForeverBarText(frame.CenterText, scale)
     end
 
     return true
