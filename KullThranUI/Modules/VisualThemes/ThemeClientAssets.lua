@@ -314,7 +314,12 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
         power:SetSize(geom.power.w * scale, geom.power.h * scale)
     end
 
-    local nameText = frame.LeftText
+    -- Whichever FontString actually holds "name" content is a per-profile
+    -- choice resolved by KUIUnitFrames.lua (which has access to `settings`)
+    -- and handed over via frame._ktStockNameText -- falling back to
+    -- frame.LeftText, KUI's own default assignment, when that isn't set
+    -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
+    local nameText = frame._ktStockNameText or frame.LeftText
     if nameText and geom.name then
         nameText:ClearAllPoints()
         nameText:SetPoint(geom.name.point, frame, geom.name.point,
@@ -516,7 +521,12 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         ApplyForeverBarMask(power, geom.power, scale)
     end
 
-    local nameText = frame.LeftText
+    -- Whichever FontString actually holds "name" content is a per-profile
+    -- choice resolved by KUIUnitFrames.lua (which has access to `settings`)
+    -- and handed over via frame._ktStockNameText -- falling back to
+    -- frame.LeftText, KUI's own default assignment, when that isn't set
+    -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
+    local nameText = frame._ktStockNameText or frame.LeftText
     if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
         local point = geom.name.point or "TOPLEFT"
         nameText:ClearAllPoints()

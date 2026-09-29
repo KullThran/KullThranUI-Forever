@@ -3795,7 +3795,12 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
     local width = math.max(1, (health.GetWidth and health:GetWidth() or 0) - 4)
 
     if centerContent ~= "none" then
-        if frame.CenterText then
+        -- "name" is excluded here too (matching LeftText below): whichever
+        -- slot actually holds the name has already been moved to the real
+        -- name tab (ApplyForeverUnitFrameArt/ApplyClassicUnitFrameArt, via
+        -- frame._ktStockNameText) -- repositioning it back onto the bar
+        -- here would silently undo that and leave the tab empty.
+        if frame.CenterText and centerContent ~= "name" then
             frame.CenterText:ClearAllPoints()
             frame.CenterText:SetPoint("CENTER", health, "CENTER", 0, 0)
             frame.CenterText:SetWidth(width)
@@ -3810,7 +3815,7 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
         frame.LeftText:SetWidth(width)
         frame.LeftText:SetJustifyH("LEFT")
     end
-    if frame.RightText and rightContent ~= "none" then
+    if frame.RightText and rightContent ~= "none" and rightContent ~= "name" then
         frame.RightText:ClearAllPoints()
         frame.RightText:SetPoint("RIGHT", health, "RIGHT", -2, 0)
         frame.RightText:SetWidth(width)
@@ -3837,6 +3842,30 @@ local function ApplyClassicFrameArt(frame, unit)
     -- while non-Forever units deliberately receive no guessed Forever box.
     local renderedTheme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
     local portraitRegion = (frame.Portrait and frame.Portrait.backdrop) or frame
+
+    -- Which FontString actually holds "name" content is a per-profile
+    -- choice (leftTextContent/rightTextContent/centerTextContent), not
+    -- always frame.LeftText -- confirmed live: a profile with a different
+    -- assignment left the name tab empty because nothing was ever moved
+    -- there. ThemeClientAssets.lua has no access to `settings`, so this is
+    -- resolved here and handed to it via frame._ktStockNameText (nil when
+    -- no slot is set to "name", which the caller already handles as "leave
+    -- LeftText untouched" for backward compatibility).
+    do
+        local textSettings = GetSettingsForUnit(unit)
+        local leftContent = textSettings.leftTextContent or "name"
+        local rightContent = textSettings.rightTextContent or "both"
+        local centerContent = textSettings.centerTextContent or "none"
+        if centerContent == "name" then
+            frame._ktStockNameText = frame.CenterText
+        elseif rightContent == "name" then
+            frame._ktStockNameText = frame.RightText
+        elseif leftContent == "name" then
+            frame._ktStockNameText = frame.LeftText
+        else
+            frame._ktStockNameText = nil
+        end
+    end
 
     local usingClassicRealArt = false
     if VT and VT.ApplyClassicUnitFrameArt and VT.ClearClassicUnitFrameArt then
