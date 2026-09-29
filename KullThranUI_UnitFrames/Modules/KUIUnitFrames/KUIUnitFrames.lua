@@ -942,6 +942,20 @@ if not Compat.HandleWhirlwindStacks then
 end
 
 local function GetThemeAccentColor()
+    -- Forever has a fixed "chrome" identity (bronze), same as the Damage
+    -- Meter's own header/border accent (ThemeEngine.lua's
+    -- DAMAGE_METER_CHROME_COLORS) -- explicit user request: UnitFrames
+    -- should match that bronze, not whatever the user's own configurable
+    -- skin.accentColor happens to be (default red), the same way Classic/
+    -- Retail already get a fixed gold identity there.
+    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme and KT.VisualThemes.GetDamageMeterAccentColor
+        and KT.VisualThemes:GetRenderedTheme() == "forever" then
+        local r, g, b = KT.VisualThemes:GetDamageMeterAccentColor()
+        if r and g and b then
+            return { r = r, g = g, b = b, a = 1 }
+        end
+    end
+
     if KT and KT.GetStyleAccentRGB then
         local r, g, b = KT:GetStyleAccentRGB()
         if r and g and b then

@@ -633,6 +633,13 @@ local FOREVER_FRAME_GEOMETRY = {
     },
 }
 
+-- Confirmed live: buffs and the name tab shared the exact same Y (buffs grow
+-- up from the tab's top edge, name grows down from it), leaving zero margin
+-- -- icon borders/glow and text ascenders overlapped a little on both units.
+-- A first-pass estimate (no client here to fine-tune it pixel-perfectly);
+-- adjust this single constant if manual QA finds it too much or too little.
+local BUFFS_TAB_GAP = 3
+
 local function UnsnapTexture(texture)
     if not texture then return end
     if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
@@ -834,9 +841,16 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         local tabW = geom.health.w * scale
         local iconSize = math.max(8, geom.health.h * scale)
         local gap = buffs.spacing or 1
+        -- Confirmed live: sharing the exact same Y as the name tab's own top
+        -- edge left zero margin between buffs (growing up from that line)
+        -- and the name text (growing down from it) -- close enough that
+        -- icon borders/glow and text ascenders overlapped a little, on both
+        -- player and target. Nudging buffs' own anchor a few pixels further
+        -- up (name's own position is untouched) opens a small gap.
+        local buffsY = geom.name.y + BUFFS_TAB_GAP
         buffs:ClearAllPoints()
         buffs:SetPoint("BOTTOMLEFT", frame, "TOPLEFT",
-            geom.name.x * scale, geom.name.y * scale)
+            geom.name.x * scale, buffsY * scale)
         buffs:SetSize(tabW, iconSize)
         buffs.size = iconSize
         buffs.spacing = gap
@@ -844,7 +858,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         if buffs.ForceUpdate then buffs:ForceUpdate() end
         frame._ktDebugBuffsCalc = string.format(
             "tabW=%.4f iconSize=%.4f x=%.4f y=%.4f postSetGetWidth=%s postSetGetHeight=%s",
-            tabW, iconSize, geom.name.x * scale, geom.name.y * scale,
+            tabW, iconSize, geom.name.x * scale, buffsY * scale,
             tostring(buffs.GetWidth and buffs:GetWidth()), tostring(buffs.GetHeight and buffs:GetHeight()))
     end
 
