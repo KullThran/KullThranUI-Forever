@@ -277,6 +277,19 @@ local FOREVER_FRAME_GEOMETRY = {
     },
 }
 
+--- Converts a geometry entry's `portrait` rect (given corner-relative, as
+--- Blizzard's own reference data expresses it -- TOPLEFT for player,
+--- TOPRIGHT for target) into its CENTER point in box-local coordinates
+--- (measured from the box's own top-left, y increasing downward),
+--- regardless of which corner it was expressed from. This is what lets the
+--- box be anchored by matching centers instead of assuming a corner.
+local function PortraitCenterInBox(geom)
+    local p = geom.portrait
+    local left = (p.point == "TOPRIGHT") and (geom.w + p.x - p.size) or p.x
+    local top = -p.y
+    return left + p.size / 2, top + p.size / 2
+end
+
 --- Applies the Forever theme's real per-client UnitFrame art: creates
 --- (once, cached on `frame`) the real player/target frame-art box texture,
 --- scaled and anchored so its own known internal portrait sub-rect lines up
@@ -319,10 +332,22 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         or (unitRegion.GetWidth and unitRegion:GetWidth())
     local scale = (targetSize and targetSize > 0) and (targetSize / geom.portrait.size) or 1
 
+    -- CENTER-to-CENTER anchoring, not point-to-point: KUI's own portrait can
+    -- sit on either side of the frame, on top, attached or detached --
+    -- anchoring by a hardcoded corner (assuming the portrait is always
+    -- where Blizzard's own reference frame puts it) ignores wherever KUI's
+    -- actual portrait really is, and the ring only wraps it by coincidence.
+    -- Confirmed live: it did not wrap the portrait correctly. Aligning the
+    -- box's own known internal portrait-center with unitRegion's real
+    -- CENTER works for every side/attachment, since it never assumes which
+    -- corner the portrait is anchored from.
+    local portraitCenterX, portraitCenterY = PortraitCenterInBox(geom)
+    local boxCenterX, boxCenterY = geom.w / 2, geom.h / 2
+
     art:ClearAllPoints()
     art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
-    art:SetPoint(geom.portrait.point, unitRegion, geom.portrait.point,
-        -(geom.portrait.x * scale), -(geom.portrait.y * scale))
+    art:SetPoint("CENTER", unitRegion, "CENTER",
+        (boxCenterX - portraitCenterX) * scale, (portraitCenterY - boxCenterY) * scale)
     art:Show()
 
     -- Re-anchor the REAL health/power bars onto the box's own real
