@@ -9170,6 +9170,27 @@ function KT:SwapPortraitFacingDefaults()
     profile._portraitFacingSwap20260929 = true
 end
 
+-- Classic's VisualThemes seed (Adapters/UnitFrames.lua) used to set
+-- portraitStyle = "attached" -- wrong, since Classic's real stock box
+-- (ApplyClassicUnitFrameArt) assumes a round-clipped portrait like Forever's.
+-- "attached" skips mask creation entirely (ApplyDetachedPortraitShape's fast
+-- path), so the portrait rendered unmasked and bled outside the ring --
+-- confirmed live via a screenshot. Fixed at the seed; this migrates an
+-- existing profile already on Classic theme, only when portraitStyle still
+-- exactly matches the OLD wrong default (a deliberate "attached" choice
+-- under any OTHER theme, where it's a normal valid setting, is left alone).
+function KT:MigrateClassicPortraitCircular()
+    local profile = db.profile
+    if not profile or profile._classicPortraitCircular20260930 then return end
+    profile._classicPortraitCircular20260930 = true
+
+    local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    if renderedTheme == "classic" and profile.portraitStyle == "attached" then
+        profile.portraitStyle = "circular"
+    end
+end
+
 local function ApplyReferenceLayoutDefaults()
     local profile = db.profile
     if not profile or profile._referenceLayout20260801 then return end
@@ -9418,6 +9439,7 @@ function Mod:OnInitialize()
     ApplyUpdatedDefaultPreset()
     ApplyTargetCastbarYellowDefault()
     KT:SwapPortraitFacingDefaults()
+    KT:MigrateClassicPortraitCircular()
     ApplyReferenceLayoutDefaults()
     ApplyDebuffDefaultsMigration()
     ApplyForeverUnitFrameLayoutDefaults()
