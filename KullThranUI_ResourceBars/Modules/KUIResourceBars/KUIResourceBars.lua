@@ -1608,6 +1608,32 @@ end
 -- -- salud/poder primario/recurso secundario forman una sola identidad visual
 -- apilada, no tres widgets independientes (ver auditoria en la entrada
 -- correspondiente de ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md seccion 30).
+--
+-- Grosor del anillo: ThemeBorderKit.lua dibuja 16px hacia FUERA del rect a
+-- scale = 1 (BASE_RING_SIZE, local privado alli; se refleja aqui a proposito,
+-- mantener sincronizado). Las tres barras se apilan a solo
+-- db.general.anchorGap px (4 por defecto, ver StackAbove), asi que un anillo
+-- de 16px por barra invadiria la barra vecina. Igual que el arreglo de CDM
+-- (ComputeClassicBorderScale en KUICooldownManager.lua): el alcance del
+-- anillo se limita a la mitad del hueco real, de modo que dos anillos
+-- vecinos se tocan en el centro del hueco sin solaparse. Tambien se limita
+-- a la mitad de los 5px con los que CastBar se auto-posiciona encima de la
+-- barra superior (CastBar.lua SnapToTop), para no invadir su anillo.
+local RB_CLASSIC_BORDER_BASE_RING_SIZE = 16
+local RB_CLASSIC_BORDER_MAX_REACH = 5 / 2
+
+local function ComputeClassicBorderScale(db)
+    local gap = tonumber(db and db.general and db.general.anchorGap) or 4
+    local reach = gap / 2
+    if reach > RB_CLASSIC_BORDER_MAX_REACH then reach = RB_CLASSIC_BORDER_MAX_REACH end
+    local scale = reach / RB_CLASSIC_BORDER_BASE_RING_SIZE
+    if scale > 1 then scale = 1 end
+    -- scale <= 0 significa "sin definir" (=1) en ThemeBorderKit.lua: se deja
+    -- una linea fina en su lugar para huecos de 0 o negativos.
+    if scale < 0.02 then scale = 0.02 end
+    return scale
+end
+
 local function ApplyClassicFrameArt(frame, db)
     if not frame then return end
     local VT = KT.VisualThemes
@@ -1618,7 +1644,7 @@ local function ApplyClassicFrameArt(frame, db)
     if wantClassic then
         frame.classicBorder = frame.classicBorder or VT:CreateClassicBorder(frame)
         if frame.classicBorder then
-            VT:SeatClassicBorder(frame.classicBorder, frame, 1)
+            VT:SeatClassicBorder(frame.classicBorder, frame, ComputeClassicBorderScale(db))
             VT:ShowClassicBorder(frame.classicBorder, true)
         end
     elseif frame.classicBorder then
