@@ -311,17 +311,34 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- position KUIUnitFrames.lua's normal layout just gave them for this
     -- render pass. Only the anchor/size changes -- fill texture, color,
     -- and mask stay whatever the user (or the theme's own seed) chose.
-    local health = frame.Health
-    if geom.health and type(health) == "table" and health.ClearAllPoints then
-        health:ClearAllPoints()
-        health:SetPoint("TOPLEFT", art, "TOPLEFT", geom.health.x * scale, -(geom.health.y * scale))
-        health:SetSize(geom.health.w * scale, geom.health.h * scale)
-    end
-    local power = frame.Power
-    if geom.power and type(power) == "table" and power.ClearAllPoints then
-        power:ClearAllPoints()
-        power:SetPoint("TOPLEFT", art, "TOPLEFT", geom.power.x * scale, -(geom.power.y * scale))
-        power:SetSize(geom.power.w * scale, geom.power.h * scale)
+    --
+    -- Anchored to `frame`, NOT to `art` (or unitRegion): in some portrait
+    -- layouts (portraitSide "top"/detached) KUIUnitFrames.lua itself anchors
+    -- frame.Portrait.backdrop relative to frame.Health -- confirmed live via
+    -- "Cannot anchor to a region dependent on it" (health -> art ->
+    -- unitRegion(=Portrait.backdrop) -> health, a real cycle). `frame` is
+    -- always a safe target -- it never depends on its own Health/Portrait
+    -- children. `art`'s resolved on-screen position (read once via
+    -- GetLeft/GetTop, not a live anchor dependency) supplies the same
+    -- origin without creating a new dependency edge.
+    local artLeft, artTop = art:GetLeft(), art:GetTop()
+    local frameLeft, frameTop = frame.GetLeft and frame:GetLeft(), frame.GetTop and frame:GetTop()
+    if artLeft and artTop and frameLeft and frameTop then
+        local originX, originY = artLeft - frameLeft, artTop - frameTop
+        local health = frame.Health
+        if geom.health and type(health) == "table" and health.ClearAllPoints then
+            health:ClearAllPoints()
+            health:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                originX + geom.health.x * scale, originY - geom.health.y * scale)
+            health:SetSize(geom.health.w * scale, geom.health.h * scale)
+        end
+        local power = frame.Power
+        if geom.power and type(power) == "table" and power.ClearAllPoints then
+            power:ClearAllPoints()
+            power:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                originX + geom.power.x * scale, originY - geom.power.y * scale)
+            power:SetSize(geom.power.w * scale, geom.power.h * scale)
+        end
     end
 end
 
