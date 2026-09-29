@@ -2,6 +2,13 @@ local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
 
+-- TEMPORARY debug switch: prints one line to chat every time
+-- ApplyForeverUnitFrameArt runs, showing whether the name/buffs objects it
+-- expects actually exist and what it resolved them to. Set back to false
+-- (or delete this block and the print call below it) once the name-tab/
+-- buffs issue is diagnosed -- this is not meant to ship on.
+local KT_DEBUG_FOREVER_TAB = true
+
 --[[
     ThemeClientAssets.lua
 
@@ -549,6 +556,16 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- frame.LeftText, KUI's own default assignment, when that isn't set
     -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
     local nameText = frame._ktStockNameText or frame.LeftText
+    if KT_DEBUG_FOREVER_TAB then
+        print(string.format(
+            "[KT DEBUG] unit=%s frame=%s geom.name=%s nameText=%s(%s) LeftText=%s(%s) stockNameText=%s Buffs=%s(%s) scale=%.3f",
+            tostring(unit), tostring(frame), tostring(geom.name),
+            tostring(nameText), type(nameText),
+            tostring(frame.LeftText), type(frame.LeftText),
+            tostring(frame._ktStockNameText),
+            tostring(frame.Buffs), type(frame.Buffs),
+            scale))
+    end
     if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
         local point = geom.name.point or "TOPLEFT"
         nameText:ClearAllPoints()
@@ -564,8 +581,13 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- Explicit user rule: a name long enough to overflow the real tab's
     -- real width shrinks further, on top of the uniform theme scale above,
     -- rather than spilling past the tab or overlapping the buffs below it.
+    -- Must target the SAME object just positioned in the tab (`nameText`,
+    -- which may be RightText/CenterText, not always LeftText) -- fitting
+    -- frame.LeftText unconditionally here was a real bug when the two
+    -- differ (that FontString was never moved, so fitting it did nothing
+    -- useful and left the actual tab text unfitted).
     if geom.name then
-        FitTextToWidth(frame.LeftText, geom.name.w * scale)
+        FitTextToWidth(nameText, geom.name.w * scale)
     end
 
     -- Buffs move into the same real name tab, per explicit user request --
@@ -575,6 +597,12 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- itself is the name's real rect, not the buffs' rect, so buffs sit
     -- immediately above it rather than overlapping the name text.
     local buffs = frame.Buffs
+    if KT_DEBUG_FOREVER_TAB then
+        print(string.format(
+            "[KT DEBUG] unit=%s buffs guard: geom.name=%s buffsIsTable=%s hasClearAllPoints=%s",
+            tostring(unit), tostring(geom.name ~= nil), tostring(type(buffs) == "table"),
+            tostring(type(buffs) == "table" and type(buffs.ClearAllPoints) == "function")))
+    end
     if geom.name and type(buffs) == "table" and buffs.ClearAllPoints then
         local tabW = geom.name.w * scale
         local iconSize = math.max(8, geom.name.h * scale)
