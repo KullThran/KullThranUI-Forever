@@ -224,6 +224,17 @@ local PROFILE_VALUES = {
 local PROFILE_ORDER = { "auto", "dps_tank", "heal" }
 
 local PREVIEW_FILL = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\Melli.tga"
+local PREVIEW_CLASS_TEXTURE = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes"
+local PREVIEW_PORTRAIT_MEDIA = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\"
+local PREVIEW_CLASS_COORDS = _G.CLASS_ICON_TCOORDS or {
+    WARRIOR = { 0, 0.25, 0, 0.25 }, MAGE = { 0.25, 0.496, 0, 0.25 },
+    ROGUE = { 0.496, 0.742, 0, 0.25 }, DRUID = { 0.742, 0.988, 0, 0.25 },
+    HUNTER = { 0, 0.25, 0.25, 0.496 }, SHAMAN = { 0.25, 0.496, 0.25, 0.496 },
+    PRIEST = { 0.496, 0.742, 0.25, 0.496 }, WARLOCK = { 0.742, 0.988, 0.25, 0.496 },
+    PALADIN = { 0, 0.25, 0.496, 0.742 }, DEATHKNIGHT = { 0.25, 0.496, 0.496, 0.742 },
+    MONK = { 0.496, 0.742, 0.496, 0.742 }, DEMONHUNTER = { 0.742, 0.988, 0.496, 0.742 },
+    EVOKER = { 0, 0.25, 0.742, 0.988 },
+}
 local PREVIEW_BG = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"
 local PREVIEW_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\UnitFramesIcons\\"
 local PREVIEW_PVP_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\"
@@ -842,6 +853,29 @@ local function EnsureUnit(preview, index)
     AddSimpleBorder(unit, 0.88)
     SetEdgeBorder(unit, 0.00, 0.55, 0.78, 0.85)
 
+    unit.portraitFrame = CreateFrame("Frame", nil, unit)
+    unit.portraitFrame:SetFrameStrata("MEDIUM")
+    unit.portraitFrame:SetFrameLevel(50)
+    unit.portraitFrame:EnableMouse(false)
+    if unit.portraitFrame.SetIgnoreParentAlpha then
+        unit.portraitFrame:SetIgnoreParentAlpha(false)
+    end
+    if unit.portraitFrame.SetClipsChildren then
+        unit.portraitFrame:SetClipsChildren(true)
+    end
+    unit.portraitFrame:Hide()
+    unit.portraitBG = unit.portraitFrame:CreateTexture(nil, "BACKGROUND")
+    unit.portraitBG:SetAllPoints()
+    unit.portraitBG:SetColorTexture(0.10, 0.10, 0.10, 1)
+    unit.portrait = unit.portraitFrame:CreateTexture(nil, "ARTWORK")
+    unit.portrait:SetAllPoints()
+    unit.portraitMask = unit.portraitFrame:CreateMaskTexture()
+    unit.portrait:AddMaskTexture(unit.portraitMask)
+    unit.portraitBG:AddMaskTexture(unit.portraitMask)
+    unit._portraitMaskApplied = true
+    unit.portraitBorder = unit.portraitFrame:CreateTexture(nil, "OVERLAY")
+    unit.portraitBorder:SetAllPoints()
+    unit.portraitBorder:Hide()
     unit.health = CreateFrame("StatusBar", nil, unit)
     unit.health:SetPoint("TOPLEFT", 3, -3)
     unit.health:SetPoint("TOPRIGHT", -3, -3)
@@ -1109,16 +1143,98 @@ local function RefreshLivePreview(preview)
         local showPower = cfg.showPowerBar == true
         unit.health:ClearAllPoints()
         unit.power:ClearAllPoints()
-        unit.health:SetPoint("TOPLEFT", unit, "TOPLEFT", padding, -padding)
-        unit.health:SetPoint("TOPRIGHT", unit, "TOPRIGHT", -padding, -padding)
+        local portraitStyle = cfg.portraitStyle or "circular"
+        local portraitShow = cfg.showPortrait == true and portraitStyle ~= "none"
+        local portraitSide = cfg.portraitSide == "right" and "right" or "left"
+        local portraitMaskName = portraitStyle == "circular" and "circle_mask.tga" or "portrait_mask.tga"
+        local portraitMasked = portraitStyle == "circular" or portraitStyle == "detached"
+        if portraitMasked then
+            unit.portraitMask:ClearAllPoints()
+            unit.portraitMask:SetPoint("TOPLEFT", unit.portraitFrame, "TOPLEFT", 1, -1)
+            unit.portraitMask:SetPoint("BOTTOMRIGHT", unit.portraitFrame, "BOTTOMRIGHT", -1, 1)
+            unit.portraitMask:SetTexture(PREVIEW_PORTRAIT_MEDIA .. portraitMaskName, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            if not unit._portraitMaskApplied then
+                unit.portrait:AddMaskTexture(unit.portraitMask)
+                unit.portraitBG:AddMaskTexture(unit.portraitMask)
+                unit._portraitMaskApplied = true
+            end
+        elseif unit._portraitMaskApplied and unit.portrait.RemoveMaskTexture then
+            unit.portrait:RemoveMaskTexture(unit.portraitMask)
+            if unit.portraitBG.RemoveMaskTexture then
+                unit.portraitBG:RemoveMaskTexture(unit.portraitMask)
+            end
+            unit._portraitMaskApplied = false
+        end
+        local portraitX = (tonumber(cfg.portraitX) or 0) * fit
+        local portraitY = (tonumber(cfg.portraitY) or 0) * fit
+        local portraitSize = math.max(16, h + (tonumber(cfg.portraitSize) or 0) * fit)
+        if portraitStyle == "circular" or portraitStyle == "detached" then portraitSize = portraitSize + math.floor(10 * fit) end
+        local portraitOverlap = portraitStyle == "circular" and portraitSize * 0.5 or 0
+        local portraitInset = portraitStyle == "attached" and portraitSize or 0
+        local portraitLeftInset = portraitShow and portraitSide == "left" and portraitInset or 0
+        local portraitRightInset = portraitShow and portraitSide == "right" and portraitInset or 0
+        unit.health:SetPoint("TOPLEFT", unit, "TOPLEFT", padding + portraitLeftInset, -padding)
+        unit.health:SetPoint("TOPRIGHT", unit, "TOPRIGHT", -padding - portraitRightInset, -padding)
         if showPower then
-            unit.power:SetPoint("BOTTOMLEFT", unit, "BOTTOMLEFT", padding, padding)
-            unit.power:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -padding, padding)
+            unit.power:SetPoint("BOTTOMLEFT", unit, "BOTTOMLEFT", padding + portraitLeftInset, padding)
+            unit.power:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -padding - portraitRightInset, padding)
             unit.power:SetHeight(powerHeight)
             unit.health:SetPoint("BOTTOMRIGHT", unit.power, "TOPRIGHT", 0, 1)
         else
             unit.health:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -padding, padding)
             unit.power:SetHeight(powerHeight)
+        end
+        unit.portraitFrame:ClearAllPoints()
+        unit.portraitFrame:SetSize(portraitSize, portraitSize)
+        if portraitStyle == "attached" then
+            if portraitSide == "right" then
+                unit.portraitFrame:SetPoint("TOPRIGHT", unit, "TOPRIGHT", -padding + portraitX, -padding + portraitY)
+            else
+                unit.portraitFrame:SetPoint("TOPLEFT", unit, "TOPLEFT", padding + portraitX, -padding + portraitY)
+            end
+        elseif portraitStyle == "circular" then
+            if portraitSide == "right" then
+                unit.portraitFrame:SetPoint("LEFT", unit.health, "RIGHT", -portraitOverlap + portraitX, portraitY)
+            else
+                unit.portraitFrame:SetPoint("RIGHT", unit.health, "LEFT", portraitOverlap + portraitX, portraitY)
+            end
+        elseif portraitSide == "right" then
+            unit.portraitFrame:SetPoint("LEFT", unit.health, "RIGHT", 4 + portraitX, portraitY)
+        else
+            unit.portraitFrame:SetPoint("RIGHT", unit.health, "LEFT", -4 + portraitX, portraitY)
+        end
+        local healthStrata = unit.health:GetFrameStrata()
+        local previewStrata = healthStrata == "BACKGROUND" and "LOW"
+            or healthStrata == "LOW" and "MEDIUM"
+            or healthStrata == "MEDIUM" and "HIGH"
+            or healthStrata == "HIGH" and "DIALOG"
+            or healthStrata == "DIALOG" and "FULLSCREEN"
+            or healthStrata == "FULLSCREEN" and "FULLSCREEN_DIALOG"
+            or "TOOLTIP"
+        unit.portraitFrame:SetFrameStrata(previewStrata)
+        unit.portraitFrame:SetFrameLevel(unit.health:GetFrameLevel() + 3)
+        local classCoords = PREVIEW_CLASS_COORDS[sample.class or "WARRIOR"]
+        if portraitShow and classCoords then
+            unit.portrait:SetTexture(PREVIEW_CLASS_TEXTURE)
+            unit.portrait:SetTexCoord(classCoords[1], classCoords[2], classCoords[3], classCoords[4])
+            unit.portrait:SetShown(true)
+            unit.portraitBorder:SetTexture(PREVIEW_PORTRAIT_MEDIA .. (portraitStyle == "circular" and "circle_border.tga" or "portrait_border.tga"))
+            unit.portraitBorder:SetShown(cfg.portraitBorder ~= false)
+            local borderR, borderG, borderB = color[1], color[2], color[3]
+            local borderAlpha = 1
+            local borderColor = cfg.portraitBorderColor
+            if cfg.portraitBorderUseCustomColor == true and type(borderColor) == "table" then
+                borderR = borderColor.r or borderR
+                borderG = borderColor.g or borderG
+                borderB = borderColor.b or borderB
+                borderAlpha = borderColor.a or 1
+            end
+            unit.portraitBorder:SetVertexColor(borderR, borderG, borderB, borderAlpha)
+            unit.portraitFrame:Show()
+        else
+            unit.portrait:Hide()
+            unit.portraitBorder:Hide()
+            unit.portraitFrame:Hide()
         end
         unit.health:SetStatusBarTexture(ResolveStatusbarTexture(cfg.healthTexture, PREVIEW_FILL))
         unit.health:SetValue((sample.health or 0.75) * 100)
@@ -1140,7 +1256,7 @@ local function RefreshLivePreview(preview)
         unit.absorb:ClearAllPoints()
         unit.absorb:SetPoint("TOPRIGHT", unit.health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
         unit.absorb:SetPoint("BOTTOMRIGHT", unit.health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
-        unit.absorb:SetWidth(math.max(1, w - (padding * 2)))
+        unit.absorb:SetWidth(math.max(1, w - (padding * 2) - portraitLeftInset - portraitRightInset))
         unit.absorb:SetStatusBarTexture(ResolveStatusbarTexture(cfg.absorbBarTexture, PREVIEW_FILL))
         unit.absorb:SetStatusBarColor(0.11, 1.00, 0.62, 0.82)
         unit.absorb:SetValue((sample.absorb or 0) * 100)
@@ -1295,19 +1411,23 @@ local function RefreshLivePreview(preview)
         local hy = tonumber(cfg.healthOffsetY) or 0
 
         local innerWidth = math.max(1, w - (padding * 2))
+        local roleIconAtRight = portraitShow
+        local roleIconRightReserve = roleIconAtRight and 28 or 0
+        local textInnerWidth = math.max(1, innerWidth - roleIconRightReserve)
         unit.name:ClearAllPoints()
         unit.value:ClearAllPoints()
         local maxChars
-        local statusValueWidth = math.min(70, innerWidth)
+        local statusValueWidth = math.min(70, textInnerWidth)
         if targetH >= 70 or (w < 140 and targetH >= 40) then
-            maxChars = math.max(3, math.floor(innerWidth / ((tonumber(cfg.nameFontSize) or (isRaidMode and 11 or 15)) * 0.58)))
+            local textCenterX = -(roleIconRightReserve * 0.5)
+            maxChars = math.max(3, math.floor(textInnerWidth / ((tonumber(cfg.nameFontSize) or (isRaidMode and 11 or 15)) * 0.58)))
             unit.name:SetJustifyH("CENTER")
-            unit.name:SetPoint("CENTER", unit.health, "CENTER", 0 + nx, 10 + ny)
-            unit.name:SetWidth(innerWidth - 12)
+            unit.name:SetPoint("CENTER", unit.health, "CENTER", textCenterX + nx, 10 + ny)
+            unit.name:SetWidth(math.max(1, textInnerWidth - 12))
             unit.name:SetHeight(18)
             unit.value:SetJustifyH("CENTER")
-            unit.value:SetPoint("CENTER", unit.health, "CENTER", 0 + hx, -10 + hy)
-            unit.value:SetWidth(innerWidth - 12)
+            unit.value:SetPoint("CENTER", unit.health, "CENTER", textCenterX + hx, -10 + hy)
+            unit.value:SetWidth(math.max(1, textInnerWidth - 12))
             unit.value:SetHeight(16)
         else
             local format = cfg.healthTextFormat or "CURRENTMAX"
@@ -1317,20 +1437,23 @@ local function RefreshLivePreview(preview)
             elseif format == "PERCENT" then
                 valueWidth = 38
             else
-                valueWidth = math.min(math.max(72, math.floor(innerWidth * 0.44)), math.max(44, innerWidth - 34))
+                valueWidth = math.min(math.max(72, math.floor(textInnerWidth * 0.44)), math.max(44, textInnerWidth - 34))
             end
             statusValueWidth = valueWidth
-            local reserveRoleIcon = configMode == "arena" or configMode == "arenaEnemy"
-                or (configMode == "party" and direction == "VERTICAL")
+            local reserveRoleIcon = not roleIconAtRight and (configMode == "arena" or configMode == "arenaEnemy"
+                or (configMode == "party" and direction == "VERTICAL"))
             local nameLeftInset = reserveRoleIcon and math.max(6, math.floor(PARTY_VERTICAL_NAME_LEFT_INSET * fit)) or 6
-            local nameWidth = math.max(24, innerWidth - valueWidth - 16 - (nameLeftInset - 6))
+            if roleIconAtRight and portraitStyle == "circular" and portraitSide == "left" then
+                nameLeftInset = math.max(nameLeftInset, math.ceil(math.max(0, portraitOverlap + portraitX)) + 4)
+            end
+            local nameWidth = math.max(24, textInnerWidth - valueWidth - 16 - (nameLeftInset - 6))
             maxChars = math.max(3, math.floor(nameWidth / ((tonumber(cfg.nameFontSize) or (isRaidMode and 11 or 15)) * 0.58)))
             unit.name:SetJustifyH("LEFT")
             unit.name:SetPoint("LEFT", unit.health, "LEFT", nameLeftInset + nx, 0 + ny)
             unit.name:SetWidth(nameWidth)
             unit.name:SetHeight(math.max(12, h - (padding * 2)))
             unit.value:SetJustifyH("RIGHT")
-            unit.value:SetPoint("RIGHT", unit.health, "RIGHT", -6 + hx, 0 + hy)
+            unit.value:SetPoint("RIGHT", unit.health, "RIGHT", -6 - roleIconRightReserve + hx, 0 + hy)
             unit.value:SetWidth(valueWidth)
             unit.value:SetHeight(math.max(12, h - (padding * 2)))
         end
@@ -1338,20 +1461,21 @@ local function RefreshLivePreview(preview)
         unit.status:SetJustifyH("CENTER")
         local centeredStatus = targetH >= 70 or (w < 140 and targetH >= 40)
         local horizontalCenteredStatus = centeredStatus and direction == "HORIZONTAL"
+        local statusCenterX = -(roleIconRightReserve * 0.5)
         if isRaidMode and (targetH >= 70 or (w < 140 and targetH >= 40)) then
-            unit.status:SetWidth(innerWidth - 12)
+            unit.status:SetWidth(math.max(1, textInnerWidth - 12))
             unit.status:SetHeight(14)
-            unit.status:SetPoint("CENTER", unit.health, "CENTER", 0, -12)
+            unit.status:SetPoint("CENTER", unit.health, "CENTER", statusCenterX, -12)
         elseif centeredStatus then
             unit.status:SetJustifyH(horizontalCenteredStatus and "CENTER" or "LEFT")
-            unit.status:SetWidth(horizontalCenteredStatus and math.min(90, innerWidth - 12) or math.min(70, innerWidth - 24))
+            unit.status:SetWidth(horizontalCenteredStatus and math.min(90, textInnerWidth - 12) or math.min(70, textInnerWidth - 24))
             unit.status:SetHeight(16)
-            unit.status:SetPoint("CENTER", unit.health, "CENTER", horizontalCenteredStatus and 0 or 12, horizontalCenteredStatus and -3 or 0)
+            unit.status:SetPoint("CENTER", unit.health, "CENTER", (horizontalCenteredStatus and 0 or 12) + statusCenterX, horizontalCenteredStatus and -3 or 0)
         else
             unit.status:SetJustifyH("LEFT")
-            unit.status:SetWidth(math.max(34, math.min(statusValueWidth, innerWidth - 24)))
+            unit.status:SetWidth(math.max(34, math.min(statusValueWidth, textInnerWidth - 24)))
             unit.status:SetHeight(math.max(12, h - (padding * 2)))
-            unit.status:SetPoint("RIGHT", unit.health, "RIGHT", -6, 0)
+            unit.status:SetPoint("RIGHT", unit.health, "RIGHT", -6 - roleIconRightReserve, 0)
         end
         unit.statusIcon:ClearAllPoints()
         if sample.status == "AFK" then
@@ -1379,7 +1503,11 @@ local function RefreshLivePreview(preview)
         end
         unit.roleIcon:ClearAllPoints()
         unit.roleIcon:SetSize(18, 18)
-        unit.roleIcon:SetPoint("BOTTOMLEFT", unit, "BOTTOMLEFT", 2, 2)
+        if roleIconAtRight then
+            unit.roleIcon:SetPoint("RIGHT", unit, "RIGHT", -6, -4)
+        else
+            unit.roleIcon:SetPoint("BOTTOMLEFT", unit, "BOTTOMLEFT", 2, 2)
+        end
         unit.roleIcon:SetShown(true)
 
         unit.leaderIcon:ClearAllPoints()
@@ -1387,7 +1515,7 @@ local function RefreshLivePreview(preview)
         unit.leaderIcon:SetPoint("TOPLEFT", unit, "TOPLEFT", 0, 1)
         unit.raidTargetIcon:ClearAllPoints()
         unit.raidTargetIcon:SetSize(16, 16)
-        unit.raidTargetIcon:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -2, 2)
+        unit.raidTargetIcon:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", roleIconAtRight and -28 or -2, 2)
         unit.readyCheckIcon:ClearAllPoints()
         unit.readyCheckIcon:SetSize(16, 16)
         unit.readyCheckIcon:SetScale(1.6)
@@ -2288,6 +2416,29 @@ local function AddAuraControls(container, W, mode)
     return by
 end
 
+local PORTRAIT_STYLES = {
+    none = "Hidden",
+    attached = "Attached",
+    detached = "Detached",
+    circular = "Circular",
+}
+local PORTRAIT_MODES = {
+    ["2d"] = "2D Portrait",
+    ["3d"] = "3D Portrait",
+    ["class"] = "Class Theme",
+}
+local CIRCULAR_PORTRAIT_MODES = {
+    ["2d"] = "2D Portrait",
+    ["class"] = "Class Theme",
+}
+local PORTRAIT_FACING = {
+    normal = "Normal",
+    flipped = "Flipped",
+}
+local PORTRAIT_SIDES = {
+    left = "Left",
+    right = "Right",
+}
 local function AddFrameLayoutControls(container, W, mode)
     local configMode = mode
     local by = 0
@@ -2311,6 +2462,72 @@ local function AddFrameLayoutControls(container, W, mode)
             function(v) ApplyValue(configMode, "showPlayer", v and true or false) end
         ); by = by + h
     end
+    _, h = W:Toggle(container, "Show Portrait", -by,
+        function() return GetValue(configMode, "showPortrait", configMode == "party") == true end,
+        function(v) ApplyValue(configMode, "showPortrait", v and true or false) end
+    ); by = by + h
+    _, h = W:Dropdown(container, "Portrait Style", -by, PORTRAIT_STYLES,
+        function() return GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none") end,
+        function(v)
+            ApplyValue(configMode, "portraitStyle", v)
+            RefreshPage()
+        end
+    ); by = by + h
+    _, h = W:Dropdown(container, "Portrait Mode", -by,
+        function()
+            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
+            return style == "circular" and CIRCULAR_PORTRAIT_MODES or PORTRAIT_MODES
+        end,
+        function()
+            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
+            local mode = GetValue(configMode, "portraitMode", "2d")
+            return style == "circular" and mode == "3d" and "2d" or mode
+        end,
+        function(v) ApplyValue(configMode, "portraitMode", v) end
+    ); by = by + h
+    _, h = W:Dropdown(container, "Portrait Side", -by, PORTRAIT_SIDES,
+        function() return GetValue(configMode, "portraitSide", "left") end,
+        function(v) ApplyValue(configMode, "portraitSide", v) end
+    ); by = by + h
+    _, h = W:Dropdown(container, "Portrait Facing", -by, PORTRAIT_FACING,
+        function() return GetValue(configMode, "portraitFacing", "normal") end,
+        function(v) ApplyValue(configMode, "portraitFacing", v) end
+    ); by = by + h
+    _, h = W:Toggle(container, "Portrait Border", -by,
+        function() return GetValue(configMode, "portraitBorder", true) ~= false end,
+        function(v) ApplyValue(configMode, "portraitBorder", v and true or false) end
+    ); by = by + h
+    _, h = W:Toggle(container, "Custom Portrait Border Color", -by,
+        function() return GetValue(configMode, "portraitBorderUseCustomColor", false) == true end,
+        function(v) ApplyValue(configMode, "portraitBorderUseCustomColor", v and true or false) end
+    ); by = by + h
+    _, h = W:ColorSwatch(container, "Portrait Border Color", -by,
+        function()
+            local c = GetValue(configMode, "portraitBorderColor")
+            if c then return c.r, c.g, c.b, c.a or 1 end
+            if KT.GetStyleAccentRGB then
+                local r, g, b = KT:GetStyleAccentRGB()
+                return r, g, b, 1
+            end
+            return KT.C_R or 1, KT.C_G or 0, KT.C_B or 0.3333333333, 1
+        end,
+        function(r, g, b, a) ApplyValue(configMode, "portraitBorderColor", { r = r, g = g, b = b, a = a or 1 }) end, false
+    ); by = by + h
+    _, h = W:Slider(container, "Portrait Size Adjustment", -by,
+        function() return GetValue(configMode, "portraitSize", 0) end,
+        function(v) ApplyValue(configMode, "portraitSize", v) end,
+        -40, 300, 1, "%d"
+    ); by = by + h
+    _, h = W:Slider(container, "Portrait X Offset", -by,
+        function() return GetValue(configMode, "portraitX", 0) end,
+        function(v) ApplyValue(configMode, "portraitX", v) end,
+        -250, 250, 1, "%d"
+    ); by = by + h
+    _, h = W:Slider(container, "Portrait Y Offset", -by,
+        function() return GetValue(configMode, "portraitY", 0) end,
+        function(v) ApplyValue(configMode, "portraitY", v) end,
+        -250, 250, 1, "%d"
+    ); by = by + h
     _, h = W:Slider(container, "Frame Width", -by,
         function() return GetValue(configMode, "frameWidth", 125) end,
         function(v) ApplyValue(configMode, "frameWidth", v) end,
