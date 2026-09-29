@@ -59,9 +59,9 @@ local KT = {
             cooldownManager = {
                 reskinBorders = true,
                 cdmBars = {
-                    barDefaults = { iconShape = "diamond" },
+                    barDefaults = { iconShape = "diamond", frameArtKit = "user_kit" },
                     bars = {
-                        { iconShape = "diamond", borderSize = 3, borderR = 0.1, borderG = 0.2, borderB = 0.3 },
+                        { iconShape = "diamond", borderSize = 3, borderR = 0.1, borderG = 0.2, borderB = 0.3, frameArtKit = "user_kit" },
                     },
                 },
             },
@@ -142,6 +142,7 @@ expect(KT.db.profile.castbar.colorMode, "CUSTOM", "classic cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.86, "classic cast bar color")
 expect(KT.db.profile.castbar.frameArtKit, "classic", "classic cast bar frame art kit")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "square", "classic CDM shape")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "classic", "classic CDM frame art kit")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "simple", "classic nameplate border")
 expect(KT.db.profile.partyFrames.party.healthTexture, "Blizzard", "classic party texture")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "palette unchanged outside KUI")
@@ -159,6 +160,7 @@ expect(KT.db.profile.unitFrames.frameArtKit, "default", "retail unit frame art k
 expect(KT.db.profile.castbar.colorMode, "CUSTOM", "retail cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.12, "retail cast bar color")
 expect(KT.db.profile.castbar.frameArtKit, "default", "retail cast bar frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "default", "retail CDM frame art kit")
 
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore KUI")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style")
@@ -174,6 +176,7 @@ expect(KT.db.profile.castbar.colorMode, "THEME", "restore cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.4, "restore cast bar color")
 expect(KT.db.profile.castbar.frameArtKit, "user_kit", "restore cast bar frame art kit")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "diamond", "restore CDM shape")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "user_kit", "restore CDM frame art kit")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "kullthran", "restore nameplate border")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "restore palette")
 expect(KT.db.profile.unitFrames.player.classThemeStyle, nil, "kui no longer seeds dead classThemeStyle")
