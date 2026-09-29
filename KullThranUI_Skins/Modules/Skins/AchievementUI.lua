@@ -8,6 +8,82 @@ local GetAchievementNumCriteria = GetAchievementNumCriteria
 local GetAchievementCriteriaInfo = GetAchievementCriteriaInfo
 local bit = bit
 
+local SkinAchievementUI
+local achievementSkinWatcher
+
+local function ScheduleAchievementSkin()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if S.db.enable and S.db.achievement and SkinAchievementUI then
+                SkinAchievementUI()
+            end
+        end)
+    elseif SkinAchievementUI then
+        SkinAchievementUI()
+    end
+end
+
+local function EnsureAchievementSkinWatcher()
+    if achievementSkinWatcher then return end
+
+    achievementSkinWatcher = CreateFrame("Frame")
+    local elapsed = 0
+    achievementSkinWatcher:SetScript("OnUpdate", function(self, delta)
+        elapsed = elapsed + (delta or 0)
+        if elapsed < 0.05 then return end
+        elapsed = 0
+
+        if _G.AchievementFrame then
+            SkinAchievementUI()
+            self:SetScript("OnUpdate", nil)
+        end
+    end)
+end
+
+local function PatchAchievementOverridePoints()
+    if not S:IsForeverProject() then return end
+
+    local current = _G.AchievementFrame_GetOverridePoints
+    if type(current) ~= "function" or current == S._ktAchievementOverrideWrapper then
+        return
+    end
+
+    local original = current
+    local wrapper
+    wrapper = function(points, achievementId, ...)
+        if achievementId == nil then
+            return points or 0
+        end
+        return original(points, achievementId, ...)
+    end
+
+    S._ktAchievementOverrideWrapper = wrapper
+    _G.AchievementFrame_GetOverridePoints = wrapper
+end
+
+local function EnsureAchievementOverridePointsWatcher()
+    if not S:IsForeverProject() or S._ktAchievementOverrideWatcher then return end
+
+    local watcher = CreateFrame("Frame")
+    watcher:RegisterEvent("ADDON_LOADED")
+    watcher:SetScript("OnEvent", function(_, _, addonName)
+        if addonName == "Blizzard_AchievementUI" or addonName == "Blizzard_LegacySystem" then
+            PatchAchievementOverridePoints()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, PatchAchievementOverridePoints)
+            end
+        end
+    end)
+    S._ktAchievementOverrideWatcher = watcher
+end
+
+if S:IsForeverProject() then
+    -- Install the watcher even when the Achievements skin toggle is disabled:
+    -- Blizzard_LegacySystem can replace this function during its load pass.
+    EnsureAchievementOverridePointsWatcher()
+    PatchAchievementOverridePoints()
+end
+
 local function SetNativeArtwork(texture, alpha, brightness, desaturation)
     if not texture or S:IsKuiSurfaceRegion(texture) then return end
     if texture.SetDesaturation then
@@ -22,8 +98,53 @@ local function SetNativeArtwork(texture, alpha, brightness, desaturation)
     if texture.Show then texture:Show() end
 end
 
+local function ApplyAchievementPanelSurface(frame, washAlpha)
+    if not (frame and S.ApplyKuiSurface) then return end
+
+    if not frame._ktAchievementBackdrop then
+        pcall(S.CreateBackdrop, S, frame, true)
+        frame._ktAchievementBackdrop = true
+        if frame.backdrop then
+            frame.backdrop:SetBackdropColor(0, 0, 0, 0.18)
+            frame.backdrop:SetBackdropBorderColor(unpack(S:GetBorderColor()))
+        end
+    end
+
+    S:ApplyKuiSurface(frame, { washAlpha = washAlpha or 0.42 })
+    if not frame._ktAchievementSurfaceHooked and frame.HookScript then
+        frame:HookScript("OnShow", function(self)
+            if S.db.enable and S.db.achievement then
+                S:ApplyKuiSurface(self, { washAlpha = washAlpha or 0.42 })
+            end
+        end)
+        frame._ktAchievementSurfaceHooked = true
+    end
+end
+
 local function ApplyAchievementPanelSatin(frame, options)
-    -- Disabled: using KUI Surface globally.
+    -- Keep this helper as the single entry point for the shared KUI texture.
+    -- The old satin layer is deliberately not used on Forever or Retail.
+    ApplyAchievementPanelSurface(frame, options and options.washAlpha)
+end
+
+local function SkinAchievementPanel(frame)
+    if not frame then return end
+
+    ApplyAchievementPanelSurface(frame)
+
+    local scrollBar = frame.ScrollBar
+    if not scrollBar and frame.ScrollBox then scrollBar = frame.ScrollBox.ScrollBar end
+    if not scrollBar and frame.ScrollFrame then scrollBar = frame.ScrollFrame.ScrollBar end
+    if scrollBar then S:HandleScrollBar(scrollBar) end
+
+    if frame.GetRegions then
+        for index = 1, frame:GetNumRegions() do
+            local region = select(index, frame:GetRegions())
+            if region and region.IsObjectType and region:IsObjectType("FontString") then
+                S:HandleFont(region)
+            end
+        end
+    end
 end
 
 -- Helper for StatusBars
@@ -133,33 +254,56 @@ local function SkinAchievementButton(button)
     if button.HiddenDescription then button.HiddenDescription:SetTextColor(0.9, 0.9, 0.9) end
 end
 
-S.SkinFuncs["Blizzard_AchievementUI"] = function()
+SkinAchievementUI = function()
+    EnsureAchievementSkinWatcher()
     if not (S.db.enable and S.db.achievement) then return end
 
     -- [FIX] Blizzard Bug: AchievementFrameComparison_UpdateStatusBars crashes if id is "summary"
     -- Use hooksecurefunc to avoid tainting Blizzard protected code (Midnight 12.x requirement)
-    if _G.AchievementFrameComparison_UpdateStatusBars then
+    if _G.AchievementFrameComparison_UpdateStatusBars and not S._ktAchievementComparisonStatusHooked then
         hooksecurefunc("AchievementFrameComparison_UpdateStatusBars", function(id)
             if id == "summary" then return end
         end)
+        S._ktAchievementComparisonStatusHooked = true
     end
 
-    -- [FIX] Blizzard Bug: AchievementFrame_GetOverridePoints crashes if achievementId is nil (TWW 11.0+)
-    if _G.AchievementFrame_GetOverridePoints then
-        local orig = _G.AchievementFrame_GetOverridePoints
-        _G.AchievementFrame_GetOverridePoints = function(points, achievementId, ...)
-            if not achievementId then return points or 0 end
-            return orig(points, achievementId, ...)
-        end
-    end
+    -- Forever replaces this function while Blizzard_LegacySystem loads, so
+    -- install it now and reapply it after either Achievement addon finishes.
+    EnsureAchievementOverridePointsWatcher()
+    PatchAchievementOverridePoints()
 
     local AchievementFrame = _G.AchievementFrame
+    if not AchievementFrame then return end
     S:HandlePortraitFrame(AchievementFrame)
     ApplyAchievementPanelSatin(AchievementFrame, {
         inset = 10, baseAlpha = 0.17, sheenAlpha = 0.055, edgeAlpha = 0.12,
     })
-    if S.ApplyKuiSurface then
-        S:ApplyKuiSurface(AchievementFrame)
+
+    -- Forever's achievement window can expose different child names from the
+    -- Retail frame. Skin every available content panel through the shared KUI
+    -- surface before applying the legacy-specific controls below.
+    local panels = {
+        _G.AchievementFrameCategories,
+        _G.AchievementFrameAchievements,
+        _G.AchievementFrameSummary,
+        _G.AchievementFrameStats,
+        _G.AchievementFrameComparison,
+        AchievementFrame.Categories,
+        AchievementFrame.Achievements,
+        AchievementFrame.Summary,
+        AchievementFrame.Stats,
+        AchievementFrame.Comparison,
+        AchievementFrame.Content,
+        AchievementFrame.ContentFrame,
+        AchievementFrame.Panel,
+    }
+    for _, panel in ipairs(panels) do
+        SkinAchievementPanel(panel)
+    end
+
+    if not AchievementFrame._ktAchievementSkinShowHooked and AchievementFrame.HookScript then
+        AchievementFrame:HookScript("OnShow", ScheduleAchievementSkin)
+        AchievementFrame._ktAchievementSkinShowHooked = true
     end
 
     -- The castle hall art is a child frame that covers the whole shell and
@@ -235,9 +379,7 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
     -- Categories
     if _G.AchievementFrameCategories then
         ApplyAchievementPanelSatin(_G.AchievementFrameCategories)
-        if S.ApplyKuiSurface then
-            S:ApplyKuiSurface(_G.AchievementFrameCategories)
-        end
+
         for i = 1, _G.AchievementFrameCategories:GetNumRegions() do
             local r = select(i, _G.AchievementFrameCategories:GetRegions())
             if r and r.IsObjectType and r:IsObjectType("Texture") then
@@ -248,7 +390,7 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
             S:HandleScrollBar(_G.AchievementFrameCategories.ScrollBar)
         end
         
-        if _G.AchievementFrameCategories.ScrollBox then
+        if _G.AchievementFrameCategories.ScrollBox and not _G.AchievementFrameCategories.ScrollBox._ktAchievementSkinHooked then
             hooksecurefunc(_G.AchievementFrameCategories.ScrollBox, "Update", function(self)
                 self:ForEachFrame(function(child)
                     local button = child.Button
@@ -265,15 +407,14 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
                     end
                 end)
             end)
+            _G.AchievementFrameCategories.ScrollBox._ktAchievementSkinHooked = true
         end
     end
 
     -- Achievements
     if _G.AchievementFrameAchievements then
         ApplyAchievementPanelSatin(_G.AchievementFrameAchievements)
-        if S.ApplyKuiSurface then
-            S:ApplyKuiSurface(_G.AchievementFrameAchievements)
-        end
+
         for i = 1, _G.AchievementFrameAchievements:GetNumRegions() do
             local r = select(i, _G.AchievementFrameAchievements:GetRegions())
             if r and r.IsObjectType and r:IsObjectType("Texture") then
@@ -284,19 +425,18 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
             S:HandleScrollBar(_G.AchievementFrameAchievements.ScrollBar)
         end
         
-        if _G.AchievementFrameAchievements.ScrollBox then
+        if _G.AchievementFrameAchievements.ScrollBox and not _G.AchievementFrameAchievements.ScrollBox._ktAchievementSkinHooked then
             hooksecurefunc(_G.AchievementFrameAchievements.ScrollBox, "Update", function(self)
                 self:ForEachFrame(SkinAchievementButton)
             end)
+            _G.AchievementFrameAchievements.ScrollBox._ktAchievementSkinHooked = true
         end
     end
 
     -- Summary
     if _G.AchievementFrameSummary then
         ApplyAchievementPanelSatin(_G.AchievementFrameSummary)
-        if S.ApplyKuiSurface then
-            S:ApplyKuiSurface(_G.AchievementFrameSummary)
-        end
+
         for i = 1, _G.AchievementFrameSummary:GetNumRegions() do
             local r = select(i, _G.AchievementFrameSummary:GetRegions())
             if r and r.IsObjectType and r:IsObjectType("Texture") then
@@ -349,7 +489,8 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
             end
         end
 
-        hooksecurefunc("AchievementFrameSummary_UpdateAchievements", function()
+        if _G.AchievementFrameSummary_UpdateAchievements and not S._ktAchievementSummaryUpdateHooked then
+            hooksecurefunc("AchievementFrameSummary_UpdateAchievements", function()
             for i = 1, _G.ACHIEVEMENTUI_MAX_SUMMARY_ACHIEVEMENTS or 4 do
                 local button = _G["AchievementFrameSummaryAchievement"..i]
                 if button then
@@ -380,14 +521,14 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
                 end
             end
         end)
+            S._ktAchievementSummaryUpdateHooked = true
+        end
     end
     
     -- Stats
     if _G.AchievementFrameStats then
         ApplyAchievementPanelSatin(_G.AchievementFrameStats)
-        if S.ApplyKuiSurface then
-            S:ApplyKuiSurface(_G.AchievementFrameStats)
-        end
+
         for i = 1, _G.AchievementFrameStats:GetNumRegions() do
             local r = select(i, _G.AchievementFrameStats:GetRegions())
             if r and r.IsObjectType and r:IsObjectType("Texture") then
@@ -421,9 +562,7 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
     if _G.AchievementFrameComparison then
         local Comparison = _G.AchievementFrameComparison
         ApplyAchievementPanelSatin(Comparison)
-        if S.ApplyKuiSurface then
-            S:ApplyKuiSurface(Comparison)
-        end
+
         for i = 1, Comparison:GetNumRegions() do
             local r = select(i, Comparison:GetRegions())
             if r and r.IsObjectType and r:IsObjectType("Texture") then
@@ -450,7 +589,8 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
     end
 
     -- [FIX] Criteria Text Color (Black text issue)
-    hooksecurefunc("AchievementObjectives_DisplayCriteria", function(objectivesFrame, id)
+    if _G.AchievementObjectives_DisplayCriteria and not S._ktAchievementCriteriaHooked then
+        hooksecurefunc("AchievementObjectives_DisplayCriteria", function(objectivesFrame, id)
         if not objectivesFrame or not objectivesFrame.GetCriteria then return end
         local numCriteria = GetAchievementNumCriteria(id)
         local textStrings = 0
@@ -476,5 +616,19 @@ S.SkinFuncs["Blizzard_AchievementUI"] = function()
                 end
             end
         end
-    end)
+        end)
+        S._ktAchievementCriteriaHooked = true
+    end
+
+    if achievementSkinWatcher then
+        achievementSkinWatcher:SetScript("OnUpdate", nil)
+    end
+end
+
+S.SkinFuncs["Blizzard_AchievementUI"] = SkinAchievementUI
+if S:IsForeverProject() then
+    -- Forever keeps legacy UI load boundaries separate from Retail. Register
+    -- this callback there as well when the compatibility system exposes the
+    -- achievement frame through its own addon boundary.
+    S.SkinFuncs["Blizzard_LegacySystem"] = SkinAchievementUI
 end

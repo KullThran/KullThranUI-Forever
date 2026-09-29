@@ -8453,6 +8453,14 @@ end
 local function ApplyForeverPortraitDefaults()
     local profile = db and db.profile
     if not profile or profile._foreverPortraitDefaults20260919c then return end
+
+    local visualTheme = KT and KT.db and KT.db.profile
+        and KT.db.profile.visualTheme and KT.db.profile.visualTheme.active or "kui"
+    if visualTheme ~= "kui" and visualTheme ~= "forever" then
+        profile._foreverPortraitDefaults20260919c = true
+        return
+    end
+
     if profile.player and profile.player.showPortrait == false then profile.player.showPortrait = true end
     if profile.target and profile.target.showPortrait == false then profile.target.showPortrait = true end
     if profile.target and profile.target.portraitSide == "left" then profile.target.portraitSide = "right" end

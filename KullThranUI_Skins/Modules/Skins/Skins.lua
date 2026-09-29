@@ -345,6 +345,13 @@ S.mult = GetPixelScale()
 -- panels can be omitted from the options page without removing their source
 -- files (they remain useful if Blizzard enables the panels in another build).
 function S:IsForeverProject()
+    if KT and KT.IS_FOREVER == true then
+        return true
+    end
+    if KT and KT.IsForever and KT:IsForever() then
+        return true
+    end
+
     local projectID = _G.WOW_PROJECT_ID
     local betaID = _G.WOW_PROJECT_FOREVER_BETA or _G.WOW_PROJECT_WOW_FOREVER_BETA
     local foreverID = _G.WOW_PROJECT_FOREVER or _G.WOW_PROJECT_WOW_FOREVER
@@ -354,7 +361,7 @@ function S:IsForeverProject()
 
     local _, _, _, interfaceVersion = _G.GetBuildInfo and _G.GetBuildInfo()
     interfaceVersion = tonumber(interfaceVersion)
-    return interfaceVersion == 16001
+    return interfaceVersion == 16001 or interfaceVersion == 160001
 end
 
 local resize = CreateFrame("Frame")

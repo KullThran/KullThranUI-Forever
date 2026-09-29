@@ -21,7 +21,7 @@ local StaticPopupDialogs = StaticPopupDialogs
 -- Constants
 local ICON_PATH = "Interface\\AddOns\\KullThranUI\\Modules\\Installers\\Icons\\"
 local DISCORD_INVITE_URL = "https://discord.gg/cqAVWpeVvd"
-local TOTAL_INSTALLER_STEPS = 19
+local TOTAL_INSTALLER_STEPS = 20
 local KUI_TEXTURE_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\"
 local KUI_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\"
 local EFL_FRIEND_ICON = KUI_ICON_PATH .. "chaticons\\FriendList.png"
@@ -2939,6 +2939,7 @@ function Mod:OpenCurrentStep()
     elseif step == 17 then self:ShowAddonListStep()
     elseif step == 18 then self:ShowProfileStep()
     elseif step == 19 then self:ShowModuleSelectionStep()
+    elseif step == 20 then self:ShowVisualThemeStep()
     else self:ShowWelcomeStep() end
 end
 
@@ -6527,20 +6528,72 @@ function Mod:ShowModuleSelectionStep()
     local btnFinish = CreateFrame("Button", nil, content, "BackdropTemplate")
     btnFinish:SetSize(120, 30)
     btnFinish:SetPoint("BOTTOMRIGHT", -30, 30)
-    btnFinish:SetText(L["Finish"])
+    btnFinish:SetText(L["Next"])
     SkinButton(btnFinish)
     btnFinish:SetScript("OnClick", function()
         local needsReload = content._ktInstallerModulesDirty == true or self.moduleSettingsDirty == true
         self.moduleSettingsDirty = nil
+        if needsReload then
+            RequestInstallerReload(self, 20)
+        else
+            self:ShowVisualThemeStep()
+        end
+    end)
+
+    local btnBack = CreateFrame("Button", nil, content, "BackdropTemplate")
+    btnBack:SetSize(120, 30)
+    btnBack:SetPoint("RIGHT", btnFinish, "LEFT", -10, 0)
+    btnBack:SetText(L["Previous"])
+    SkinButton(btnBack)
+    btnBack:SetScript("OnClick", function() self:ShowProfileStep() end)
+
+
+end
+
+
+function Mod:ShowVisualThemeStep()
+    L = KT:GetLocale()
+    KT.db.profile.installer.step = 20
+    self:UpdateProgressBar(20)
+    if self.content then self.content:Hide() end
+    local content = CreateFrame("Frame", nil, self.frame)
+    content:SetAllPoints()
+    self.content = content
+
+    local title = content:CreateFontString(nil, "OVERLAY")
+    title:SetPoint("TOP", 0, -30)
+    title:SetFont(GetKTFont(), 24, "OUTLINE")
+    title:SetText(L["Visual Theme"] or "Visual Theme")
+    title:SetTextColor(unpack(KT_COLOR))
+
+    local info = content:CreateFontString(nil, "OVERLAY")
+    info:SetPoint("TOP", title, "BOTTOM", 0, -16)
+    info:SetWidth(660)
+    info:SetFont(GetKTFont(), 13)
+    info:SetText(L["Select a base layout and visual style for your interface."] or "Select a base layout and visual style for your interface.")
+    info:SetTextColor(0.9, 0.9, 0.9)
+    info:SetJustifyH("CENTER")
+
+    -- Call the Visual Theme Engine's selector
+    if KT.VisualThemes and KT.VisualThemes.CreateSelector then
+        local selectorContainer = CreateFrame("Frame", nil, content)
+        selectorContainer:SetSize(660, 300)
+        selectorContainer:SetPoint("TOP", info, "BOTTOM", 0, -40)
+        KT.VisualThemes:CreateSelector(selectorContainer, { columns = 4, compact = false })
+    end
+
+    local btnFinish = CreateFrame("Button", nil, content, "BackdropTemplate")
+    btnFinish:SetSize(120, 30)
+    btnFinish:SetPoint("BOTTOMRIGHT", -30, 30)
+    btnFinish:SetText(L["Finish"])
+    SkinButton(btnFinish)
+    btnFinish:SetScript("OnClick", function()
         KT.db.profile.installer.showOnLogin = false
         self._ktExplicitlyClosed = true
         self.frame:Hide()
         C_Timer.After(0, function()
             if KT and KT.OpenMenu then
                 KT:OpenMenu()
-            end
-            if needsReload then
-                RequestInstallerReload(self, 20)
             end
         end)
     end)
@@ -6550,7 +6603,7 @@ function Mod:ShowModuleSelectionStep()
     btnBack:SetPoint("RIGHT", btnFinish, "LEFT", -10, 0)
     btnBack:SetText(L["Previous"])
     SkinButton(btnBack)
-    btnBack:SetScript("OnClick", function() self:ShowProfileStep() end)
+    btnBack:SetScript("OnClick", function() self:ShowModuleSelectionStep() end)
 
     local btnDiscord = CreateFrame("Button", nil, content, "BackdropTemplate")
     btnDiscord:SetSize(150, 30)
@@ -6561,7 +6614,6 @@ function Mod:ShowModuleSelectionStep()
         StaticPopup_Show("KT_INSTALLER_URL", nil, nil, DISCORD_INVITE_URL)
     end)
 end
-
 function Mod:ApplyScaleOnly(resolution, opts)
     local res = tostring(resolution or "AUTO"):upper()
     local silent = type(opts) == "table" and opts.silent == true

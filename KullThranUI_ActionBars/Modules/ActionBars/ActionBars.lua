@@ -184,6 +184,9 @@ function Mod:OnInitialize()
                 buttonBackdropColor = { r = 0, g = 0, b = 0, a = 1 },
             }
         end
+        if KT.VisualThemes and KT.VisualThemes.ApplyCurrentThemeToModule then
+            KT.VisualThemes:ApplyCurrentThemeToModule("actionbars")
+        end
     end
 end
 

@@ -84,9 +84,13 @@ local function BuildUI()
     pcall(f.timerText.SetFont, f.timerText, "Fonts\\FRIZQT__.TTF", 22, "OUTLINE")
     f.timerText:SetText("0:00")
 
-    -- Visible at 0:00 when idle so the element can always be found/moved in
-    -- Unlock Mode; the count starts on combat entry.
-    f:Show()
+    -- The element can always be found/moved in Unlock Mode; the count starts
+    -- on combat entry. Respect the profile default while it is idle.
+    if GetConfig().enabled == false then
+        f:Hide()
+    else
+        f:Show()
+    end
     Mod.combatTimerFrame = f
     return f
 end
@@ -156,6 +160,10 @@ function Mod:HideCombatTimer()
 end
 
 function Mod:StartCombatTimer()
+    if GetConfig().enabled == false then
+        self:HideCombatTimer()
+        return
+    end
     BuildUI()
     ApplyStyle()
     self:ApplyCombatTimerPosition()
@@ -173,6 +181,15 @@ end
 function Mod:StopCombatTimer(showTotal)
     if not state.running then return end
     local total = GetTime() - (state.startedAt or GetTime())
+    if GetConfig().enabled == false then
+        state.running = false
+        state.showUntil = nil
+        if self.combatTimerFrame then
+            self.combatTimerFrame:SetScript("OnUpdate", nil)
+            self.combatTimerFrame:Hide()
+        end
+        return
+    end
     state.running = false
     if self.combatTimerFrame then
         self.combatTimerFrame:SetScript("OnUpdate", nil)
@@ -268,11 +285,17 @@ function Mod:ApplyCombatTimerPosition()
 end
 
 function Mod:RefreshCombatTimer()
+    if GetConfig().enabled == false then
+        self:HideCombatTimer()
+        return
+    end
     ApplyStyle()
     if state.running then
         if not self.combatTimerFrame then BuildUI() end
         self.combatTimerFrame:Show()
         self:UpdateCombatTimerText(GetTime() - (state.startedAt or GetTime()))
+    elseif self.combatTimerFrame then
+        self.combatTimerFrame:Show()
     end
 end
 

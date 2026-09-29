@@ -164,6 +164,34 @@ local tostring = _G.tostring
 local type = _G.type
 local UIParent = _G.UIParent
 
+local function HasActiveGroupLootRoll()
+    local getter = _G.GetActiveLootRollIDs
+    if type(getter) == "function" then
+        local ok, ids = pcall(getter)
+        if ok and type(ids) == "table" and #ids > 0 then
+            return true
+        end
+    end
+
+    local container = _G.GroupLootContainer
+    if container and type(container.rollFrames) == "table" then
+        for _, frame in pairs(container.rollFrames) do
+            if frame then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function ShouldHideAlerts(db)
+    return db
+        and db.visibility
+        and db.visibility.hideAlerts
+        and not HasActiveGroupLootRoll()
+end
+
 local function LText(text)
     if type(text) ~= "string" then
         return text
@@ -1640,7 +1668,7 @@ function Mod:EnsureBattleNetToastVisibility()
     if not toast._KTEnhancementsVisibilityHook and toast.HookScript then
         toast:HookScript('OnShow', function()
             local db = Mod:GetDB()
-            if not (IsModuleEnabled() and db.visibility.hideAlerts) then
+            if not (IsModuleEnabled() and ShouldHideAlerts(db)) then
                 return
             end
 
@@ -1656,7 +1684,7 @@ function Mod:EnsureBattleNetToastVisibility()
         end)
         toast:HookScript('OnHide', function()
             local db = Mod:GetDB()
-            if IsModuleEnabled() and db.visibility.hideAlerts and _G.AlertFrame then
+            if IsModuleEnabled() and ShouldHideAlerts(db) and _G.AlertFrame then
                 _G.AlertFrame:Hide()
             end
         end)
@@ -1703,7 +1731,7 @@ function Mod:InstallHooks()
         _G.AlertFrame._KTEnhancementsHook = true
         _G.AlertFrame:HookScript("OnShow", function(frame)
             local db = Mod:GetDB()
-            if IsModuleEnabled() and db.visibility.hideAlerts and not frame.KT_BNetToastVisible
+            if IsModuleEnabled() and ShouldHideAlerts(db) and not frame.KT_BNetToastVisible
                 and not (_G.BNToastFrame and _G.BNToastFrame.IsShown and _G.BNToastFrame:IsShown()) then
                 frame:Hide()
             end
@@ -1887,7 +1915,7 @@ function Mod:RefreshSettings()
     if IsModuleEnabled() and db.blocks.blockFriendRequests then
         self:DeclinePendingFriendInvites()
     end
-    if _G.AlertFrame and IsModuleEnabled() and db.visibility.hideAlerts
+    if _G.AlertFrame and IsModuleEnabled() and ShouldHideAlerts(db)
         and not (_G.BNToastFrame and _G.BNToastFrame.IsShown and _G.BNToastFrame:IsShown()) then
         _G.AlertFrame:Hide()
     end

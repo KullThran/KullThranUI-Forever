@@ -1,0 +1,315 @@
+local addonName, ns = ...
+local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
+KT.VisualThemes = KT.VisualThemes or {}
+
+local NIL_MARKER_KEY = "__ktVisualThemeNil"
+
+local function DeepCopy(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local result = {}
+    seen[value] = result
+    for key, child in pairs(value) do
+        result[DeepCopy(key, seen)] = DeepCopy(child, seen)
+    end
+    return result
+end
+
+local function PackValue(value)
+    if value == nil then
+        return { [NIL_MARKER_KEY] = true }
+    end
+    return DeepCopy(value)
+end
+
+local function UnpackValue(value)
+    if type(value) == "table" and value[NIL_MARKER_KEY] == true then
+        local count = 0
+        for _ in pairs(value) do count = count + 1 end
+        if count == 1 then return nil end
+    end
+    return DeepCopy(value)
+end
+
+local function GetPath(tbl, path)
+    if type(tbl) ~= "table" or type(path) ~= "string" then return nil end
+    local current = tbl
+    for key in string.gmatch(path, "[^%.]+") do
+        if type(current) ~= "table" then return nil end
+        local numeric = tonumber(key)
+        current = current[numeric or key]
+    end
+    return current
+end
+
+local function SetPath(tbl, path, value)
+    if type(tbl) ~= "table" or type(path) ~= "string" then return end
+    local keys = {}
+    for key in string.gmatch(path, "[^%.]+") do
+        keys[#keys + 1] = tonumber(key) or key
+    end
+    if #keys == 0 then return end
+    local current = tbl
+    for index = 1, #keys - 1 do
+        local key = keys[index]
+        if type(current[key]) ~= "table" then current[key] = {} end
+        current = current[key]
+    end
+    current[keys[#keys]] = UnpackValue(value)
+end
+
+local function CapturePaths(profile, paths)
+    local data = {}
+    for _, path in ipairs(paths or {}) do
+        data[path] = PackValue(GetPath(profile, path))
+    end
+    return data
+end
+
+local function ApplyPaths(profile, data)
+    for path, value in pairs(data or {}) do
+        SetPath(profile, path, value)
+    end
+end
+
+local function GetClientFlavor()
+    if _G.WOW_PROJECT_ID and _G.WOW_PROJECT_MAINLINE
+        and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE then
+        return "retail"
+    end
+    return "forever"
+end
+
+local function AdapterAvailable(adapter, clientFlavor)
+    if type(adapter) ~= "table" then return false end
+    if type(adapter.isAvailable) ~= "function" then return true end
+    local ok, available = pcall(adapter.isAvailable, clientFlavor)
+    return ok and available ~= false
+end
+
+local function AdapterProfile(adapter)
+    if type(adapter) ~= "table" or type(adapter.getProfile) ~= "function" then return nil end
+    local ok, profile = pcall(adapter.getProfile)
+    if ok and type(profile) == "table" then return profile end
+    return nil
+end
+
+function KT.VisualThemes:GetClientFlavor()
+    return GetClientFlavor()
+end
+
+function KT.VisualThemes:RepairLegacyState(profile)
+    local state = self:InitSlots(profile)
+    if not state then return end
+    local version = tonumber(state.schemaVersion) or 0
+    if version >= self.SCHEMA_VERSION then return end
+
+    local registry, order = self:GetAllAdapters()
+    for _, moduleKey in ipairs(order or {}) do
+        local adapter = registry[moduleKey]
+        local oldSlot = state.slots[moduleKey] and state.slots[moduleKey].kui
+        local moduleProfile = AdapterProfile(adapter)
+        if moduleProfile and type(oldSlot) == "table" then
+            ApplyPaths(moduleProfile, oldSlot)
+        end
+        if moduleProfile and type(adapter.validate) == "function" then
+            pcall(adapter.validate, moduleProfile, "kui", GetClientFlavor())
+        end
+    end
+
+    state.active = "kui"
+    state.requested = "kui"
+    state.modules = {}
+    state.slots = {}
+    state.applied = {}
+    state.schemaVersion = self.SCHEMA_VERSION
+end
+
+function KT.VisualThemes:EnsureInitialized()
+    local profile = KT.db and KT.db.profile
+    if not profile then return nil end
+    self:RepairLegacyState(profile)
+    local state = self:InitSlots(profile)
+    state.schemaVersion = self.SCHEMA_VERSION
+    if not self:IsKnownTheme(state.active) then state.active = "kui" end
+    if not self:IsKnownTheme(state.requested) then state.requested = state.active end
+    return profile, state
+end
+
+function KT.VisualThemes:GetRenderedTheme()
+    local profile = KT.db and KT.db.profile
+    if profile then
+        self:EnsureInitialized()
+    end
+    local state = profile and profile.visualTheme
+    if state and self:IsKnownTheme(state.active) then
+        return state.active
+    end
+    return "kui"
+end
+
+-- Fixed chrome identity for the Damage Meter header/border. Classic and
+-- Retail share the same "Blizzard style" gold; kui keeps following the
+-- user's own accent color (returns nil so callers fall back to it).
+local DAMAGE_METER_CHROME_COLORS = {
+    classic = { 1.00, 0.82, 0.10 },
+    retail = { 1.00, 0.82, 0.10 },
+    forever = { 0.82, 0.65, 0.23 },
+}
+
+function KT.VisualThemes:GetDamageMeterAccentColor()
+    local color = DAMAGE_METER_CHROME_COLORS[self:GetRenderedTheme()]
+    if color then return color[1], color[2], color[3] end
+    return nil
+end
+
+function KT.VisualThemes:GetRequestedTheme()
+    local profile = KT.db and KT.db.profile
+    local state = profile and profile.visualTheme
+    if state and self:IsKnownTheme(state.requested) then
+        return state.requested
+    end
+    return self:GetRenderedTheme()
+end
+
+function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
+    local profile, state = self:EnsureInitialized()
+    if not profile or type(moduleKey) ~= "string" then return false end
+    local adapter = self:GetModuleAdapter(moduleKey)
+    if not adapter then return false end
+
+    local clientFlavor = GetClientFlavor()
+    if not AdapterAvailable(adapter, clientFlavor) then return false end
+    local moduleProfile = AdapterProfile(adapter)
+    if not moduleProfile then return false end
+
+    local activeTheme = state.active
+    if state.applied[moduleKey] == activeTheme then return true end
+
+    local ok, err = pcall(function()
+        local destination = self:LoadSlot(profile, moduleKey, activeTheme)
+        if destination then
+            ApplyPaths(moduleProfile, destination)
+        elseif activeTheme ~= "kui" and type(adapter.seed) == "function" then
+            adapter.seed(moduleProfile, activeTheme, clientFlavor)
+        end
+        if type(adapter.validate) == "function" then
+            adapter.validate(moduleProfile, activeTheme, clientFlavor)
+        end
+    end)
+    if not ok then
+        if KT.Print then KT:Print("Visual theme initialization failed in " .. moduleKey .. ": " .. tostring(err)) end
+        return false
+    end
+
+    state.applied[moduleKey] = activeTheme
+    return true
+end
+
+function KT.VisualThemes:ApplyAll(targetTheme)
+    if not self:IsKnownTheme(targetTheme) then
+        if KT.Print then KT:Print("Unknown visual theme: " .. tostring(targetTheme)) end
+        return false
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        if KT.Print then KT:Print("Visual themes cannot be changed during combat.") end
+        return false
+    end
+
+    local profile, state = self:EnsureInitialized()
+    if not profile then
+        if KT.Print then KT:Print("The profile is not ready yet.") end
+        return false
+    end
+
+    local currentTheme = state.active
+    if targetTheme == currentTheme then return true end
+
+    local registry, order = self:GetAllAdapters()
+    local clientFlavor = GetClientFlavor()
+    local slotBackup = DeepCopy(state.slots)
+    local appliedBackup = DeepCopy(state.applied)
+    local rollback = {}
+
+    for _, moduleKey in ipairs(order or {}) do
+        local adapter = registry[moduleKey]
+        if AdapterAvailable(adapter, clientFlavor) then
+            local moduleProfile = AdapterProfile(adapter)
+            if moduleProfile then
+                local paths = {}
+                if type(adapter.getOwnedPaths) == "function" then
+                    local ok, result = pcall(adapter.getOwnedPaths, currentTheme, clientFlavor, moduleProfile)
+                    if ok and type(result) == "table" then paths = result end
+                end
+
+                rollback[#rollback + 1] = {
+                    profile = moduleProfile,
+                    data = CapturePaths(moduleProfile, paths),
+                }
+                self:SaveSlot(profile, moduleKey, currentTheme, CapturePaths(moduleProfile, paths))
+
+                local ok, err = pcall(function()
+                    local destination = self:LoadSlot(profile, moduleKey, targetTheme)
+                    if destination then
+                        ApplyPaths(moduleProfile, destination)
+                    elseif type(adapter.seed) == "function" then
+                        adapter.seed(moduleProfile, targetTheme, clientFlavor)
+                    end
+                    if type(adapter.validate) == "function" then
+                        adapter.validate(moduleProfile, targetTheme, clientFlavor)
+                    end
+                end)
+
+                if not ok then
+                    for index = #rollback, 1, -1 do
+                        ApplyPaths(rollback[index].profile, rollback[index].data)
+                    end
+                    state.slots = slotBackup
+                    state.applied = appliedBackup
+                    state.requested = currentTheme
+                    if KT.Print then
+                        KT:Print("Visual theme failed in " .. moduleKey .. ": " .. tostring(err))
+                    end
+                    return false
+                end
+                state.applied[moduleKey] = targetTheme
+            else
+                state.applied[moduleKey] = nil
+            end
+        else
+            state.applied[moduleKey] = nil
+        end
+    end
+
+    state.requested = targetTheme
+    state.active = targetTheme
+    state.schemaVersion = self.SCHEMA_VERSION
+
+    if type(_G.ReloadUI) == "function" then
+        _G.ReloadUI()
+    end
+    return true
+end
+
+function KT.VisualThemes:RequestApply(themeKey)
+    if not self:IsKnownTheme(themeKey) then return false end
+    if themeKey == self:GetRenderedTheme() then return true end
+
+    local catalog = self:GetThemeCatalog()
+    local theme = catalog[themeKey]
+    StaticPopupDialogs.KT_VISUAL_THEME_CONFIRM = {
+        text = "Apply %s and reload the interface?",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function(_, data)
+            if data then KT.VisualThemes:ApplyAll(data) end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+    StaticPopup_Show("KT_VISUAL_THEME_CONFIRM", theme.name, nil, themeKey)
+    return true
+end

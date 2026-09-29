@@ -2713,6 +2713,7 @@ local function AddOptionBlock(cols, column, title, buildFn)
     else
         cols.leftUsed = cols.leftUsed + totalH + cols.gap
     end
+    return frame, content, totalH
 end
 
 local function EndOptionBlocks(cols)
@@ -5980,7 +5981,7 @@ local function BuildGeneralCore(sc, W, y)
     _, h = W:Label(sc, "Build a complete visual preset for KUI or fine tune the palette manually. These settings affect the entire addon.", -y, 11); y = y + h
     local styleCols = BeginOptionBlocks(sc, y, { gap = 14, columnGap = 14 })
 
-    AddOptionBlock(styleCols, "left", "Preset Styles", function(container)
+    local presetFrame, presetContent = AddOptionBlock(styleCols, "left", "Preset Colors", function(container)
         local by = 0
         _, h = W:Label(container, "Choose a preset to recolor the KullThranUI menu and sync the main profile accent values.", -by, 11); by = by + h
 
@@ -6046,7 +6047,38 @@ local function BuildGeneralCore(sc, W, y)
         return by
     end)
 
-    AddOptionBlock(styleCols, "right", LText("Manual Colors"), function(container)
+    AddOptionBlock(styleCols, "right", "Visual Theme", function(container)
+        local by = 0
+        _, h = W:Label(container, "Select the visual theme. Note: This sets the geometry and assets.", -by, 11); by = by + h
+        if KT.VisualThemes and KT.VisualThemes.CreateSelector then
+            h = KT.VisualThemes:CreateSelector(container, { columns = 2, compact = true, yOffset = by, width = styleCols.blockW - 20 })
+            by = by + h
+        end
+        return by
+    end)
+
+    local colorControlsEnabled = true
+    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme then
+        colorControlsEnabled = KT.VisualThemes:GetRenderedTheme() == "kui"
+    end
+    if not colorControlsEnabled and presetFrame and presetContent then
+        presetContent:SetAlpha(0.38)
+        local presetBlocker = CreateFrame("Button", nil, presetFrame)
+        presetBlocker:SetAllPoints(presetContent)
+        presetBlocker:SetFrameLevel(presetContent:GetFrameLevel() + 10)
+        presetBlocker:EnableMouse(true)
+        presetBlocker:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Color presets are available with KullThranUI Style.")
+            GameTooltip:Show()
+        end)
+        presetBlocker:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+    end
+
+y = EndOptionBlocks(styleCols) + 8
+local frame, content = CreateOptionBlock(sc, LText("Manual Colors"), 10, -y, sc:GetWidth() - 22)
         local by = 0
         KT.db.profile.skin = KT.db.profile.skin or {}
         local skin = KT.db.profile.skin
@@ -6062,8 +6094,8 @@ local function BuildGeneralCore(sc, W, y)
         end
 
 
-        _, h = W:Label(container, LText("Fine tune the smart recolor palette manually if you want a custom style."), -by, 11); by = by + h
-        _, h = W:ColorSwatch(container, LText("Accent Color"), -by,
+        _, h = W:Label(content, LText("Fine tune the smart recolor palette manually if you want a custom style."), -by, 11); by = by + h
+        _, h = W:ColorSwatch(content, LText("Accent Color"), -by,
             function() local c = KT_GetActiveAccent(skin); return c.r, c.g, c.b, 1 end,
             function(r, g, b)
                 skin.accentColor = MakeStyleColor(r, g, b, 1)
@@ -6075,33 +6107,33 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:ColorSwatch(container, LText("Window Background"), -by,
+        _, h = W:ColorSwatch(content, LText("Window Background"), -by,
             function() local c = skin.backgroundColor or STYLE_PRESETS.kui_crimson.background; return c.r, c.g, c.b, c.a end,
             function(r, g, b, a) skin.backgroundColor = MakeStyleColor(r, g, b, a); ApplyManualStyle() end,
             true
         ); by = by + h
-        _, h = W:ColorSwatch(container, LText("Main Text"), -by,
+        _, h = W:ColorSwatch(content, LText("Main Text"), -by,
             function() local c = skin.menuTextColor or STYLE_PRESETS.kui_crimson.text; return c.r, c.g, c.b, 1 end,
             function(r, g, b) skin.menuTextColor = MakeStyleColor(r, g, b, 1); ApplyManualStyle() end,
             false
         ); by = by + h
-        _, h = W:ColorSwatch(container, LText("Secondary Text"), -by,
+        _, h = W:ColorSwatch(content, LText("Secondary Text"), -by,
             function() local c = skin.menuSubtextColor or STYLE_PRESETS.kui_crimson.muted; return c.r, c.g, c.b, 1 end,
             function(r, g, b) skin.menuSubtextColor = MakeStyleColor(r, g, b, 1); ApplyManualStyle() end,
             false
         ); by = by + h
-        _, h = W:ColorSwatch(container, LText("Background Tint"), -by,
+        _, h = W:ColorSwatch(content, LText("Background Tint"), -by,
             function() local c = skin.menuBackgroundTint or STYLE_PRESETS.kui_crimson.backgroundTint; return c.r, c.g, c.b, c.a end,
             function(r, g, b, a) skin.menuBackgroundTint = MakeStyleColor(r, g, b, a); ApplyManualStyle() end,
             true
         ); by = by + h
-        _, h = W:Dropdown(container, "Unlock Mode Color", -by,
+        _, h = W:Dropdown(content, "Unlock Mode Color", -by,
             { accent = "Accent", custom = "Custom" },
             function() return skin.unlockModeColorMode or "accent" end,
             function(v) skin.unlockModeColorMode = v; ApplyManualStyle() end,
             { "accent", "custom" }
         ); by = by + h
-        _, h = W:ColorSwatch(container, "Unlock Mode Accent", -by,
+        _, h = W:ColorSwatch(content, "Unlock Mode Accent", -by,
             function()
                 local mode = skin.unlockModeColorMode or "accent"
                 local c = (mode == "accent") and (KT_GetActiveAccent(skin)) or (skin.unlockModeColor or KT_GetActiveAccent(skin))
@@ -6114,13 +6146,13 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:Dropdown(container, "Friend List Color", -by,
+        _, h = W:Dropdown(content, "Friend List Color", -by,
             { accent = "Accent", custom = "Custom" },
             function() return skin.friendListColorMode or "accent" end,
             function(v) skin.friendListColorMode = v; ApplyManualStyle() end,
             { "accent", "custom" }
         ); by = by + h
-        _, h = W:ColorSwatch(container, "Friend List Accent", -by,
+        _, h = W:ColorSwatch(content, "Friend List Accent", -by,
             function()
                 local mode = skin.friendListColorMode or "accent"
                 local c = (mode == "accent") and (KT_GetActiveAccent(skin)) or (skin.friendListColor or KT_GetActiveAccent(skin))
@@ -6133,7 +6165,7 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:Dropdown(container, "Armory Color", -by,
+        _, h = W:Dropdown(content, "Armory Color", -by,
             { accent = "Accent", custom = "Custom" },
             function() return skin.armoryColorMode or "accent" end,
             function(v)
@@ -6142,7 +6174,7 @@ local function BuildGeneralCore(sc, W, y)
             end,
             { "accent", "custom" }
         ); by = by + h
-        _, h = W:ColorSwatch(container, "Armory Accent", -by,
+        _, h = W:ColorSwatch(content, "Armory Accent", -by,
             function()
                 local mode = skin.armoryColorMode or "accent"
                 local c = (mode == "accent") and (KT_GetActiveAccent(skin)) or (skin.armoryColor or KT_GetActiveAccent(skin))
@@ -6155,7 +6187,7 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:Dropdown(container, "Objective Tracker Color", -by,
+        _, h = W:Dropdown(content, "Objective Tracker Color", -by,
             { accent = "Accent", custom = "Custom" },
             function() return KT.db.profile.objectiveTracker and KT.db.profile.objectiveTracker.colorMode or "accent" end,
             function(v)
@@ -6164,7 +6196,7 @@ local function BuildGeneralCore(sc, W, y)
             end,
             { "accent", "custom" }
         ); by = by + h
-        _, h = W:ColorSwatch(container, "Objective Tracker Accent", -by,
+        _, h = W:ColorSwatch(content, "Objective Tracker Accent", -by,
             function()
                 local obj = KT.db.profile.objectiveTracker
                 local mode = obj and obj.colorMode or "accent"
@@ -6181,13 +6213,13 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:Dropdown(container, "Bags Color", -by,
+        _, h = W:Dropdown(content, "Bags Color", -by,
             { accent = "Accent", custom = "Custom" },
             function() return skin.bagsColorMode or "accent" end,
             function(v) skin.bagsColorMode = v; ApplyManualStyle() end,
             { "accent", "custom" }
         ); by = by + h
-        _, h = W:ColorSwatch(container, "Bags Accent", -by,
+        _, h = W:ColorSwatch(content, "Bags Accent", -by,
             function()
                 local mode = skin.bagsColorMode or "accent"
                 local c = (mode == "accent") and (KT_GetActiveAccent(skin)) or (skin.bagsColor or KT_GetActiveAccent(skin))
@@ -6200,17 +6232,43 @@ local function BuildGeneralCore(sc, W, y)
             end,
             false
         ); by = by + h
-        _, h = W:Dropdown(container, "Menu Icons", -by,
+        _, h = W:Dropdown(content, "Menu Icons", -by,
             { accent = "Accent", white = "White" },
             function() return skin.menuIconColorMode or "accent" end,
             function(v) skin.menuIconColorMode = v; ApplyManualStyle() end,
             { "accent", "white" }
         ); by = by + h
-        _, h = W:Label(container, "If some live module keeps the previous palette, use Reload UI after saving the style.", -by, 10); by = by + h
-        return by
-    end)
+        _, h = W:Label(content, "If some live module keeps the previous palette, use Reload UI after saving the style.", -by, 10); by = by + h
 
-    y = EndOptionBlocks(styleCols) + 8
+
+
+
+    local enabled = true
+    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme then
+        enabled = (KT.VisualThemes:GetRenderedTheme() == "kui")
+    end
+
+    if not enabled then
+        local blocker = CreateFrame("Button", nil, frame)
+        blocker:SetAllPoints(content)
+        blocker:SetFrameLevel(content:GetFrameLevel() + 10)
+        blocker:EnableMouse(true)
+        blocker:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Color presets and manual palette controls are available with KullThranUI Style.")
+            GameTooltip:Show()
+        end)
+        blocker:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+        end)
+        content:SetAlpha(0.38)
+    else
+        content:SetAlpha(1.0)
+    end
+
+    y = y + FinalizeOptionBlock(frame, content, by) + 8
+
+
 
     return y
 end
