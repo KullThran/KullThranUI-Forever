@@ -12,15 +12,34 @@ KT.VisualThemes = KT.VisualThemes or {}
 -- frame state directly, independent of whether that function ever ran, so
 -- it can't be silenced the same way. Delete this whole block (down to
 -- SlashCmdList) once the issue is diagnosed -- not meant to ship on.
+local function KTDebugDumpPoints(region, label)
+    if type(region) ~= "table" or type(region.GetNumPoints) ~= "function" then
+        return label .. ": (no GetNumPoints)"
+    end
+    local n = region:GetNumPoints()
+    if n == 0 then return label .. ": 0 points" end
+    local parts = {}
+    for i = 1, n do
+        local point, relTo, relPoint, x, y = region:GetPoint(i)
+        parts[#parts + 1] = string.format("%s->%s(%s) %s,%s",
+            tostring(point), tostring(relTo and (relTo.GetName and relTo:GetName() or relTo)),
+            tostring(relPoint), tostring(x), tostring(y))
+    end
+    return label .. ": " .. table.concat(parts, " | ")
+end
+
 local function KTDebugDumpFrame(frame, label)
     if type(frame) ~= "table" then
         return label .. ": frame not found (wrong global name?)\n"
     end
     local health = frame.Health
+    local buffs = frame.Buffs
+    local nameFS = frame._ktStockNameText or frame.LeftText
     return string.format(
         "%s: LeftText=%s RightText=%s CenterText=%s Buffs=%s\n" ..
         "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
-        "  Health=%s (%sx%s) frame=%sx%s\n",
+        "  Health=%s (%sx%s) frame=%sx%s\n" ..
+        "  %s\n  %s\n  %s\n",
         label,
         tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
         tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
@@ -30,7 +49,10 @@ local function KTDebugDumpFrame(frame, label)
         tostring(health and health.GetWidth and health:GetWidth()),
         tostring(health and health.GetHeight and health:GetHeight()),
         tostring(frame.GetWidth and frame:GetWidth()),
-        tostring(frame.GetHeight and frame:GetHeight())
+        tostring(frame.GetHeight and frame:GetHeight()),
+        KTDebugDumpPoints(health, "HealthPoints"),
+        KTDebugDumpPoints(buffs, "BuffsPoints"),
+        KTDebugDumpPoints(nameFS, "NamePoints")
     )
 end
 
