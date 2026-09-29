@@ -226,6 +226,21 @@ local function FitTextToWidth(fs, maxWidth)
     if type(fs) ~= "table" or type(fs.GetStringWidth) ~= "function" then return end
     if type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
     if not maxWidth or maxWidth <= 0 then return end
+    local path, currentSize, flags = fs:GetFont()
+    if not path or not currentSize then return end
+    -- Cache the ORIGINAL font size once (a separate field from
+    -- ScaleStockBarText's own cache, so the two never fight over the same
+    -- slot) and always re-measure from THAT size, never from whatever size
+    -- the last call left behind -- otherwise repeated calls within the same
+    -- refresh (confirmed live via KUIUnitFrames.lua's identical bug: a
+    -- target change fires this more than once) would shrink an
+    -- already-shrunk font further each time, never recovering.
+    local base = fs._ktForeverFitBaseFontSize
+    if not base then
+        base = currentSize
+        fs._ktForeverFitBaseFontSize = base
+    end
+    fs:SetFont(path, base, flags)
     local width = fs:GetStringWidth()
     -- A FontString showing text derived from a secure/protected context can
     -- return a tainted "secret" number here -- confirmed live, an identical
@@ -233,9 +248,7 @@ local function FitTextToWidth(fs, maxWidth)
     -- to compare ... a secret number value" and broke the addon on enable.
     if type(issecretvalue) == "function" and issecretvalue(width) then return end
     if not width or width <= 0 or width <= maxWidth then return end
-    local path, size, flags = fs:GetFont()
-    if not path or not size then return end
-    fs:SetFont(path, math.max(6, size * (maxWidth / width)), flags)
+    fs:SetFont(path, math.max(6, base * (maxWidth / width)), flags)
 end
 
 local function ResolveStockScale(frame, geom)
