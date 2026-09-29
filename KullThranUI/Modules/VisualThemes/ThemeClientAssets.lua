@@ -226,24 +226,36 @@ end
     and size -- the ratio between `unitRegion`'s size and the box's known
     portrait sub-size IS the scale factor, applied to both the box's overall
     size and its anchor offset.
-    OUTSTANDING, explicitly deferred (see ESTUDIO entry 37): this only
-    places the frame-art box correctly. It does not yet reposition the
-    actual health/power StatusBars to sit inside the box's own real
-    bar-track rectangles, nor draw the bar-track atlas pieces themselves --
-    that touches the same deeply-coupled shared layout code flagged as
-    risky back in entry 33, and needs its own verified step once this
-    box placement is confirmed to look right in-game.
+    Entry 38 adds the real health/power bar-track rectangles from the same
+    real geometry table and re-anchors the frame's ACTUAL Health/Power
+    StatusBars to sit inside them (same uniform scale as the box itself),
+    after KUIUnitFrames.lua's own normal layout has already positioned them
+    for this render pass -- never touching that shared computation itself,
+    only re-anchoring its result for forever+player/target. Safe to do
+    unconditionally on every apply because a theme switch in this addon
+    always goes through a full ReloadUI (confirmed elsewhere in this
+    codebase), so there is never a stale Forever-anchored bar left behind
+    after switching away -- the next render pass recomputes it fresh before
+    this function would run again. Bar-track atlas backgrounds themselves
+    (the actual `-Bar-Health`/`-Bar-Mana` art) are still not drawn -- the
+    bars are repositioned/resized onto the real rectangle, but keep KUI's
+    own fill texture/mask, matching how Classic's health bar already keeps
+    the user's own texture choice instead of being overridden.
 ]]
 local FOREVER_FRAME_GEOMETRY = {
     player = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Player-PortraitOn",
         portrait = { point = "TOPLEFT", x = 24, y = -19, size = 60 },
+        health = { x = 85, y = 40, w = 124, h = 20 },
+        power = { x = 85, y = 61, w = 124, h = 10 },
     },
     target = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Target-PortraitOn",
         portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
+        health = { x = 23, y = 40, w = 126, h = 20 },
+        power = { x = 23, y = 61, w = 134, h = 10 },
     },
 }
 
@@ -293,6 +305,24 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     art:SetPoint(geom.portrait.point, unitRegion, geom.portrait.point,
         -(geom.portrait.x * scale), -(geom.portrait.y * scale))
     art:Show()
+
+    -- Re-anchor the REAL health/power bars onto the box's own real
+    -- bar-track rectangle (same scale as the box itself), overriding the
+    -- position KUIUnitFrames.lua's normal layout just gave them for this
+    -- render pass. Only the anchor/size changes -- fill texture, color,
+    -- and mask stay whatever the user (or the theme's own seed) chose.
+    local health = frame.Health
+    if geom.health and type(health) == "table" and health.ClearAllPoints then
+        health:ClearAllPoints()
+        health:SetPoint("TOPLEFT", art, "TOPLEFT", geom.health.x * scale, -(geom.health.y * scale))
+        health:SetSize(geom.health.w * scale, geom.health.h * scale)
+    end
+    local power = frame.Power
+    if geom.power and type(power) == "table" and power.ClearAllPoints then
+        power:ClearAllPoints()
+        power:SetPoint("TOPLEFT", art, "TOPLEFT", geom.power.x * scale, -(geom.power.y * scale))
+        power:SetSize(geom.power.w * scale, geom.power.h * scale)
+    end
 end
 
 --- Hides (does not destroy) the Forever frame-art box created by
