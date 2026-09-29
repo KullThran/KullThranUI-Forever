@@ -86,6 +86,33 @@ local function EnsureArtHost(frame, cacheKey)
     return host
 end
 
+--- Sizes and anchors `art` as a SQUARE centered on `unitRegion`, instead of
+--- stretching it to whatever rect `unitRegion` happens to have. A portrait
+--- ring/frame piece reads as distorted the moment its container isn't
+--- exactly square, and `unitRegion` (a real unit frame's portrait container)
+--- is not guaranteed to be -- forcing a square derived from its own height
+--- (falling back to width if height isn't available) and centering on it is
+--- robust regardless of the container's actual shape or any layout timing
+--- around when this is first called.
+--- @param art Texture the texture to size/anchor
+--- @param unitRegion Frame|Region the region to center the square art on
+local function SeatSquareArt(art, unitRegion)
+    art:ClearAllPoints()
+    local size = unitRegion.GetHeight and unitRegion:GetHeight()
+    if not size or size <= 0 then
+        size = (unitRegion.GetWidth and unitRegion:GetWidth()) or 0
+    end
+    if size and size > 0 then
+        art:SetSize(size, size)
+        art:SetPoint("CENTER", unitRegion, "CENTER", 0, 0)
+    else
+        -- unitRegion has no usable size yet (e.g. not laid out this pass) --
+        -- fall back to the previous stretch-to-fill behavior rather than
+        -- leaving art with a stale or zero size.
+        art:SetAllPoints(unitRegion)
+    end
+end
+
 --- Applies the Classic theme's real per-client UnitFrame art: creates (once,
 --- cached on `frame`) a portrait/frame ring texture anchored to `unitRegion`
 --- (the real portrait region -- pass `frame.Portrait.backdrop` when it
@@ -113,8 +140,7 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion)
         frame._ktClassicPortraitArt = art
     end
 
-    art:ClearAllPoints()
-    art:SetAllPoints(unitRegion)
+    SeatSquareArt(art, unitRegion)
     art:Show()
 end
 
@@ -185,8 +211,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     end
     art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
 
-    art:ClearAllPoints()
-    art:SetAllPoints(unitRegion)
+    SeatSquareArt(art, unitRegion)
     art:Show()
 end
 
