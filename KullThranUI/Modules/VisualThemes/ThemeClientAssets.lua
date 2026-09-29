@@ -41,7 +41,9 @@ local function KTDebugDumpFrame(frame, label)
         "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
         "  Health=%s (%sx%s) frame=%sx%s Art=%sx%s\n" ..
         "  %s\n  %s\n  %s\n  %s\n" ..
-        "  HealthCalc=%s\n  ArtCalc=%s\n  NameCalc=%s\n  BuffsCalc=%s\n",
+        "  HealthCalc=%s\n  ArtCalc=%s\n  NameCalc=%s\n  BuffsCalc=%s\n" ..
+        "  RightText: shown=%s size=%sx%s text=%s\n  %s\n" ..
+        "  StatusOverlay: exists=%s shown=%s\n  %s\n",
         label,
         tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
         tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
@@ -61,7 +63,19 @@ local function KTDebugDumpFrame(frame, label)
         tostring(frame._ktDebugHealthCalc),
         tostring(frame._ktDebugArtCalc),
         tostring(frame._ktDebugNameCalc),
-        tostring(frame._ktDebugBuffsCalc)
+        tostring(frame._ktDebugBuffsCalc),
+        -- "Health text moving" was assumed to mean frame.Health itself, which
+        -- /ktforevertab already confirmed correct -- but frame.RightText (the
+        -- value) and frame._kuiStatusOverlay (AFK/Ghost/Dead) were NEVER
+        -- actually checked. Adding both now to close that blind spot.
+        tostring(frame.RightText and frame.RightText.IsShown and frame.RightText:IsShown()),
+        tostring(frame.RightText and frame.RightText.GetWidth and frame.RightText:GetWidth()),
+        tostring(frame.RightText and frame.RightText.GetHeight and frame.RightText:GetHeight()),
+        tostring(frame.RightText and frame.RightText.GetText and frame.RightText:GetText()),
+        KTDebugDumpPoints(frame.RightText, "RightTextPoints"),
+        tostring(frame._kuiStatusOverlay ~= nil),
+        tostring(frame._kuiStatusOverlay and frame._kuiStatusOverlay.IsShown and frame._kuiStatusOverlay:IsShown()),
+        KTDebugDumpPoints(frame._kuiStatusOverlay, "StatusOverlayPoints")
     )
 end
 
