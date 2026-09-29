@@ -6711,7 +6711,7 @@ function Mod:UpdateFrameHealthEvent(frame)
 
     local db = self:GetModeDB(frame.mode or "party")
     local hpPercent = UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
-    -- State-stamped paint (EllesmereUI pattern): an event that arrives without a
+    -- State-stamped paint: an event that arrives without a
     -- real value change (idle aura/range refresh, duplicate fires) must not write
     -- the bar. Avoids the sustained idle PartyFrames cost in large raids.
     local hpSecret = IsSecretValue(hpPercent)

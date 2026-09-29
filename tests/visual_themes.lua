@@ -66,8 +66,8 @@ local KT = {
                 },
             },
             partyFrames = {
-                party = { healthTexture = "User Texture", absorbBarTexture = "User Texture" },
-                raid = { healthTexture = "User Texture", absorbBarTexture = "User Texture" },
+                party = { healthTexture = "User Texture", absorbBarTexture = "User Texture", absorbBarColor = { r = 0.4, g = 0.5, b = 0.6 } },
+                raid = { healthTexture = "User Texture", absorbBarTexture = "User Texture", absorbBarColor = { r = 0.4, g = 0.5, b = 0.6 } },
             },
             skin = {
                 stylePreset = "broken_value",
@@ -149,6 +149,8 @@ expect(_G.KullThranUINameplatesDB_Forever.borderColor.r, 0.28, "classic nameplat
 expect(_G.KullThranUINameplatesDB_Forever.targetGlowStyle, "vibrant", "classic nameplate target glow style")
 expect(_G.KullThranUINameplatesDB_Forever.healthBarTexture, "Blizzard", "classic nameplate health texture")
 expect(KT.db.profile.partyFrames.party.healthTexture, "Blizzard", "classic party texture")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, 0.86, "classic party absorb color r")
+expect(KT.db.profile.partyFrames.raid.absorbBarColor.r, 0.86, "classic raid absorb color r")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "palette unchanged outside KUI")
 expect(KT.db.profile.unitFrames.player.borderColor.r, 0.92, "classic unit border color")
 expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art kit")
@@ -163,6 +165,7 @@ expect(_G.KullThranUINameplatesDB_Forever.borderColor.r, 0.03, "retail nameplate
 expect(_G.KullThranUINameplatesDB_Forever.targetGlowStyle, "none", "retail nameplate target glow style")
 expect(_G.KullThranUINameplatesDB_Forever.healthBarTexture, "Blizzard Raid Bar", "retail nameplate health texture")
 expect(KT.db.profile.unitFrames.player.borderColor.r, 0.20, "retail unit border color")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, 0.12, "retail party absorb color r")
 expect(KT.db.profile.unitFrames.frameArtKit, "default", "retail unit frame art kit")
 expect(KT.db.profile.castbar.colorMode, "CUSTOM", "retail cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.12, "retail cast bar color")
@@ -192,6 +195,9 @@ expect(_G.KullThranUINameplatesDB_Forever.targetGlowStyle, "kullthranui", "resto
 expect(_G.KullThranUINameplatesDB_Forever.healthBarTexture, "User Texture", "restore nameplate health texture")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "restore palette")
 expect(KT.db.profile.unitFrames.player.classThemeStyle, nil, "kui no longer seeds dead classThemeStyle")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, 0.4, "restore custom party absorb color r")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.g, 0.5, "restore custom party absorb color g")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.b, 0.6, "restore custom party absorb color b")
 expect(KT.db.profile.unitFrames.player.borderColor.r, 0.55, "restore custom unit border color r")
 expect(KT.db.profile.unitFrames.player.borderColor.g, 0.33, "restore custom unit border color g")
 expect(KT.db.profile.unitFrames.player.borderColor.b, 0.77, "restore custom unit border color b")
@@ -201,6 +207,7 @@ KT.db.profile.partyFrames = nil
 KT.db.profile.cooldownManager = nil
 expect(KT.VisualThemes:ApplyAll("forever"), true, "apply with disabled modules")
 expect(KT.db.profile.partyFrames.party.healthTexture, "Melli Dark", "disabled party theme seed")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, 0.82, "disabled party absorb color seed")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "circle", "disabled CDM theme seed")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "kullthran", "forever nameplate border")
 expect(_G.KullThranUINameplatesDB_Forever.borderColor.r, 0.82, "forever nameplate border color r")
@@ -208,6 +215,7 @@ expect(_G.KullThranUINameplatesDB_Forever.targetGlowStyle, "kullthranui", "forev
 expect(_G.KullThranUINameplatesDB_Forever.healthBarTexture, "Melli Dark", "forever nameplate health texture")
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore disabled modules")
 expect(KT.db.profile.partyFrames.party.healthTexture, nil, "disabled party KUI restore")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, nil, "disabled party absorb color KUI restore")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "none", "disabled CDM KUI restore")
 expect(reloads, 5, "disabled-module reload count")
 
