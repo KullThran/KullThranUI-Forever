@@ -3779,12 +3779,23 @@ local function ApplyClassicFrameArt(frame, unit)
         end
     end
 
+    local usingForeverRealArt = false
     if VT and VT.ApplyForeverUnitFrameArt and VT.ClearForeverUnitFrameArt then
         if renderedTheme == "forever" then
-            VT:ApplyForeverUnitFrameArt(frame, portraitRegion, unit)
+            usingForeverRealArt = VT:ApplyForeverUnitFrameArt(frame, portraitRegion, unit) and true or false
         else
             VT:ClearForeverUnitFrameArt(frame)
         end
+    end
+
+    -- The real Forever frame-art box already provides its own visual
+    -- framing around the portrait/bars, so KUI's own generic border
+    -- (ApplyBorderAppearance, above) becomes redundant clutter around it --
+    -- confirmed via a live screenshot showing both at once. Only ever
+    -- hidden here, never shown: a user-configured borderSize of 0 must stay
+    -- hidden regardless of theme.
+    if usingForeverRealArt and frame.unifiedBorder then
+        frame.unifiedBorder:Hide()
     end
 end
 

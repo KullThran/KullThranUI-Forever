@@ -270,6 +270,7 @@ local FOREVER_FRAME_GEOMETRY = {
 --- @param frame Frame the unit frame's outer frame (owns the cache)
 --- @param unitRegion Frame|Region the real portrait region to align the box's internal portrait to
 --- @param unit string|nil the unit key ("player"/"target"); any other value clears
+--- @return boolean|nil true when the real box art was actually drawn (the caller can use this to hide its own generic border, now redundant); nil otherwise
 function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
@@ -340,6 +341,8 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
             power:SetSize(geom.power.w * scale, geom.power.h * scale)
         end
     end
+
+    return true
 end
 
 --- Hides (does not destroy) the Forever frame-art box created by
