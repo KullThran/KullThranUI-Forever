@@ -96,6 +96,37 @@ local function KTDebugDumpFrame(frame, label)
 end
 
 
+-- RightText's own GetPoint()/GetWidth() are unreadable (confirmed live:
+-- entirely secret-tainted, presumably because its :SetText() content is
+-- health-derived and WoW blanket-taints the whole widget once that happens).
+-- Static reading can't find who else repositions it either -- the only two
+-- call sites found (ApplyStockUFHealthTextGeometry, and the generic
+-- BuildTextPositioner + corrective ApplyClassicFrameArt pattern in
+-- ReloadFrames) both look correctly ordered by inspection. hooksecurefunc
+-- sidesteps the taint: its callback gets the CALLER's own literal arguments,
+-- not a re-read of the (tainted) widget state, so this can still show which
+-- code repositions RightText and in what order, even though GetPoint cannot.
+local ktHookedRightText = {}
+local function KTHookRightTextCalls(frame, label)
+    if type(frame) ~= "table" or type(frame.RightText) ~= "table" then return end
+    local rt = frame.RightText
+    if ktHookedRightText[rt] then return end
+    ktHookedRightText[rt] = true
+    if type(hooksecurefunc) ~= "function" then return end
+    hooksecurefunc(rt, "SetPoint", function(_, point, relTo, relPoint, x, y)
+        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
+        print(string.format("[%s RightText:SetPoint] %s->%s(%s) %s,%s",
+            label, KTDebugSafeStr(point), KTDebugSafeStr(relToName),
+            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y)))
+    end)
+    hooksecurefunc(rt, "ClearAllPoints", function()
+        print(string.format("[%s RightText:ClearAllPoints]", label))
+    end)
+    hooksecurefunc(rt, "SetWidth", function(_, width)
+        print(string.format("[%s RightText:SetWidth] %s", label, KTDebugSafeStr(width)))
+    end)
+end
+
 -- NOT /ktdebug: KullThranUI already registers its own /ktdebug ("compatibility
 -- scan") elsewhere in the addon. Same command string means SlashCmdList only
 -- keeps one handler -- confirmed live: every previous /ktdebug attempt this
@@ -107,6 +138,8 @@ SlashCmdList["KTFOREVERDEBUG"] = function()
     -- window, so it lands in KullThranUI_Chat's own history and can be
     -- grabbed with its existing "Copy Chat" dialog, which the user already
     -- has and prefers over a bespoke EditBox.
+    KTHookRightTextCalls(_G.KullThranUI_UF_Player, "Player")
+    KTHookRightTextCalls(_G.KullThranUI_UF_Target, "Target")
     local text = KTDebugDumpFrame(_G.KullThranUI_UF_Player, "Player")
         .. KTDebugDumpFrame(_G.KullThranUI_UF_Target, "Target")
     for line in text:gmatch("[^\n]+") do
