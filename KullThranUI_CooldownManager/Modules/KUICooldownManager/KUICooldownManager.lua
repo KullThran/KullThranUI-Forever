@@ -8006,6 +8006,35 @@ end
 -------------------------------------------------------------------------------
 --  VisualThemes: optional classic 8-piece frame art around a CDM icon
 -------------------------------------------------------------------------------
+-- Ring size (in on-screen pixels) of ThemeBorderKit.lua's shared 8-piece
+-- classic border at scale = 1. That file does not expose BASE_RING_SIZE as
+-- a public constant (it is a private local there), so the value is mirrored
+-- here deliberately; keep this in sync if ThemeBorderKit.lua's own value
+-- ever changes.
+local CDM_CLASSIC_BORDER_BASE_RING_SIZE = 16
+
+-- CDM icons sit far closer together (default spacing = 2px, icons as small
+-- as 28px) than the other 3 modules this shared border kit is used on
+-- (frames of 100px+), so reusing scale = 1 (a 16px outward ring on every
+-- side) overlaps the neighboring icon by roughly 2*16 - spacing pixels --
+-- not a maybe, that is the actual arithmetic at the module's own defaults.
+-- Scale the ring down per-bar so its outward reach stays within half of
+-- that bar's own on-screen icon spacing, closing the gap instead of
+-- spilling past it into the next icon.
+local function ComputeClassicBorderScale(barData)
+    local barScale = (barData and barData.barScale) or 1.0
+    if not barScale or barScale < 0.1 then barScale = 1.0 end
+    local spacing = ((barData and barData.spacing) or 2) * barScale
+    local scale = (spacing / 2) / CDM_CLASSIC_BORDER_BASE_RING_SIZE
+    if scale > 1 then scale = 1 end
+    -- Keep a hairline ring instead of 0 (or less, for a bar configured with
+    -- negative/overlapping spacing): ThemeBorderKit.lua's own SeatClassicBorder
+    -- treats scale <= 0 as "unset" and resets it to a full-size scale = 1 ring,
+    -- which would reintroduce the exact overlap this function exists to avoid.
+    if scale < 0.02 then scale = 0.02 end
+    return scale
+end
+
 -- Applies or removes the "classic" theme's shared border kit around a single
 -- CDM icon. Purely decorative: anchored just outside the icon itself (same
 -- pattern as CastBar/ResourceBars/UnitFrames -- see ESTUDIO_SELECTOR_ESTILOS_
@@ -8022,7 +8051,7 @@ local function ApplyClassicFrameArt(icon, barData)
     if wantClassic then
         icon.classicBorder = icon.classicBorder or VT:CreateClassicBorder(icon)
         if icon.classicBorder then
-            VT:SeatClassicBorder(icon.classicBorder, icon, 1)
+            VT:SeatClassicBorder(icon.classicBorder, icon, ComputeClassicBorderScale(barData))
             VT:ShowClassicBorder(icon.classicBorder, true)
         end
     elseif icon.classicBorder then
