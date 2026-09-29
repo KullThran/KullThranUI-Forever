@@ -73,6 +73,7 @@ end
 
 _G.CreateFrame = function(_, _, parent) return NewRegion(parent) end
 _G.UIParent = NewRegion(nil)
+_G.SlashCmdList = {}
 _G.C_Texture = {
     GetAtlasInfo = function(atlas)
         if atlas:find("%-Mask$") then return { width = 132, height = 32 } end

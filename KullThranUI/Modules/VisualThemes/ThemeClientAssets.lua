@@ -2,34 +2,86 @@ local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
 
--- TEMPORARY debug switch: shows a bright on-screen text marker every time
--- ApplyForeverUnitFrameArt runs, reporting whether the name/buffs objects it
--- expects actually exist. A chat print was tried first and never appeared
--- at all (not even a Lua error) -- an on-screen marker sidesteps whatever
--- chat-related quirk this client has, and shows up directly in a
--- screenshot. Set back to false (or delete this block, ShowForeverDebugMarker,
--- and its call sites) once the name-tab/buffs issue is diagnosed -- this is
--- not meant to ship on.
-local KT_DEBUG_FOREVER_TAB = true
-local _ktDebugMarkers = {}
-local function ShowForeverDebugMarker(unit, msg)
-    local key = tostring(unit)
-    local fs = _ktDebugMarkers[key]
-    if not fs then
-        local host = CreateFrame("Frame", nil, UIParent)
-        host:SetFrameStrata("TOOLTIP")
-        host:SetSize(600, 20)
-        local slot = 0
-        for _ in pairs(_ktDebugMarkers) do slot = slot + 1 end
-        host:SetPoint("TOP", UIParent, "TOP", 0, -40 - (slot * 22))
-        fs = host:CreateFontString(nil, "OVERLAY")
-        fs:SetAllPoints(host)
-        fs:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
-        fs:SetTextColor(1, 1, 0, 1)
-        _ktDebugMarkers[key] = fs
+-- TEMPORARY debug tool: /ktdebug opens a floating, draggable window with
+-- selectable text dumping the CURRENT live state of the player/target
+-- frames (not hooked into any apply function -- a chat print and an
+-- on-screen marker triggered from inside ApplyForeverUnitFrameArt were both
+-- tried first and neither ever appeared, which is itself a real finding:
+-- either that code path isn't running at all on this client, or something
+-- about this client swallows output from inside it). This reads global
+-- frame state directly, independent of whether that function ever ran, so
+-- it can't be silenced the same way. Delete this whole block (down to
+-- SlashCmdList) once the issue is diagnosed -- not meant to ship on.
+local function KTDebugDumpFrame(frame, label)
+    if type(frame) ~= "table" then
+        return label .. ": frame not found (wrong global name?)\n"
     end
-    fs:SetText("[KT DEBUG " .. key .. "] " .. msg)
-    fs:Show()
+    local health = frame.Health
+    return string.format(
+        "%s: LeftText=%s RightText=%s CenterText=%s Buffs=%s\n" ..
+        "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
+        "  Health=%s (%sx%s) frame=%sx%s\n",
+        label,
+        tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
+        tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
+        tostring(frame._ktStockNameText), tostring(frame._ktForeverLayoutActive),
+        tostring(frame._ktClassicLayoutActive),
+        tostring(health ~= nil),
+        tostring(health and health.GetWidth and health:GetWidth()),
+        tostring(health and health.GetHeight and health:GetHeight()),
+        tostring(frame.GetWidth and frame:GetWidth()),
+        tostring(frame.GetHeight and frame:GetHeight())
+    )
+end
+
+local function KTShowDebugWindow(text)
+    local f = _G.KT_ForeverDebugWindow
+    if not f then
+        f = CreateFrame("Frame", "KT_ForeverDebugWindow", UIParent)
+        f:SetSize(520, 320)
+        f:SetPoint("CENTER")
+        f:SetFrameStrata("DIALOG")
+        f:SetMovable(true)
+        f:EnableMouse(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.9)
+
+        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOPLEFT", 10, -8)
+        title:SetText("KT Forever Debug -- select all, copy, paste back")
+
+        local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        if closeBtn.SetPoint then
+            closeBtn:SetPoint("TOPRIGHT", 2, 2)
+        end
+
+        local edit = CreateFrame("EditBox", nil, f)
+        edit:SetMultiLine(true)
+        edit:SetSize(490, 270)
+        edit:SetPoint("TOPLEFT", 10, -30)
+        edit:SetFontObject(GameFontNormal)
+        edit:SetAutoFocus(true)
+        edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        f._edit = edit
+
+        _G.KT_ForeverDebugWindow = f
+    end
+    f._edit:SetText(text)
+    f._edit:HighlightText()
+    f._edit:SetFocus()
+    f:Show()
+end
+
+SLASH_KTFOREVERDEBUG1 = "/ktdebug"
+SlashCmdList["KTFOREVERDEBUG"] = function()
+    local text = KTDebugDumpFrame(_G.KullThranUI_UF_Player, "Player")
+        .. KTDebugDumpFrame(_G.KullThranUI_UF_Target, "Target")
+    KTShowDebugWindow(text)
 end
 
 --[[
@@ -579,16 +631,6 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- frame.LeftText, KUI's own default assignment, when that isn't set
     -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
     local nameText = frame._ktStockNameText or frame.LeftText
-    if KT_DEBUG_FOREVER_TAB then
-        ShowForeverDebugMarker(unit, string.format(
-            "u=%s name=%s(%s) Left=%s Stock=%s Buffs=%s scale=%.2f",
-            tostring(unit),
-            tostring(nameText ~= nil), type(nameText),
-            tostring(frame.LeftText ~= nil),
-            tostring(frame._ktStockNameText ~= nil),
-            tostring(frame.Buffs ~= nil),
-            scale))
-    end
     if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
         local point = geom.name.point or "TOPLEFT"
         nameText:ClearAllPoints()
