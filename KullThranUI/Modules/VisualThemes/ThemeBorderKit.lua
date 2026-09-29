@@ -170,25 +170,32 @@ function KT.VisualThemes:SeatClassicBorder(border, rect, scale)
     bottomRight:SetSize(ringSize, ringSize)
     bottomRight:SetPoint("TOPLEFT", rect, "BOTTOMRIGHT", 0, 0)
 
+    -- Edge pieces span the FULL length of their side, right up to the rect's
+    -- corner points -- not inset by ringSize -- so they abut the corner
+    -- pieces exactly with no gap and no overlap. (The corner pieces above are
+    -- already sized ringSize x ringSize and anchored flush with these same
+    -- corner points, extending outward from them; anchoring the edges to the
+    -- unshifted corner points, rather than inset by ringSize, is what closes
+    -- the gap a previous version of this function left at all 4 corners.)
     top:ClearAllPoints()
     top:SetHeight(ringSize)
-    top:SetPoint("BOTTOMLEFT", rect, "TOPLEFT", ringSize, 0)
-    top:SetPoint("BOTTOMRIGHT", rect, "TOPRIGHT", -ringSize, 0)
+    top:SetPoint("BOTTOMLEFT", rect, "TOPLEFT", 0, 0)
+    top:SetPoint("BOTTOMRIGHT", rect, "TOPRIGHT", 0, 0)
 
     bottom:ClearAllPoints()
     bottom:SetHeight(ringSize)
-    bottom:SetPoint("TOPLEFT", rect, "BOTTOMLEFT", ringSize, 0)
-    bottom:SetPoint("TOPRIGHT", rect, "BOTTOMRIGHT", -ringSize, 0)
+    bottom:SetPoint("TOPLEFT", rect, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("TOPRIGHT", rect, "BOTTOMRIGHT", 0, 0)
 
     left:ClearAllPoints()
     left:SetWidth(ringSize)
-    left:SetPoint("TOPRIGHT", rect, "TOPLEFT", 0, -ringSize)
-    left:SetPoint("BOTTOMRIGHT", rect, "BOTTOMLEFT", 0, ringSize)
+    left:SetPoint("TOPRIGHT", rect, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMRIGHT", rect, "BOTTOMLEFT", 0, 0)
 
     right:ClearAllPoints()
     right:SetWidth(ringSize)
-    right:SetPoint("TOPLEFT", rect, "TOPRIGHT", 0, -ringSize)
-    right:SetPoint("BOTTOMLEFT", rect, "BOTTOMRIGHT", 0, ringSize)
+    right:SetPoint("TOPLEFT", rect, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMLEFT", rect, "BOTTOMRIGHT", 0, 0)
 
     border._ktSeatRect = rect
     border._ktSeatScale = scale
