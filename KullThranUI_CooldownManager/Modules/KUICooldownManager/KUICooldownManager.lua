@@ -2526,6 +2526,18 @@ local function RegisterCDMUnlockElements()
                         y = yOff or 0,
                     }
                     barData.anchorTo = "none"
+                    frame._kuiUnlockManualPosition = nil
+                end,
+                applyPendingPosition = function(_, pos)
+                    frame._kuiUnlockManualPosition = true
+                    frame:ClearAllPoints()
+                    frame:SetPoint(
+                        pos.point or "TOPLEFT",
+                        pos.relativeTo or UIParent,
+                        pos.relativePoint or pos.point or "TOPLEFT",
+                        pos.x or 0,
+                        pos.y or 0
+                    )
                 end,
                 applyPosition = function()
                     if BuildAllCDMBars then
@@ -2940,11 +2952,11 @@ local DEFAULTS = {
                     activeAnimR = 1.0,
                     activeAnimG = 0.85,
                     activeAnimB = 0.0,
-                    -- Buffs: anclado centrado encima de la cast bar
+                    -- Buffs: justo encima de la castbar de KullThranUI.
                     anchorTo = "castbar",
                     anchorPosition = "top",
                     anchorOffsetX = 0,
-                    anchorOffsetY = 15,
+                    anchorOffsetY = 4,
                     growCentered = true,
                     barVisibility = "always",
                     housingHideEnabled = true,
@@ -7174,6 +7186,36 @@ local function InstallBlizzardCDMSuppressionHooks(frame)
     end
 end
 
+-- Blizzard can leave an edit-mode/demo item directly under the native viewer
+-- without exposing it through the active pool mirror. KUI cannot reclaim that
+-- item, so it keeps Blizzard's original point (usually the top edge of the
+-- screen). Park only unclaimed item children; claimed native frames must
+-- remain visible because their parent is still Blizzard's viewer shell.
+local function SuppressUnclaimedBlizzardCDMChildren(viewer, barKey)
+    if not viewer or not viewer.GetChildren then return end
+
+    local barData = barDataByKey[barKey]
+    local children = { viewer:GetChildren() }
+    for _, child in ipairs(children) do
+        if child and child ~= viewer.Selection then
+            local isItemFrame = child.Icon or child.Cooldown
+                or child.cooldownID or child.cooldownInfo
+            if isItemFrame then
+                local fd = ns._nativeCDMFrameData[child]
+                local claimed = fd and fd.barKey == barKey and not fd.suppressedByKUI
+                if not claimed then
+                    if barData and ns.EnsureNativeCDMFrame and ns.ReleaseNativeCDMFrame then
+                        ns.EnsureNativeCDMFrame(child, barKey, barData)
+                        ns.ReleaseNativeCDMFrame(child)
+                    else
+                        child:SetAlpha(0)
+                    end
+                end
+            end
+        end
+    end
+end
+
 function ns.ParkSecondaryCDMViewer(frame)
     if not frame then return end
     frame:SetAlpha(0)
@@ -7249,10 +7291,11 @@ HideBlizzardCDM = function()
     -- The giant edit-mode square is the root Blizzard cooldown-viewer shell,
     -- not the KUI bar. Force every native CDM root frame off-screen and hidden
     -- while the user is in Blizzard Edit Mode.
-    for _, frameName in pairs(ns.BLIZZ_CDM_FRAMES) do
+    for barKey, frameName in pairs(ns.BLIZZ_CDM_FRAMES) do
         local frame = _G[frameName]
         if frame then
             InstallBlizzardCDMSuppressionHooks(frame)
+            SuppressUnclaimedBlizzardCDMChildren(frame, barKey)
             if KT and KT:IsBlizzardEditModeActive() then
                 SuppressBlizzardCDMEditModeFrame(frame)
             end
@@ -7460,7 +7503,9 @@ BuildCDMBar = function(barIndex)
         end
     end
 
-    if anchorKey == "mouse" then
+    local manualUnlockPosition = frame._kuiUnlockManualPosition
+        and KT and KT._unlockActive
+    if not manualUnlockPosition and anchorKey == "mouse" then
         -- Determine SetPoint anchor and 15px directional nudge
         local pointFrom, baseOX, baseOY, forceGrow
         if anchorPos == "left" then
@@ -7726,7 +7771,7 @@ BuildCDMBar = function(barIndex)
                 frame:SetPoint("CENTER", UIParent, "CENTER", 0, defY)
             end
         end
-    else
+    elseif not manualUnlockPosition then
         local pos = p.cdmBarPositions[key]
         if pos and pos.point then
             ApplyBarPositionCentered(frame, pos, 1, 1, scale)
@@ -9809,10 +9854,12 @@ function ns.NativeCDMViewerLayoutObserved(viewerName)
                 if barKey and not reassertedBars[barKey] then
                     reassertedBars[barKey] = true
                     ns.ReassertNativeCDMViewerLayout(pendingViewerName)
+                    HideBlizzardCDM()
                 end
             end
         elseif viewerName then
             ns.ReassertNativeCDMViewerLayout(viewerName)
+            HideBlizzardCDM()
         end
 
         local signatureChanged = true
@@ -10614,6 +10661,11 @@ ns.BuildAllCDMBars = BuildAllCDMBars
 ns.OnUnlockModeChanged = function()
     local function Refresh()
         if InCombatLockdown and InCombatLockdown() then return end
+        if not (KT and KT._unlockActive) then
+            for _, frame in pairs(cdmBarFrames) do
+                frame._kuiUnlockManualPosition = nil
+            end
+        end
         if ns.SyncKUITrackerBars then ns.SyncKUITrackerBars("unlock") end
         if BuildAllCDMBars then BuildAllCDMBars() end
     end
@@ -12858,6 +12910,65 @@ ns.initFrame:SetScript("OnEvent", function(self, event, arg1)
                 end
             end
             p.migratedCDM_v36 = true
+        end
+
+        -- v38: undo the temporary player-frame migration. The original
+        -- Forever layout anchors the buff row above the standalone cast bar.
+        if p and p.cdmBars and p.cdmBars.bars and not p.migratedCDM_v38 then
+            if p.migratedCDM_v37 then
+                for _, b in ipairs(p.cdmBars.bars) do
+                    if b.key == "buffs" and b.anchorTo == "playerframe" then
+                        b.anchorTo = "castbar"
+                        b.anchorPosition = "top"
+                        b.anchorOffsetX = 0
+                        b.anchorOffsetY = 15
+                    end
+                end
+                if p.cdmBarPositions then
+                    p.cdmBarPositions.buffs = nil
+                end
+            end
+            p.migratedCDM_v38 = true
+        end
+        -- v39: the castbar follows the highest resource/CDM frame on Forever,
+        -- so it is not a stable anchor for the buff row. Keep buffs on the
+        -- central cooldown bar instead.
+        if p and p.cdmBars and p.cdmBars.bars and not p.migratedCDM_v39 then
+            for _, b in ipairs(p.cdmBars.bars) do
+                if b.key == "buffs"
+                    and (b.anchorTo == "castbar"
+                        or b.anchorTo == "playerframe"
+                        or b.anchorTo == "erb_powerbar"
+                        or b.anchorTo == "erb_castbar")
+                then
+                    b.anchorTo = "cooldowns"
+                    b.anchorPosition = "top"
+                    b.anchorOffsetX = 0
+                    b.anchorOffsetY = 15
+                end
+            end
+            if p.cdmBarPositions then
+                p.cdmBarPositions.buffs = nil
+            end
+            p.migratedCDM_v39 = true
+        end
+
+        -- v40: return the default buff row to the castbar. v39 moved it to
+        -- cooldowns while chasing the native viewer duplicate; that was not
+        -- the intended Forever layout. Preserve an actual Unlock Mode position.
+        if p and p.cdmBars and p.cdmBars.bars and not p.migratedCDM_v40 then
+            for _, b in ipairs(p.cdmBars.bars) do
+                if b.key == "buffs" and b.anchorTo == "cooldowns" then
+                    b.anchorTo = "castbar"
+                    b.anchorPosition = "top"
+                    b.anchorOffsetX = 0
+                    b.anchorOffsetY = 4
+                    if p.cdmBarPositions then
+                        p.cdmBarPositions.buffs = nil
+                    end
+                end
+            end
+            p.migratedCDM_v40 = true
         end
         KUI_CDM._needsCapture = not KUI_CDM.db.profile._capturedOnce
         _G._KUI_CDM_AceDB = KUI_CDM.db

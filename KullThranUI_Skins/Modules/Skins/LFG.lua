@@ -2079,6 +2079,173 @@ local function SkinLFG()
 end
 
 -- =============================================================
+-- SKIN LFG FOREVER / CAMELOT
+-- =============================================================
+
+local SkinForeverLFG
+local foreverLFGSkinWatcher
+
+local function ScheduleForeverLFGSkin()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if S.db.enable and S.db.lfg and SkinForeverLFG then
+                SkinForeverLFG()
+            end
+        end)
+    elseif SkinForeverLFG then
+        SkinForeverLFG()
+    end
+end
+
+local function EnsureForeverLFGSkinWatcher()
+    if foreverLFGSkinWatcher then return end
+
+    foreverLFGSkinWatcher = CreateFrame("Frame")
+    local elapsed = 0
+    foreverLFGSkinWatcher:SetScript("OnUpdate", function(self, delta)
+        elapsed = elapsed + (delta or 0)
+        if elapsed < 0.05 then return end
+        elapsed = 0
+
+        if _G.LFGParentFrame then
+            SkinForeverLFG()
+            self:SetScript("OnUpdate", nil)
+        end
+    end)
+end
+
+local function SkinForeverLFGPanel(frame, parent)
+    if not frame then return end
+
+    if frame ~= parent and not frame._ktForeverLFGTexturesStripped then
+        S:StripTextures(frame)
+        frame._ktForeverLFGTexturesStripped = true
+    end
+
+    if not frame.backdrop then
+        pcall(S.CreateBackdrop, S, frame, true)
+    end
+
+    ApplyForeverLFGSurface(frame)
+    pcall(EnsureWindowAccentBorder, frame)
+
+    local scrollBar = frame.ScrollBar
+    if not scrollBar and frame.ScrollBox then scrollBar = frame.ScrollBox.ScrollBar end
+    if not scrollBar and frame.ScrollFrame then scrollBar = frame.ScrollFrame.ScrollBar end
+    if scrollBar then S:HandleScrollBar(scrollBar) end
+
+    if frame.GetRegions then
+        for index = 1, frame:GetNumRegions() do
+            local region = select(index, frame:GetRegions())
+            if region and region.IsObjectType and region:IsObjectType("FontString") then
+                S:HandleFont(region)
+            end
+        end
+    end
+end
+
+ApplyForeverLFGSurface = function(frame)
+    if not (frame and S.ApplyKuiSurface) then return end
+
+    -- The vanilla-style finder rebuilds parts of its panels when switching
+    -- tabs. Reapply the shared KUI surface on every show so Blizzard's
+    -- background cannot replace it after the initial skin pass.
+    S:ApplyKuiSurface(frame, { washAlpha = 0.42 })
+    if not frame._ktForeverLFGSurfaceHooked and frame.HookScript then
+        frame:HookScript("OnShow", function(self)
+            if S.db.enable and S.db.lfg then
+                S:ApplyKuiSurface(self, { washAlpha = 0.42 })
+                pcall(EnsureWindowAccentBorder, self)
+            end
+        end)
+        frame._ktForeverLFGSurfaceHooked = true
+    end
+end
+
+SkinForeverLFG = function()
+    EnsureForeverLFGSkinWatcher()
+    if not (S.db.enable and S.db.lfg) then return end
+
+    local parent = _G.LFGParentFrame
+    if not parent then return end
+
+    S:HandlePortraitFrame(parent)
+    local closeButton = parent.CloseButton or _G.LFGParentFrameCloseButton
+    if closeButton then
+        S:HandleCloseButton(closeButton)
+    end
+
+    local panels = {}
+    local seenPanels = {}
+    local function AddPanel(frame)
+        if frame and not seenPanels[frame] then
+            seenPanels[frame] = true
+            panels[#panels + 1] = frame
+        end
+    end
+
+    AddPanel(parent)
+    AddPanel(parent.ListingFrame)
+    AddPanel(parent.BrowseFrame)
+    AddPanel(parent.WhoListFrame)
+    AddPanel(parent.LFGListingFrame)
+    AddPanel(parent.LFGBrowseFrame)
+    AddPanel(parent.LFGWhoListFrame)
+    AddPanel(_G.LFGListingFrame)
+    AddPanel(_G.LFGBrowseFrame)
+    AddPanel(_G.LFGWhoListFrame)
+
+    for _, frame in ipairs(panels) do
+        SkinForeverLFGPanel(frame, parent)
+    end
+
+    local tabs = {
+        parent.Tab1,
+        parent.Tab2,
+        parent.Tab3,
+        parent.ListingTab,
+        parent.BrowsingTab,
+        parent.WhoListingTab,
+        parent.ListingFrame and parent.ListingFrame.Tab,
+        parent.BrowseFrame and parent.BrowseFrame.Tab,
+    }
+    for _, tab in ipairs(tabs) do
+        if tab then
+            S:HandleTab(tab)
+        end
+    end
+
+    local buttons = {
+        _G.LFGListingBackButton,
+        _G.LFGListingPostButton,
+        _G.LFGBrowseBackButton,
+        _G.LFGBrowseSearchButton,
+        _G.LFGBrowseGroupInviteButton,
+        _G.LFGBrowseSendMessageButton,
+        parent.BackButton,
+        parent.SearchButton,
+        parent.PostButton,
+        parent.ListingFrame and parent.ListingFrame.BackButton,
+        parent.ListingFrame and parent.ListingFrame.PostButton,
+        parent.BrowseFrame and parent.BrowseFrame.BackButton,
+        parent.BrowseFrame and parent.BrowseFrame.SearchButton,
+    }
+    for _, button in ipairs(buttons) do
+        if button then
+            S:HandleButton(button)
+        end
+    end
+
+    if not parent._ktForeverLFGShowHooked and parent.HookScript then
+        parent:HookScript("OnShow", ScheduleForeverLFGSkin)
+        parent._ktForeverLFGShowHooked = true
+    end
+
+    if foreverLFGSkinWatcher then
+        foreverLFGSkinWatcher:SetScript("OnUpdate", nil)
+    end
+end
+-- =============================================================
 -- SKIN CHALLENGES
 -- =============================================================
 local function SkinChallenges()
@@ -2395,12 +2562,18 @@ local function SkinPVP()
     end
 end
 
-S.SkinFuncs["Blizzard_ChallengesUI"] = SkinChallenges
-S.SkinFuncs["Blizzard_PVPUI"] = SkinPVP
-if not IsSecureLFGSafeMode() then
-    S.SkinFuncs["Blizzard_GroupFinder"] = SkinLFG
+if S:IsForeverProject() then
+    -- Forever/Camelot loads the vanilla-style finder and does not load the
+    -- Retail Blizzard_GroupFinder addon.
+    S.SkinFuncs["Blizzard_GroupFinder_VanillaStyle"] = SkinForeverLFG
 else
-    -- Retail safe mode: only repair readable text on the application dialog.
-    -- Avoid full skinning of protected Group Finder frames to prevent taint.
-    S.SkinFuncs["Blizzard_GroupFinder"] = SkinSecureLFGReadableText
+    S.SkinFuncs["Blizzard_ChallengesUI"] = SkinChallenges
+    S.SkinFuncs["Blizzard_PVPUI"] = SkinPVP
+    if not IsSecureLFGSafeMode() then
+        S.SkinFuncs["Blizzard_GroupFinder"] = SkinLFG
+    else
+        -- Retail safe mode: only repair readable text on the application dialog.
+        -- Avoid full skinning of protected Group Finder frames to prevent taint.
+        S.SkinFuncs["Blizzard_GroupFinder"] = SkinSecureLFGReadableText
+    end
 end

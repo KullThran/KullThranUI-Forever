@@ -1,0 +1,60 @@
+local addonName, ns = ...
+local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
+KT.VisualThemes = KT.VisualThemes or {}
+
+local function GetProfile()
+    if not (KT.db and KT.db.profile) then return nil end
+    KT.db.profile.cooldownManager = KT.db.profile.cooldownManager or {}
+    return KT.db.profile.cooldownManager
+end
+
+local function GetPaths(_, _, profile)
+    local paths = { "reskinBorders", "cdmBars.barDefaults.iconShape" }
+    local bars = profile and profile.cdmBars and profile.cdmBars.bars
+    local barCount = math.max(4, type(bars) == "table" and #bars or 0)
+    for index = 1, barCount do
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".iconShape"
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderSize"
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderR"
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderG"
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderB"
+    end
+    return paths
+end
+
+KT.VisualThemes:RegisterModule("cooldownmanager", {
+    isAvailable = function() return GetProfile() ~= nil end,
+    getProfile = GetProfile,
+    getOwnedPaths = GetPaths,
+    seed = function(profile, themeKey)
+        local shape, borderSize, r, g, b
+        if themeKey == "classic" then
+            shape, borderSize, r, g, b = "square", 2, 0.55, 0.40, 0.16
+        elseif themeKey == "forever" then
+            shape, borderSize, r, g, b = "circle", 2, 0.82, 0.65, 0.23
+        elseif themeKey == "retail" then
+            shape, borderSize, r, g, b = "csquare", 1, 0.12, 0.28, 0.50
+        else
+            shape, borderSize, r, g, b = "none", 1, 0, 0, 0
+        end
+        profile.reskinBorders = true
+        profile.cdmBars = profile.cdmBars or {}
+        profile.cdmBars.barDefaults = profile.cdmBars.barDefaults or {}
+        profile.cdmBars.barDefaults.iconShape = shape
+        profile.cdmBars.bars = profile.cdmBars.bars or {}
+        for index = 1, 4 do
+            profile.cdmBars.bars[index] = profile.cdmBars.bars[index] or {}
+        end
+        for _, bar in ipairs(profile.cdmBars.bars) do
+            bar.iconShape = shape
+            bar.borderSize = borderSize
+            bar.borderR, bar.borderG, bar.borderB = r, g, b
+        end
+    end,
+    validate = function(profile)
+        local valid = { none = true, cropped = true, square = true, circle = true, csquare = true, diamond = true, hexagon = true, portrait = true, shield = true }
+        for _, bar in ipairs(profile.cdmBars and profile.cdmBars.bars or {}) do
+            if not valid[bar.iconShape] then bar.iconShape = "none" end
+        end
+    end,
+})

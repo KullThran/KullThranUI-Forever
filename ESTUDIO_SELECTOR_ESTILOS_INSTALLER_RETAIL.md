@@ -1,0 +1,1149 @@
+# Estudio: selector de cuatro estilos para el installer de KullThranUI
+
+**Estado:** estudio y plan de implementación. No hay código del selector implementado todavía.  
+**Fecha del estudio:** 2026-09-29.  
+**Workspace donde se guarda el estudio:** `KullThranUI-Forever-Workspace`.  
+**Destino previsto de la primera implementación:** `C:\Users\Pablo\Documents\KullThranUI-Workspace` (Retail).
+
+## 1. Objetivo
+
+Crear más adelante un paso visual del installer, similar al selector de EllesmereUI, con cuatro tarjetas:
+
+1. **WOW CLASSIC**
+2. **WOW FOREVER**
+3. **WOW RETAIL**
+4. **KULLTHRANUI STYLE**
+
+El cuarto estilo representa el diseño propio que KullThranUI usa actualmente:
+
+- En Retail: marcos de unidad de color, planos y sin retrato por defecto.
+- En Forever: la variante propia actual con retratos, especialmente jugador y objetivo.
+
+El objetivo no es cambiar solo una paleta de colores. Cada estilo debe poder cambiar arte, geometría, retratos, forma de iconos, bordes y texturas en varios módulos, manteniendo las funciones de KullThranUI.
+
+## 2. Conclusión del estudio
+
+La mejor ruta es construir un **motor de estilos visuales independiente del installer** y hacer que el nuevo paso sea solamente uno de sus consumidores.
+
+No conviene implementar las cuatro tarjetas como botones que escriben directamente una lista grande de opciones en `Installers.lua`. Eso produciría tres problemas:
+
+- El installer pasaría a conocer los detalles internos de todos los módulos.
+- Un cambio futuro de una clave en UnitFrames, ActionBars o CDM rompería silenciosamente un estilo.
+- Al alternar estilos se perderían ajustes personalizados o se mezclarían valores de dos estilos.
+
+La arquitectura recomendada tiene cuatro piezas:
+
+1. **Catálogo de estilos:** nombres, textos, color de tarjeta, disponibilidad y constructor de la miniatura.
+2. **Registro de módulos:** un adaptador por cada superficie visual que sabe leer, guardar, aplicar y validar su parte del estilo.
+3. **Motor de cambio:** guarda las opciones propiedad de cada estilo, restaura la ranura del estilo de destino y coordina la recarga.
+4. **Paso del installer:** presenta las tarjetas, muestra cuál está en uso y solicita la aplicación global.
+
+La elección debe escribirse solamente al confirmar la recarga. Si el usuario cancela, la base de datos debe quedar intacta.
+
+## 3. Fuentes examinadas
+
+### EllesmereUI 9.3.1
+
+Ruta estudiada: `C:\Users\Pablo\Desktop\EllesmereUI-9.3.1`.
+
+Archivos principales:
+
+- `EllesmereUI/EllesmereUI_StyleCards.lua`
+- `EllesmereUI/EllesmereUI_StyleChoicePopup.lua`
+- `EllesmereUI/EllesmereUI_StyleLaunchPopup.lua`
+- `EllesmereUIOptions/EUI_Style_Options.lua`
+- `EllesmereUI/EllesmereUI_FirstInstall.lua`
+- `EllesmereUI/EllesmereUI_ForeverLayout.lua`
+- `EllesmereUI/EllesmereUI_ClassicArt.lua`
+- `EllesmereUI/EllesmereUI_RetailAtlas.lua`
+- `EllesmereUI/EllesmereUI_ClientGate.lua`
+- `EllesmereUI/EllesmereUI_Lite.lua`
+- Implementaciones de estilo en UnitFrames, ActionBars, Nameplates, ResourceBars y CooldownManager.
+
+### KullThranUI Forever
+
+Archivos principales:
+
+- `KullThranUI_Installer/Modules/Installers/Installers.lua`
+- `KullThranUI_Installer/Modules/Installers/Installer_Options.lua`
+- `KullThranUI/Options.lua`
+- `KullThranUI_UnitFrames/Modules/KUIUnitFrames/KUIUnitFrames.lua`
+- `KullThranUI_PartyFrames/Modules/PartyFrames/PartyFrames.lua`
+- `KullThranUI_ActionBars/Modules/ActionBars/ActionBars.lua`
+- `KullThranUI_ResourceBars/Modules/KUIResourceBars/KUIResourceBars.lua`
+- `KullThranUI_CastBar/Modules/CastBar/CastBar.lua`
+- `KullThranUI_CooldownManager/Modules/KUICooldownManager/KUICooldownManager.lua`
+- `KullThranUI_Nameplates/Modules/Nameplates/Nameplates.lua`
+
+### KullThranUI Retail
+
+Se contrastó la estructura actual de `C:\Users\Pablo\Documents\KullThranUI-Workspace`.
+
+- El installer de Retail tiene actualmente **20 pasos**.
+- El installer de Forever tiene actualmente **19 pasos**.
+- Retail incluye un paso para Mythic+ Timer que Forever no tiene.
+- Los dos installers conservan el mismo patrón general, pero sus números no son intercambiables.
+- Los módulos principales existen en ambos workspaces, pero sus defaults y las APIs del cliente no siempre coinciden.
+
+## 4. Cómo resuelve EllesmereUI este problema
+
+### 4.1 Las tarjetas son una vista reutilizable
+
+`EllesmereUI_StyleCards.lua` construye las tarjetas y sus miniaturas. La misma función se usa en:
+
+- La elección del primer arranque.
+- La cabecera de la página permanente de estilos.
+- El anuncio de la función.
+
+La tarjeta no aplica valores por sí sola. Solo emite una clave como `eui`, `blizzard`, `classic` o `forever`.
+
+Cada tarjeta tiene:
+
+- Identificador estable.
+- Título y subtítulo.
+- Color propio.
+- Miniatura construida con frames y texturas.
+- Estado `IN USE`.
+- Estado deshabilitado cuando no hay nada que cambiar.
+- Acción `Apply to All` o una acción equivalente según el contexto.
+
+Esta separación es correcta y debe conservarse en KullThranUI.
+
+### 4.2 Existe un registro central de módulos
+
+`EUI_Style_Options.lua` registra cada superficie visual con:
+
+- Clave estable del módulo.
+- Carpeta del addon.
+- Nombre mostrado.
+- Función que localiza su perfil.
+- Funciones de lectura y escritura del estilo.
+- Función que informa del estilo que realmente se renderiza en la sesión.
+- Semilla opcional para la primera activación de un estilo.
+
+El registro cubre, entre otros:
+
+- Action Bars.
+- Unit Frames.
+- Player Aura Bars.
+- Nameplates.
+- Cooldown Manager Icons.
+- Tracked Buff Bars.
+- Player Cast Bar.
+- Resource Bars.
+- Minimap.
+- Damage Meters.
+- Quest Tracker.
+- Chat.
+- Raid Frames.
+- Character Sheet.
+
+La ventaja es que `ApplyAll` no contiene lógica específica de cada módulo. Recorre el registro y delega.
+
+### 4.3 El estilo se fija por sesión
+
+Los módulos de Ellesmere leen el estilo al cargar y lo mantienen durante toda la sesión. Un cambio requiere recarga porque puede modificar:
+
+- Geometría.
+- Máscaras.
+- NineSlice y atlas.
+- Tamaño de marcos.
+- Posiciones relativas.
+- Creación o ausencia de retratos y piezas de arte.
+
+La página de opciones puede mostrar el estilo solicitado en la base de datos y, por separado, el que se está renderizando en ese momento.
+
+### 4.4 La escritura se realiza al confirmar
+
+El popup de recarga es transaccional:
+
+1. Calcula qué módulos cambiarían.
+2. Muestra una sola confirmación.
+3. Si se cancela, no escribe flags ni ajustes.
+4. Si se confirma, cambia todos los módulos y recarga.
+
+Esto evita una sesión con varios módulos en estados incompatibles.
+
+### 4.5 Cada estilo conserva sus propios ajustes
+
+Ellesmere no se limita a sobrescribir valores. Cada módulo puede tener `_styleSlots` con las claves que pertenecen al aspecto visual.
+
+Al pasar de A a B:
+
+1. Guarda en la ranura A los valores visuales actuales.
+2. Busca una ranura guardada de B.
+3. Si existe, la restaura.
+4. Si B nunca se usó, aplica una semilla inicial.
+5. Mantiene fuera del intercambio las opciones que no pertenecen al estilo.
+
+Así, si el usuario ajusta el tamaño del borde Classic, cambia a Retail y vuelve a Classic, recupera su ajuste Classic.
+
+### 4.6 Forever es una variante con capacidades propias
+
+En EllesmereUI 9.3.1, `forever` solo se ofrece en el cliente Forever. Internamente parte de la lógica reutiliza la base Blizzard y añade flags y ranuras exclusivas de Forever.
+
+También hay correcciones de layout dependientes del estilo. Por ejemplo, `ForeverLayoutForLook` mueve la barra de actitudes únicamente si sigue en una posición que el addon había colocado. Si el usuario la movió, no la pisa.
+
+Este detalle es importante: un estilo puede necesitar posiciones distintas, pero nunca debe recolocar a ciegas un elemento que el usuario ya personalizó.
+
+## 5. Diferencia entre versión del cliente y estilo visual
+
+Hay que mantener dos conceptos separados:
+
+- **Cliente:** Retail o Forever. Determina APIs, atlas disponibles, restricciones de seguridad y módulos existentes.
+- **Estilo visual:** Classic, Forever, Retail o KullThranUI Style. Determina la apariencia elegida.
+
+No debe usarse una variable como `isForever` para decidir automáticamente el estilo. Un usuario de Retail debe poder elegir el aspecto Forever y un usuario de Forever debe poder elegir un aspecto Retail, siempre que exista un adaptador compatible.
+
+La resolución recomendada es:
+
+```lua
+local clientFlavor = KT:GetClientFlavor() -- "retail" o "forever"
+local visualTheme = profile.visualTheme.active -- "classic", "forever", "retail" o "kui"
+local adapter = Registry[moduleKey]
+adapter:Apply(visualTheme, clientFlavor)
+```
+
+El adaptador decide si usa:
+
+- Un atlas nativo del cliente.
+- Una textura original de KullThranUI.
+- Una composición creada con piezas de Blizzard disponibles.
+- Una aproximación compatible cuando el cliente no tiene el recurso exacto.
+
+## 6. Definición funcional de los cuatro estilos
+
+Los nombres visibles pueden revisarse antes de implementar. Las claves internas deben ser cortas, estables y no traducidas.
+
+| Clave | Nombre visible provisional | Definición |
+|---|---|---|
+| `classic` | WOW CLASSIC | Arte vanilla: marcos clásicos, anillos, slots cuadrados y texturas clásicas donde existan. |
+| `forever` | WOW FOREVER | Bronce, glifos, badges redondos, retratos y arte coherente con Forever. |
+| `retail` | WOW RETAIL | Arte moderno de Blizzard Retail, atlas y geometría moderna cuando el cliente los permita. |
+| `kui` | KULLTHRANUI STYLE | Diseño propio plano de KullThranUI. En Retail, UnitFrames sin retrato por defecto; en Forever, variante propia con retratos. |
+
+### 6.1 WOW CLASSIC
+
+Objetivo visual:
+
+- UnitFrames con marco y retrato de inspiración vanilla.
+- ActionBars con slot cuadrado clásico.
+- CastBar y ResourceBars con marco clásico cuando sea viable.
+- CDM con iconos cuadrados y bordes clásicos.
+- Nameplates planos con textura clásica.
+
+No debe significar ejecutar código del cliente Classic ni depender de `WOW_PROJECT_CLASSIC`. Es una apariencia emulada dentro del cliente activo.
+
+### 6.2 WOW FOREVER
+
+Objetivo visual:
+
+- Marcos bronce.
+- Retratos redondos o integrados según el módulo.
+- Badges de nivel y PvP compatibles.
+- Iconos y remates coherentes con el arte Forever.
+- En Retail, usar solamente recursos propios de KullThranUI o recursos Blizzard cuya redistribución/uso sea válido y estable.
+
+Este estilo necesita una revisión de assets antes de implementarse en Retail. Los atlas exclusivos de Forever no pueden darse por existentes en Retail.
+
+### 6.3 WOW RETAIL
+
+Objetivo visual:
+
+- Arte de Blizzard Retail para marcos, botones y cast bars.
+- Formas y atlas modernos.
+- Mantener las funciones, filtros, textos, auras y lógica de KullThranUI.
+
+No se recomienda desactivar los módulos KUI y devolver todo a los frames nativos. Eso cambiaría comportamiento, opciones, anclajes y compatibilidad. La ruta coherente es que los módulos KUI sigan siendo los propietarios y rendericen un kit visual Retail.
+
+### 6.4 KULLTHRANUI STYLE
+
+Debe ser el estilo propio actual, sin depender de EllesmereUI instalado.
+
+- Retail: conservar los marcos planos de color y `showPortrait = false` para jugador y objetivo como defaults del workspace Retail.
+- Forever: conservar `showPortrait = true` para jugador y objetivo y `portraitStyle = "circular"`, de acuerdo con el diseño actual de Forever.
+- Mantener las texturas Melli y la paleta elegida en el paso de color.
+
+El nombre visible queda fijado como **KullThranUI Style** y la clave interna como `kui`.
+
+## 7. Relación con los temas de color actuales
+
+El tema visual y la paleta son ejes separados: `profile.visualTheme.active` guarda `kui`, `classic`, `forever` o `retail`; `profile.skin.stylePreset` conserva la paleta.
+
+Los presets y los colores manuales solo tienen efecto y permanecen interactivos con `kui`. En los otros tres temas se conservan, pero quedan atenuados y bloqueados. Cambiar una paleta no debe seleccionar `kui` automáticamente, y regresar a `kui` debe recuperar la paleta anterior.
+
+La implementación exacta del bloqueo y del layout se define en las secciones 29.2 y 29.3.
+
+## 8. Lugar recomendado dentro del installer
+
+### Ruta principal recomendada
+
+Añadir el selector como **último paso**, después de `ShowModuleSelectionStep`, y trasladar el botón Finish al nuevo paso.
+
+Motivos:
+
+1. Los perfiles de resolución ya se habrán importado y no podrán sobrescribir el estilo después.
+2. La selección de módulos ya estará decidida.
+3. El motor podrá aplicar el estilo a todos los módulos activos y guardar la preferencia global para los desactivados.
+4. La recarga de estilo será la última operación del installer.
+5. Al volver tras la recarga, el paso puede mostrar la tarjeta `IN USE` y permitir finalizar.
+
+Estado actual que debe respetarse al portar:
+
+- Retail: 20 pasos. El nuevo paso sería inicialmente el 21.
+- Forever: 19 pasos. El nuevo paso sería inicialmente el 20.
+
+No se debe copiar el número de un workspace al otro.
+
+### Mejora recomendada antes de seguir aumentando pasos
+
+El installer usa números repetidos en `TOTAL_INSTALLER_STEPS`, `OpenCurrentStep`, cada función de página y los botones Next/Back. Conviene introducir constantes:
+
+```lua
+local STEP = {
+    WELCOME = 1,
+    LANGUAGE = 2,
+    COLOR_THEME = 3,
+    -- ...
+    MODULE_SELECTION = 20, -- Retail en el estado estudiado
+    VISUAL_STYLE = 21,
+}
+```
+
+Una segunda fase podría usar una tabla ordenada por cliente. Para la primera implementación basta con constantes, pero no deben quedar números nuevos dispersos.
+
+### Alternativa no recomendada para la primera versión
+
+Mostrar la elección inmediatamente después del idioma sería más visible, pero obligaría a mantener un estado `pendingVisualTheme` hasta el final. Los imports de perfil posteriores podrían sobrescribir parte de lo elegido. Solo merece la pena si se implementa una transacción completa del installer.
+
+## 9. Archivos nuevos propuestos en Retail
+
+Nombres orientativos:
+
+```text
+KullThranUI/
+  Modules/
+    VisualThemes/
+      VisualThemeCatalog.lua
+      VisualThemeEngine.lua
+      VisualThemeRegistry.lua
+      VisualThemeSlots.lua
+      Adapters/
+        UnitFrames.lua
+        PartyFrames.lua
+        ActionBars.lua
+        ResourceBars.lua
+        CastBar.lua
+        CooldownManager.lua
+        Nameplates.lua
+
+KullThranUI_Installer/
+  Modules/
+    Installers/
+      VisualThemeCards.lua
+```
+
+También se puede ubicar el motor en una carpeta `Core/VisualThemes`. Lo importante es que pertenezca al addon base y no al installer, para poder reutilizarlo desde opciones.
+
+El TOC debe cargar el catálogo, slots y registro antes de cualquier página que los use. Los adaptadores no deben forzar la carga de módulos desactivados; pueden registrarse desde cada addon al inicializarse o utilizar adaptadores de datos simples en el núcleo.
+
+## 10. Modelo de datos propuesto
+
+```lua
+profile.visualTheme = {
+    active = "kui",
+    requested = "kui",
+    schemaVersion = 1,
+    modules = {
+        -- Ausente significa heredar `active`.
+        -- unitframes = "forever",
+    },
+    slots = {
+        -- Solo claves propiedad del estilo, separadas por módulo y estilo.
+        -- unitframes = { kui = {...}, retail = {...} },
+    },
+}
+```
+
+Significado:
+
+- `active`: estilo que se espera que esté renderizándose tras la última recarga completada.
+- `requested`: elección confirmada para la próxima carga. Puede ser útil durante migraciones y diagnóstico.
+- `schemaVersion`: versión del formato, independiente de la versión del addon.
+- `modules`: override opcional por módulo para una futura página avanzada.
+- `slots`: ajustes visuales guardados por estilo.
+
+Para la primera versión no hace falta exponer overrides por módulo, pero el formato debe permitirlos para no tener que migrar toda la base de datos después.
+
+## 11. Contrato del registro de módulos
+
+Cada adaptador debería proporcionar un contrato parecido a este:
+
+```lua
+KT.VisualThemes:RegisterModule("unitframes", {
+    isAvailable = function(clientFlavor) end,
+    getProfile = function() end,
+    getRenderedStyle = function() end,
+    getOwnedPaths = function(styleKey, clientFlavor) end,
+    seed = function(profile, styleKey, clientFlavor) end,
+    validate = function(profile, styleKey, clientFlavor) end,
+    refreshPreview = function(styleKey, parent) end,
+})
+```
+
+Responsabilidades:
+
+- `isAvailable`: informa de si el módulo existe en ese cliente.
+- `getProfile`: devuelve su tabla de configuración sin asumir que el frame está creado.
+- `getRenderedStyle`: devuelve el estilo fijado al inicio de sesión.
+- `getOwnedPaths`: lista exacta de claves que el estilo puede intercambiar.
+- `seed`: define los valores de primera visita.
+- `validate`: normaliza valores incompatibles antes de recargar.
+- `refreshPreview`: opcional; permite reutilizar una representación del módulo.
+
+## 12. Claves propiedad del estilo
+
+Cada adaptador debe declarar explícitamente qué claves puede tocar. Una regla simple:
+
+> Si una opción determina arte, forma o geometría necesaria para ese arte, puede ser propiedad del estilo. Si determina comportamiento o contenido, debe conservarse.
+
+### Deben conservarse entre estilos
+
+- Posiciones movidas por el usuario, salvo una migración condicional comprobada.
+- Escala global y perfil de resolución.
+- Hechizos seguidos.
+- Filtros de auras.
+- Keybinds.
+- Visibilidad por combate o instancia.
+- Orden de barras.
+- Configuración de click casting.
+- Textos elegidos por el usuario, salvo que un kit no tenga físicamente ese slot.
+- Módulos activados o desactivados.
+
+### Pueden cambiar por estilo
+
+- Retratos y su forma.
+- Atlas, texturas y NineSlice.
+- Forma y máscara de botones.
+- Grosor y tipo de borde.
+- Textura de barras.
+- Tamaños mínimos necesarios para el arte.
+- Insets del retrato y de las barras.
+- Posición relativa de badges que pertenecen al marco.
+- Iconos de clasificación, PvP y rol cuando formen parte del kit.
+
+### Regla para posiciones
+
+Si un estilo necesita mover un elemento, el adaptador solo debe hacerlo cuando la posición actual coincide con una posición anterior conocida del addon. Si no coincide, se considera posición del usuario y se conserva.
+
+## 13. Matriz inicial de módulos
+
+### Fase 1: necesaria para que las cuatro tarjetas sean reales
+
+| Módulo | Estado actual útil | Trabajo requerido |
+|---|---|---|
+| UnitFrames | Ya soporta retratos por unidad, estilos circular/attached/detached/none, texturas, bordes, color de clase y class power. Forever ya tiene defaults de retrato propios. | Crear kits de render `classic`, `forever`, `retail`, `kui`; separar el kit de las opciones generales; hacer las migraciones de retrato conscientes del estilo. |
+| ActionBars | Ya tiene `buttonStyle`, `buttonShape`, máscaras, bordes y formas por barra. | Añadir kits de slot/borde para Classic, Forever y Retail; decidir qué opciones quedan bloqueadas bajo cada kit. |
+| CooldownManager | Ya tiene forma de icono, borde, fondo, animación y configuración separada para barras. | Separar estilo de iconos y estilo de buff bars; registrar dos superficies aunque la tarjeta global aplique ambas. |
+| CastBar | Ya tiene textura, color mode, icono y geometría propia. | Añadir kit de marco Classic/Forever/Retail y conservar color/textos elegidos. |
+| ResourceBars | Ya tiene textura por barra, borde, color mode y pips. | Añadir marco por estilo sin reemplazar configuración funcional ni colores de recurso. |
+| Nameplates | Ya tiene texturas, cast bar, glow, slots de texto y metadatos dinámicos. | Añadir kits visuales sin alterar lógica de nivel/clasificación; comprobar recursos exclusivos del cliente. |
+
+### Fase 2: coherencia global
+
+| Módulo | Trabajo probable |
+|---|---|
+| PartyFrames | Kits de borde, textura, iconos de rol y highlights; preservar presets DPS/Heal y posiciones. |
+| Buffs & Debuffs | Bordes de icono y forma de slot según estilo. |
+| Minimap | Anillo/cabecera Classic, Forever y Retail, manteniendo botones y tracking. |
+| Damage Meter | Ventana, fondo y textura de barras. |
+| Chat | Marco y pestañas. |
+| Objective Tracker | Marco visual; no cambiar objetivos ni filtros. |
+| Skins / ventanas Blizzard | Tema de ventanas coordinado, con adaptadores separados por cliente. |
+| Armory | Arte de panel y slots; especial cuidado con el layout distinto de Forever y Retail. |
+
+La primera versión no debe mostrar “Apply to All” como completado si solo UnitFrames cambia. Para publicar el selector hacen falta al menos los seis módulos de la fase 1 y pruebas visuales de todos ellos.
+
+## 14. Particularidades de UnitFrames
+
+Este módulo es el principal riesgo porque el retrato modifica el ancho útil, los anchors y los metadatos.
+
+Defaults confirmados en el estado estudiado:
+
+- Forever: jugador y objetivo tienen `showPortrait = true`; el estilo global de retrato es circular.
+- Retail: jugador y objetivo tienen `showPortrait = false` en los defaults actuales.
+- Ambos workspaces comparten muchas rutas y opciones, pero no deben recibir la misma tabla sin adaptación.
+
+La semilla propuesta para `kui`:
+
+```lua
+if clientFlavor == "forever" then
+    profile.portraitStyle = "circular"
+    profile.player.showPortrait = true
+    profile.target.showPortrait = true
+else
+    profile.player.showPortrait = false
+    profile.target.showPortrait = false
+end
+```
+
+No debe ponerse siempre `portraitStyle = "none"` en Retail, porque esa clave también afecta a otras unidades. El adaptador debe declarar por separado las claves de jugador, objetivo, focus, boss y pet.
+
+Hay que auditar las migraciones actuales de Forever como `ApplyForeverPortraitDefaults`. Una migración unilateral no debe volver a activar retratos después de que el usuario elija `retail` o `classic`.
+
+## 15. Algoritmo de aplicación recomendado
+
+```text
+ApplyAll(targetStyle):
+    validar que targetStyle existe
+    detectar clientFlavor
+    construir lista de adaptadores disponibles
+    calcular cambios sin escribir
+    si no hay cambios, marcar tarjeta IN USE y terminar
+    mostrar popup Reload Required
+
+onConfirm:
+    para cada adaptador:
+        localizar perfil
+        determinar estilo de origen
+        guardar en slot de origen solo ownedPaths
+        restaurar slot de destino si existe
+        si no existe, ejecutar seed de destino
+        validar resultado para este cliente
+        guardar override/herencia del módulo
+    guardar visualTheme.requested y visualTheme.active
+    guardar schemaVersion
+    solicitar recarga mediante la ruta segura del cliente
+```
+
+La operación debe protegerse con `pcall` por adaptador y registrar fallos. Si un adaptador falla antes de la recarga, el motor debe restaurar el snapshot en memoria de los adaptadores ya modificados y no marcar el estilo como activo.
+
+## 16. Integración exacta con el installer
+
+Cambios futuros en Retail:
+
+1. Incrementar `TOTAL_INSTALLER_STEPS` de 20 a 21.
+2. Añadir `ShowVisualThemeStep` al enrutador `OpenCurrentStep`.
+3. Cambiar el botón final de `ShowModuleSelectionStep` por `Next`.
+4. Hacer que ese botón abra `ShowVisualThemeStep`.
+5. Mover Finish, Join Discord y el cierre definitivo al nuevo paso.
+6. Hacer que Back vuelva a `ShowModuleSelectionStep`.
+7. En una recarga confirmada, guardar `reopenStep`/`resumeStep` en el paso visual.
+8. Tras recargar, mostrar `IN USE` y permitir Finish sin otra recarga.
+9. Añadir textos localizables para títulos, captions, botones, confirmación y fallos.
+
+Cambios equivalentes en Forever:
+
+- Partir de 19 pasos y añadir el paso 20.
+- No introducir Mythic+ Timer ni rutas Retail en el orden de Forever.
+- Usar el mecanismo de recarga que sea válido en Forever; no llamar a `ReloadUI()` desde lógica compartida sin pasar por la abstracción existente.
+
+## 17. Diseño de las tarjetas
+
+La captura aportada es una buena referencia de composición:
+
+- Cuatro tarjetas en una fila.
+- Banda superior con el color de estilo.
+- Nombre grande.
+- Etiqueta corta.
+- Miniatura oscura.
+- Descripción de dos o tres líneas.
+- Botón `Apply to All`.
+- Badge `IN USE` sobre la tarjeta activa.
+
+Para el tamaño actual del installer hay que comprobar si cuatro tarjetas de unos 200 px caben. Si el frame no llega a unos 900 px útiles, opciones válidas:
+
+1. Aumentar el ancho del installer solo para esta página.
+2. Usar tarjetas de aproximadamente 170–180 px.
+3. Usar una cuadrícula 2 × 2 en resoluciones estrechas.
+
+La recomendación es una disposición adaptable:
+
+- Cuatro columnas cuando el ancho útil sea suficiente.
+- Dos columnas y dos filas si no lo es.
+
+Las miniaturas deben construirse con primitivas propias o assets permitidos. No deben ser capturas estáticas que queden obsoletas al cambiar una textura.
+
+## 18. Estado `IN USE`
+
+Una tarjeta solo debe mostrar `IN USE` si:
+
+- Todos los módulos disponibles heredan ese estilo, o
+- El usuario está en modo global y no hay overrides divergentes.
+
+Si más adelante se permiten estilos por módulo, la cabecera debe mostrar `MIXED` cuando haya diferencias.
+
+Con módulos desactivados:
+
+- El estilo global se guarda igualmente.
+- El módulo lo adopta la próxima vez que se active.
+- La tarjeta puede considerarse `IN USE` si todos los módulos activos coinciden y los desactivados heredan la clave global.
+
+Esto mejora el comportamiento de Ellesmere, donde los módulos sin perfil cargado pueden quedar fuera de `ApplyAll`.
+
+## 19. Compatibilidad y capacidades por cliente
+
+El catálogo debe poder declarar capacidades:
+
+```lua
+styles.forever.capabilities = {
+    nativeOn = { forever = true },
+    emulatedOn = { retail = true },
+}
+```
+
+No se debe comprobar solo si un atlas tiene un nombre conocido. Antes de usarlo:
+
+- Consultar `C_Texture.GetAtlasInfo` cuando exista.
+- Mantener una alternativa propia.
+- Evitar file IDs que no existan en Forever.
+- Mantener rutas específicas del cliente fuera de los defaults compartidos.
+
+Retail y Forever también difieren en restricciones de seguridad. La aplicación del estilo debe ocurrir fuera de combate y la recarga debe pasar por una única abstracción.
+
+## 20. Licencia y reutilización de EllesmereUI
+
+`EllesmereUI/license.txt` declara copyright 2026 y reserva todos los derechos que no estén concedidos explícitamente.
+
+Consecuencia para KullThranUI:
+
+- Se puede estudiar el comportamiento y diseñar una arquitectura equivalente de forma independiente.
+- No se debe copiar código, texturas, mockups ni recursos de EllesmereUI sin permiso explícito del autor.
+- Las miniaturas y kits visuales de KullThranUI deben escribirse desde cero.
+- Para estilos Blizzard se pueden usar recursos proporcionados por el cliente mediante sus rutas/atlas, con fallback propio cuando falten.
+
+El archivo `SKINNING_API.md` es una API para que addons externos adopten el tema de EllesmereUI cuando EllesmereUI está instalado. No resuelve este objetivo, porque el nuevo selector debe funcionar de forma autónoma dentro de KullThranUI.
+
+## 21. Migración de perfiles existentes
+
+Primera carga después de introducir el sistema:
+
+1. Si `profile.visualTheme` no existe, detectar el workspace/cliente.
+2. En Retail, asignar `kui` sin modificar los valores existentes.
+3. En Forever, asignar `kui` sin modificar los valores existentes.
+4. Crear la ranura inicial `kui` a partir de las claves visuales actuales.
+5. Marcar `schemaVersion = 1`.
+
+No debe ejecutarse una semilla `kui` sobre perfiles existentes. El perfil actual es la fuente de la ranura inicial y puede contener personalizaciones.
+
+Para perfiles nuevos, sí se usan las semillas oficiales de cada cliente.
+
+Al importar un perfil antiguo:
+
+- Si no trae `visualTheme`, se captura como `kui`.
+- Si trae una versión de esquema antigua, se migra antes de construir frames.
+- Nunca se borran ranuras desconocidas durante una actualización; se conservan hasta completar la migración.
+
+## 22. Página permanente en General
+
+La ubicación permanente queda fijada en `General > Advanced Style System`. El selector ocupa la columna derecha junto a `Preset Colors` y `Manual Colors` pasa debajo a ancho completo.
+
+`General` y el futuro paso del installer deben reutilizar el mismo catálogo, las mismas tarjetas, los mismos previews y la misma operación de aplicación. La especificación completa está en la sección 29.
+
+## 23. Pruebas necesarias
+
+### Pruebas de datos
+
+- Cambiar `kui -> classic -> kui` y comprobar que los valores KUI regresan.
+- Personalizar Classic, cambiar a Retail y volver a Classic.
+- Cancelar el popup y comprobar que no cambia ninguna SavedVariable.
+- Simular un error en un adaptador y comprobar rollback.
+- Activar después un módulo que estaba desactivado y comprobar que hereda el estilo global.
+- Importar un perfil antiguo sin `visualTheme`.
+- Cambiar de perfil AceDB y comprobar aislamiento de ranuras.
+
+### Pruebas visuales por estilo
+
+- UnitFrames: jugador, objetivo, focus, pet, ToT y boss.
+- Retratos a izquierda/derecha y ausencia de retrato.
+- Nivel dinámico y clasificación sin solaparse.
+- Cast bars con y sin icono.
+- ActionBars con proc glow, swipe y cargas.
+- CDM con varias barras, filas y shapes.
+- Nameplates hostiles, amistosas, elite, rare y casting.
+- ResourceBars con diferentes clases y recursos secundarios.
+- PartyFrames en party, raid, arena y test mode.
+
+### Matriz de ejecución
+
+- Retail, instalación limpia.
+- Retail, perfil existente personalizado.
+- Forever, instalación limpia.
+- Forever, perfil existente personalizado.
+- Cambio fuera de combate.
+- Intento durante combate: debe aplazarse o bloquearse con mensaje claro, sin escritura parcial.
+- Resoluciones 1080p, 1440p y 4K.
+- Escala de UI automática y manual.
+
+### Validación real
+
+`luac -p` solo valida sintaxis. Esta función requiere capturas o comprobación dentro de cada cliente porque depende de layering, atlas, masks, frame levels y anchors.
+
+## 24. Fases de implementación propuestas
+
+### Fase 0: inventario visual
+
+- Capturar el aspecto actual de los módulos principales en Retail y Forever.
+- Identificar assets Blizzard disponibles en ambos clientes.
+- Diseñar assets originales que falten.
+- Aprobar nombres finales y captions de las cuatro tarjetas.
+
+### Fase 1: núcleo sin UI
+
+- Crear catálogo, registro, slots y migración.
+- Implementar transacción y rollback.
+- Añadir API de registro de adaptadores.
+- Añadir logging de diagnóstico.
+
+### Fase 2: UnitFrames como piloto
+
+- Implementar los cuatro kits.
+- Comprobar retratos Retail/Forever.
+- Validar que posiciones y opciones funcionales sobreviven a los cambios.
+- No publicar todavía el selector global.
+
+### Fase 3: resto de módulos principales
+
+- ActionBars.
+- CooldownManager icons y bars.
+- CastBar.
+- ResourceBars.
+- Nameplates.
+- PartyFrames si se incluye en la primera entrega pública.
+
+### Fase 4: tarjetas y página permanente
+
+- Construir miniaturas originales.
+- Añadir estados `IN USE`, hover y disabled.
+- Crear página de opciones reutilizable.
+
+### Fase 5: paso del installer
+
+- Integrar la página final.
+- Conectar Next/Back/Finish.
+- Confirmar recarga y reapertura.
+- Añadir localización.
+
+### Fase 6: port a Forever
+
+- Reusar el motor y el contrato.
+- Sustituir solamente adaptadores y assets dependientes del cliente.
+- Mantener orden y número de pasos propios de Forever.
+- Ejecutar la matriz completa de pruebas.
+
+## 25. Riesgos principales
+
+1. **Sobrescribir posiciones:** evitarlo con claves propiedad del estilo y migraciones condicionales.
+2. **Mezclar paleta con geometría:** mantener `skin.stylePreset` y `visualTheme.active` separados.
+3. **Atlas ausentes:** capability checks y fallbacks.
+4. **Retratos que alteran anchors:** kits de UnitFrames con layout propio y pruebas por unidad.
+5. **Migraciones antiguas que fuerzan defaults:** hacerlas conscientes del estilo activo.
+6. **Recarga cancelada con datos ya escritos:** escribir solo en `onConfirm`.
+7. **Módulos desactivados:** guardar herencia global y aplicar al habilitarlos.
+8. **Números de paso divergentes:** constantes y orden específico por workspace.
+9. **Copiar material protegido:** reimplementación independiente y assets originales/Blizzard.
+10. **Declarar éxito por código sin revisar el render:** validación dentro de Retail y Forever.
+
+## 26. Decisiones pendientes antes de programar
+
+- Nombre visible final del cuarto estilo: `KullThranUI Style`.
+- Si PartyFrames forma parte de la primera entrega o de la segunda.
+- Si el selector global cambia también la fuente y el skin de ventanas.
+- Qué assets originales se crearán para emular Forever en Retail.
+- Si WOW RETAIL en Forever será una reproducción completa o una aproximación documentada.
+- Si la página avanzada permitirá overrides por módulo desde la primera versión.
+- Tamaño final del installer para cuatro tarjetas.
+
+## 27. Checklist para el siguiente agente
+
+Antes de editar código:
+
+- [ ] Leer este documento completo.
+- [ ] Comprobar el estado actual de ambos workspaces; los números de paso pueden haber cambiado.
+- [ ] Confirmar los cuatro nombres visibles con el usuario.
+- [ ] Hacer inventario de assets y verificar licencia.
+- [ ] Crear primero el motor en el addon base, no en `Installers.lua`.
+- [ ] Definir `ownedPaths` de UnitFrames antes de escribir semillas.
+- [ ] Capturar el perfil actual como ranura `kui` durante la migración.
+- [ ] Implementar y probar UnitFrames como piloto.
+- [ ] Añadir el resto de adaptadores principales.
+- [ ] Crear tarjetas originales y reutilizables.
+- [ ] Insertar el nuevo paso al final del installer Retail.
+- [ ] Escribir solo al confirmar la recarga.
+- [ ] Probar ida y vuelta entre todos los estilos.
+- [ ] Validar visualmente en juego, no solo con sintaxis Lua.
+
+## 28. Qué no se ha hecho en este estudio
+
+- No se ha añadido ningún paso al installer.
+- No se ha creado ningún preset ejecutable.
+- No se han copiado archivos ni assets de EllesmereUI.
+- No se han cambiado defaults de UnitFrames, ActionBars, CDM ni otros módulos.
+- No se ha modificado el workspace Retail.
+
+Este documento es el punto de partida para la implementación posterior.
+
+## 29. Refinamiento vinculante: General, previews y guía para IA
+
+Esta sección sustituye cualquier alternativa anterior sobre la ubicación permanente, el nombre del cuarto tema y el funcionamiento de los colores. La implementación aún no debe comenzar; estas son instrucciones para el agente que la realice después.
+
+### 29.1 Decisiones cerradas
+
+- El selector permanente va en `General > Advanced Style System`.
+- Se coloca en la columna derecha, al lado de las paletas actuales.
+- `Preset Styles` pasa a llamarse visualmente `Preset Colors` para evitar confundir paleta con tema.
+- `Manual Colors` se mueve debajo, en un bloque a ancho completo.
+- `Preset Colors` y `Manual Colors` solo funcionan con `KullThranUI Style`.
+- El cuarto tema se llama `KullThranUI Style` y usa la clave interna `kui`.
+- El installer tendrá más adelante un paso que reutiliza el mismo selector; no tendrá una implementación paralela.
+- Ningún archivo distribuido debe contener tags, comentarios, nombres internos o textos que mencionen el proyecto usado como referencia.
+
+### 29.2 Layout exacto de General
+
+```text
+ADVANCED STYLE SYSTEM
+┌─────────────────────────────┬─────────────────────────────┐
+│ PRESET COLORS               │ VISUAL THEME                │
+│ paletas actuales            │ [kui]       [forever]       │
+│                             │ [retail]    [classic]        │
+└─────────────────────────────┴─────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│ MANUAL COLORS                                             │
+│ colores base                 overrides por módulo         │
+└───────────────────────────────────────────────────────────┘
+```
+
+En `KullThranUI/Options.lua`:
+
+1. Conservar `BeginOptionBlocks` para la fila superior.
+2. Construir `Preset Colors` con `AddOptionBlock(..., "left", ...)`.
+3. Construir `Visual Theme` con `AddOptionBlock(..., "right", ...)`.
+4. Cerrar la fila con `EndOptionBlocks`.
+5. Crear `Manual Colors` debajo mediante `CreateOptionBlock` con ancho `sc:GetWidth() - 22`.
+6. Finalizarlo con `FinalizeOptionBlock`.
+7. No modificar el helper de dos columnas para forzar un bloque completo.
+8. Dentro de Manual Colors usar dos columnas internas:
+   - Izquierda: Accent, Window Background, Main Text, Secondary Text y Background Tint.
+   - Derecha: Unlock Mode, Friend List, Armory, Objective Tracker, Bags y Menu Icons.
+
+Pseudocódigo orientativo:
+
+```lua
+local styleCols = BeginOptionBlocks(sc, y, 10, 12)
+
+AddOptionBlock(styleCols, "left", "Preset Colors", BuildPresetColors)
+AddOptionBlock(styleCols, "right", "Visual Theme", function(content)
+    KT.VisualThemes:CreateSelector(content, {
+        columns = 2,
+        compact = true,
+    })
+end)
+
+y = EndOptionBlocks(styleCols) + 8
+
+local frame, content = CreateOptionBlock(
+    sc, "Manual Colors", 10, -y, sc:GetWidth() - 22
+)
+local height = BuildManualColors(content, { columns = 2 })
+y = y + FinalizeOptionBlock(frame, content, height) + 8
+```
+
+### 29.3 Bloqueo de las opciones de color
+
+El estado debe depender del tema que realmente está renderizado en la sesión:
+
+```lua
+local enabled = KT.VisualThemes:GetRenderedTheme() == "kui"
+```
+
+Aplicar un helper único, por ejemplo `RefreshColorThemeAvailability`, a `Preset Colors` y `Manual Colors`:
+
+- Con `enabled == true`: alpha 1 e interacción normal.
+- Con `enabled == false`: contenido a alpha aproximada de 0.38.
+- Añadir un blocker transparente por encima del contenido bloqueado para capturar clics.
+- Tooltip del blocker: `Color presets and manual palette controls are available with KullThranUI Style.`
+- No cambiar automáticamente a `kui` al pulsar una paleta.
+- No borrar, normalizar ni sobrescribir la paleta guardada.
+- Al regresar a `kui`, habilitar controles y recuperar la paleta anterior.
+- Refrescar al construir la página y después de recargar.
+- `Visual Theme` siempre queda habilitado.
+
+El blocker de bloque completo es preferible a repartir lógica de deshabilitado por todos los color pickers y dropdowns existentes.
+
+### 29.4 Mapa de archivos de KullThranUI para el agente
+
+La primera implementación se hace en `C:\Users\Pablo\Documents\KullThranUI-Workspace`. Después se porta a `C:\Users\Pablo\Documents\KullThranUI-Forever-Workspace`.
+
+Antes de editar, abrir todos los TOC implicados. No fiarse de nombres parecidos. En el estado investigado, UnitFrames carga `KullThranUI_UnitFrames/Modules/KUIUnitFrames/KUI_UnitFrames_Options.lua`; también existe `KUI_Unit_Frames_Options.lua`, pero no es el cargado por el TOC actual.
+
+| Área | Archivos que se deben leer |
+|---|---|
+| General y paletas | `KullThranUI/Options.lua`: buscar `Advanced Style System`, `STYLE_PRESETS`, `ApplySmartStylePreset`, `ApplyManualStyle` y helpers de bloques. |
+| UnitFrames | `KullThranUI_UnitFrames/Modules/KUIUnitFrames/KUIUnitFrames.lua` y el archivo de opciones declarado por su TOC. |
+| PartyFrames | `KullThranUI_PartyFrames/Modules/PartyFrames/PartyFrames.lua` y `PartyFrames_Options.lua`. |
+| ActionBars | `KullThranUI_ActionBars/Modules/ActionBars/ActionBars.lua` y `ActionBars_Options.lua`. |
+| ResourceBars | `KullThranUI_ResourceBars/Modules/KUIResourceBars/KUIResourceBars.lua` y `KUI_ResourceBars_Options.lua`. |
+| CastBar | `KullThranUI_CastBar/Modules/CastBar/CastBar.lua` y su archivo de opciones indicado en TOC. |
+| Cooldown Manager | `KullThranUI_CooldownManager/Modules/KUICooldownManager/KUICooldownManager.lua` y `KUI_CooldownManager_Options.lua`. |
+| Nameplates | `KullThranUI_Nameplates/Modules/Nameplates/Nameplates.lua` y `Nameplates_Options.lua`. |
+| Installer | `KullThranUI_Installer/Modules/Installers/Installers.lua` y `Installer_Options.lua`. |
+
+En cada módulo:
+
+1. Localizar defaults.
+2. Seguir el setter de opción hasta la función final de render.
+3. Separar arte, geometría, retrato y textura de posiciones, filtros y comportamiento.
+4. Declarar solo las claves propiedad del tema.
+5. Registrar diferencias Retail/Forever antes de escribir defaults compartidos.
+6. Revisar migraciones antiguas. `ApplyForeverPortraitDefaults`, o su equivalente vigente, no puede forzar retratos si el tema activo indica otra geometría.
+
+### 29.5 Dónde encontrar los diseños y assets
+
+Tema KullThranUI:
+
+- `KullThranUI/Modules/SimplicityTextures/Backdrop.tga`
+- `KullThranUI/Modules/SimplicityTextures/Normal.tga`
+- `KullThranUI/Modules/SimplicityTextures/Overlay.tga`
+- `KullThranUI/Modules/SimplicityTextures/Border.tga`
+- `KullThranUI/Modules/SimplicityTextures/circle_border.tga`
+- `KullThranUI/Libraries/KUITextures/CustomTextures/MelliReforged.tga`
+- `KullThranUI/Libraries/texture/media/portraits/`: máscaras y bordes circle, csquare, diamond, hexagon, shield, portrait y square.
+- `KullThranUI/Libraries/texture/media/icons/UnitFramesIcons/`.
+- `KullThranUI/Libraries/KUITextures/`: fondos y botones usados por el installer.
+
+`KullThranUI_ActionBars/Modules/ActionBars/ActionBars.lua` ya contiene `SHAPE_MASKS`, `SHAPE_BORDERS`, `SMP` y `SHAPE_MEDIA`. Se estudian para construir el kit `kui` sin convertir sus constantes locales en dependencias globales.
+
+Tema Classic, mediante recursos Blizzard con fallback:
+
+```text
+Interface\TargetingFrame\UI-TargetingFrame
+Interface\Buttons\UI-Quickslot
+Interface\Buttons\UI-Quickslot2
+Interface\TargetingFrame\UI-StatusBar
+Interface\MainMenuBar\UI-MainMenuBar-EndCap-Dwarf
+Interface\CastingBar\UI-CastingBar-Border
+```
+
+Tema Retail:
+
+- Usar atlas del cliente.
+- Comprobar `C_Texture.GetAtlasInfo` antes de `SetAtlas`.
+- Declarar fallback para cada pieza.
+- Mantener la lógica funcional de KUI aunque cambie el chrome.
+
+Tema Forever:
+
+- En Forever, inventariar primero recursos disponibles en ese cliente.
+- En Retail, no asumir que los atlas exclusivos existen.
+- Para emularlo en Retail se necesitan assets originales de KullThranUI o piezas Blizzard válidas.
+- UnitFrames debe considerar los retratos circulares y badges propios de Forever.
+
+### 29.6 Referencia privada que puede consultar el agente
+
+Ruta: `C:\Users\Pablo\Desktop\EllesmereUI-9.3.1`.
+
+Archivos útiles para entender responsabilidades, sin copiar código ni nombres:
+
+- `EllesmereUI/EllesmereUI_StyleCards.lua`: composición de tarjetas y miniaturas.
+- `EllesmereUI/EllesmereUI_ClassicArt.lua`: piezas clásicas compartidas.
+- `EllesmereUI/EllesmereUI_RetailAtlas.lua`: compatibilidad de atlas.
+- `EllesmereUIUnitFrames/EllesmereUIUnitFrames.lua`: kits de UnitFrames.
+- `EllesmereUIActionBars/EllesmereUIActionBars.lua`: estilos de slots.
+- `EllesmereUICooldownManager/EllesmereUICooldownManager.lua` y `EllesmereUI/EllesmereUICdmBuffBars.lua`.
+- `EllesmereUIResourceBars/EllesmereUIResourceBars.lua`.
+- `EllesmereUINameplates/EllesmereUINameplates.lua`.
+
+Esta ruta aparece únicamente en el estudio para que otro agente pueda reproducir la investigación. No debe trasladarse a Lua, XML, TOC, changelog, release notes, UI o metadatos de assets.
+
+### 29.7 Construcción de los live previews
+
+Crear una API compartida:
+
+```lua
+KT.VisualThemes:CreatePreview(parent, themeKey, options)
+KT.VisualThemes:UpdatePreview(preview, themeKey, options)
+KT.VisualThemes:ReleasePreview(preview)
+KT.VisualThemes:CreateThemeCard(parent, themeKey, options)
+```
+
+`General` presenta cuatro tarjetas 2 × 2. El installer puede usar cuatro columnas con ancho suficiente y 2 × 2 en ancho reducido.
+
+Todos los previews muestran la misma escena ficticia:
+
+1. Mini UnitFrame con nombre, vida, recurso, nivel y retrato cuando corresponda.
+2. Fila de cuatro o cinco slots.
+3. Banda corta de recurso o cast.
+
+Reglas:
+
+- Crear texturas y font strings propios dentro del `stage`.
+- No reparentar UnitFrames, ActionBars, CDM o frames seguros.
+- No escribir SavedVariables ni llamar setters o `ApplyAll`.
+- No registrar eventos ni `OnUpdate`.
+- Usar `SetClipsChildren(true)` cuando exista.
+- Fijar frame levels de fondo, barras, retrato, marco, textos e iconos.
+- Limpiar capas al reciclar.
+- El hover solo cambia realce y tooltip.
+- Validar atlas y fallback.
+- El preview `kui` usa la paleta guardada sin modificarla.
+
+Kits:
+
+- `kui`: Melli, color plano, borde propio y retrato según cliente.
+- `classic`: rutas clásicas Blizzard y slots cuadrados.
+- `retail`: atlas modernos disponibles y fallback.
+- `forever`: bronce, retrato y badge con assets propios/permitidos.
+
+Previews KUI existentes que sirven para estudiar patrones, no para reparentar frames:
+
+- `CreateBagsInstallerLivePreview`
+- `CreateDamageMeterInstallerLivePreview`
+- `CreateCooldownManagerInstallerLivePreview`
+- `CreateUnitFramesInstallerLivePreview`
+- `CreatePartyFramesInstallerLivePreview`
+- `CreateNameplatesInstallerPreview`
+- `CreateResourceBarsInstallerLivePreview`
+
+PartyFrames exporta `KullThranUI_PartyFramesOptions.CreateLivePreview`. UnitFrames también exporta una API de preview desde el archivo cargado. ResourceBars y Nameplates contienen renderers que pueden aportar helpers puros.
+
+### 29.8 Estructura propuesta
+
+```text
+KullThranUI/
+  Modules/
+    VisualThemes/
+      ThemeCatalog.lua
+      ThemeEngine.lua
+      ThemeRegistry.lua
+      ThemeSlots.lua
+      ThemePreview.lua
+      Adapters/
+        UnitFrames.lua
+        PartyFrames.lua
+        ActionBars.lua
+        ResourceBars.lua
+        CastBar.lua
+        CooldownManager.lua
+        Nameplates.lua
+```
+
+API propia: `KT.VisualThemes`. Datos: `profile.visualTheme`. Claves: `kui`, `classic`, `forever` y `retail`. `profile.skin.stylePreset` sigue siendo únicamente la paleta.
+
+Orden para el agente:
+
+1. Inventario real de TOC, claves y assets.
+2. Núcleo y migración sin UI.
+3. UnitFrames como piloto.
+4. Renderer de preview independiente.
+5. Selector permanente en General y bloqueo de colores.
+6. ActionBars.
+7. ResourceBars y CastBar.
+8. Cooldown Manager.
+9. Nameplates.
+10. PartyFrames.
+11. Futuro paso del installer.
+12. Port a Forever cuando Retail esté validado.
+
+### 29.9 Prohibición de nombres, tags y comentarios externos
+
+El código final debe usar nombres propios: `KT.VisualThemes`, `visualTheme`, `themeKey`, `ThemeCatalog`, `ThemeEngine`, `ThemePreview`, `kui`, `classic`, `forever` y `retail`.
+
+Queda prohibido en archivos nuevos o modificados:
+
+- Tags o comentarios que mencionen el proyecto de referencia.
+- Comentarios `inspired by`, `port`, `compat` o similares asociados a esa marca.
+- Variables, funciones, tablas, constantes, prefijos o sufijos como `eui` o `EUIStyle`.
+- Textos visibles, logs, SavedVariables, changelog o release notes con esa marca.
+- Metadatos de procedencia en assets.
+- Nombres de funciones privadas copiados de la referencia.
+
+Antes de cerrar la implementación:
+
+```powershell
+rg -n -i "ellesmere|eui" <archivos-nuevos-o-modificados-del-sistema-de-temas>
+```
+
+El resultado esperado es cero. La búsqueda se limita a los archivos de esta función porque este documento de estudio y el historial pueden contener referencias necesarias.
+
+### 29.10 Criterios de aceptación
+
+- `General` conserva la fila de dos columnas sin solapes.
+- `Manual Colors` aparece debajo a ancho completo.
+- Las cuatro tarjetas tienen previews construidos en tiempo real.
+- Solo `kui` habilita paletas y colores manuales.
+- Cambiar de tema no borra la paleta KUI.
+- Abrir previews no modifica SavedVariables.
+- Cambiar `kui -> classic -> retail -> forever -> kui` recupera el aspecto KUI previo.
+- Se prueban UI scales 100 %, 125 % y 150 %.
+- Se validan perfiles nuevos, antiguos e importados.
+- Se ejecutan parser Lua y `git diff --check`.
+- Se revisa visualmente Retail antes de portar.
+- Se repite la matriz completa en Forever.
+- La búsqueda de nombres prohibidos da cero en los archivos de implementación.
+
+## 30. Problemas surgidos durante la implementación en Forever y soluciones
+
+1. **Orden de carga en el TOC (KullThranUI.toc)**:
+   - **Problema**: El documento sugería cargar VisualThemes antes de que las opciones lo usaran. Sin embargo, al insertarlo antes de Options.lua, fue necesario asegurar que el namespace KT ya estuviera completamente inicializado por KullThranUI.lua.
+   - **Solución**: Insertar el bloque de VisualThemes exactamente después de Widgets.lua y antes de Options.lua. Esto garantiza que los helpers de UI estén disponibles si el motor de temas los necesita, y que Options.lua pueda acceder a KT.VisualThemes para registrar las páginas.
+
+2. **Refactorización de Options.lua (Manual Colors)**:
+   - **Problema**: La sección Manual Colors estaba programada como una función anónima pasada a AddOptionBlock para la columna derecha, encapsulando variables locales como skin y ApplyManualStyle. Al moverla a un bloque de ancho completo debajo de la cuadrícula, el alcance de estas variables se rompe si no se extraen adecuadamente.
+   - **Solución**: Se deben elevar las declaraciones de skin y ApplyManualStyle al ámbito superior de la función creadora de la página de opciones, para que tanto Preset Colors como el nuevo bloque de ancho completo de Manual Colors puedan acceder a ellas sin errores de variable nil.
+
+3. **Invocación de ReloadUI()**:
+   - **Problema**: El prototipo de ThemeEngine.lua llamaba directamente a ReloadUI(). En Retail, esto puede causar un error de interfaz bloqueada (taint) si se ejecuta desde código inseguro sin un evento de hardware (click).
+   - **Solución**: Reemplazar la llamada directa a ReloadUI() por el wrapper nativo de la UI, KT:Reload() o usar el popup de confirmación estándar de KullThranUI (StaticPopup_Show("KT_RELOAD_UI")), asegurando que la acción provenga siempre de la confirmación del usuario.
+
+4. **Semilla de UnitFrames y Defaults de AceDB**:
+   - **Problema**: Al implementar el adaptador de UnitFrames, los perfiles recién creados a veces aplicaban los defaults de AceDB definidos en Defaults.lua *después* de que la semilla del tema intentara configurar portraitStyle.
+   - **Solución**: Asegurar que ThemeEngine:ApplyAll() o la semilla inicial del adaptador se ejecute en el evento PROFILE_CREATED o PLAYER_ENTERING_WORLD tras la carga del perfil de AceDB, o bien inyectar la semilla directamente en la tabla de defaults antes de inicializar la DB.
+
+5. **Bloqueo Visual de Colores**:
+   - **Problema**: Al intentar añadir un "blocker" transparente sobre Manual Colors cuando enabled == false, los dropdowns de AceGUI/KUI a veces filtraban clics a través del frame bloqueador debido al frame level.
+   - **Solución**: Asegurar que el frame bloqueador tenga EnableMouse(true) y un FrameLevel sustancialmente más alto que el contenedor principal (locker:SetFrameLevel(container:GetFrameLevel() + 10)), además de gestionar el estado alpha de los textos y texturas manualmente para dar el feedback visual correcto.
+6. **Sincronización de getOwnedPaths en los Adaptadores**:
+   - **Problema**: Módulos como Nameplates y Cooldown Manager tienen configuraciones visuales muy profundas (p. ej. profile.nameplates.units.TARGET.healthbar.texture). Declarar todas estas rutas manualmente en getOwnedPaths es propenso a errores u omisiones si se añaden nuevas opciones visuales en el futuro.
+   - **Solución**: Es recomendable implementar un helper en el núcleo del motor de temas que permita definir patrones o rutas parciales (ej. *.texture, *.borderTheme) para extraer iterativamente las opciones correspondientes de la tabla de defaults, evitando el mantenimiento duplicado.
+
+7. **Lazy Loading y Modificación Temprana**:
+   - **Problema**: Algunos módulos de KullThranUI utilizan *lazy loading* para instanciar sus frames y registrar sus opciones. Cuando el instalador o el menú inyectan la semilla de un nuevo tema, podrían inicializar tablas en KullThranDB antes de que el módulo principal las asigne o valide.
+   - **Solución**: Los adaptadores solo deben devolver la estructura plana esperada de opciones. La validación o forzado de actualización visual de los frames (como ActionBars o CastBar) no debe realizarse inmediatamente; en su lugar, se confía en que el ReloadUI() forzará la inicialización natural de todos los módulos con los valores actualizados en la base de datos.
+8. **Transición del Instalador (Paso de Módulos a Tema Visual)**:
+   - **Problema**: Originalmente, el paso de selección de módulos evaluaba si había cambios sucios (
+eedsReload) y lanzaba el ReloadUI() al hacer clic en Finish. Al cambiar Finish por Next, esta validación se pierde o se retrasa hasta el nuevo paso, donde el motor de temas puede lanzar su propia recarga.
+   - **Solución**: El estado moduleSettingsDirty debe conservarse a nivel del instalador. El botón "Apply" de las tarjetas visuales debe marcar la recarga como inminente. Alternativamente, la recarga del instalador y la recarga del motor de temas deben unificarse en una única llamada transaccional al pulsar Finish en el último paso.
+
+9. **Comportamiento Abrupto de la Recarga desde la Tarjeta**:
+   - **Problema**: El ThemeSelector.lua implementado muestra un popup (StaticPopup_Show) que llama a ReloadUI() de inmediato al confirmar. En el contexto del instalador, esto corta abruptamente la experiencia antes de que el usuario pulse Finish.
+   - **Solución**: Para la integración final del instalador, CreateSelector debe aceptar un callback u opción onApply que anule la recarga inmediata, permitiendo que el instalador guarde la petición (profile.visualTheme.requested = key) y ejecute la recarga solo al finalizar el wizard, tal y como especifica el estudio original ("La recarga de estilo será la última operación del installer").
+
+10. **Problema de renderizado de tarjetas (Width = 0)**:
+   - **Problema**: El menú Options.lua generaba el contenedor de tarjetas sin un tamaño predefinido explícito. El motor de WoW devolvía GetWidth() == 0, lo que causaba que las tarjetas de los estilos intentaran calcular anchos negativos y no se mostraran en la interfaz.
+   - **Solución**: Enviar explícitamente el ancho calculado de la columna styleCols.blockW - 20 desde Options.lua hasta KT.VisualThemes:CreateSelector() en options.width, y añadir fallbacks seguros en ThemeSelector.lua.
+
+11. **Alcance del namespace KT (LibStub vs Tabla Privada)**:
+   - **Problema**: Las tarjetas no se generaban porque KT.VisualThemes se evaluaba como nulo en Options.lua. Esto ocurría porque los archivos de VisualThemes se definían con local addonName, KT = ..., lo que inyectaba VisualThemes en la tabla privada 
+s, pero Options.lua buscaba en la instancia global del addon creada por LibStub("AceAddon-3.0").
+   - **Solución**: Refactorizar la cabecera de los 15 archivos nuevos de VisualThemes para usar local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI"), asegurando que KT.VisualThemes se adhiera al scope global correcto del framework de Ace3.
+
+12. **Paths anidados (e.g., "player.showPortrait") interpretados literalmente**:
+   - **Problema**: Los adaptadores que reportaban en su getOwnedPaths claves como "player.showPortrait" fallaban al guardar y restaurar datos, porque ApplyAll hacía p[path], generando una clave string literal en lugar de adentrarse en la sub-tabla player.
+   - **Solución**: Implementar los helpers GetPath y SetPath en ThemeEngine.lua para resolver rutas separadas por puntos de forma recursiva, permitiendo manipular jerarquías profundas en las bases de datos de los módulos.
+
+13. **Cuelgues por DB nula al ejecutar ReloadUI**:
+   - **Problema**: Algunos adaptadores como ActionBars devolvían 
+il en su getProfile() si el usuario jamás había tocado las opciones o el módulo estaba inactivo. Esto causaba un error en dapter.seed(p, ...) y detenía el bucle de ApplyAll(), impidiendo que ReloadUI() se llegara a disparar, con lo que el popup no hacía nada aparente.
+   - **Solución**: Envolver la ejecución del adaptador dentro de if p then en ThemeEngine.lua, y garantizar en los getProfile() de los adaptadores la creación on-the-fly (or {}) anclada directamente en la base de datos principal (KT.db.profile.modulo).
+
+14. **Colores de tema con formato equivocado en ThemePreview.lua (`color[1]` vs `color.r`)**:
+   - **Problema**: `ThemeCatalog.lua` define `theme.color` como `{ r=, g=, b= }`, pero los helpers `Color()`/`AddEdges()` de `ThemePreview.lua` indexaban `color[1..4]` (formato array, usado internamente por la tabla `PREVIEW`). Al llamar `AddEdges(card, theme.color, ...)` en `CreateThemeCard`, `color[1]` daba `nil` y `SetColorTexture(nil, nil, nil, 1)` lanzaba `bad argument #1`, rompiendo el selector entero (`ThemeSelector.lua` -> `Options.lua`) en cuanto se abria la pagina.
+   - **Solución**: Se anadio un helper `ColorParts(color)` que detecta si la tabla trae `r/g/b` o indices numericos y devuelve siempre 4 numeros; `Color()` y `AddEdges()` lo usan internamente. No se toco el formato de `ThemeCatalog.lua` porque otros sitios ya leen `theme.color.r/g/b` directamente.
+
+15. **La tarjeta "Forever" del selector no debe ser un kit aparte**: se decidio que su miniatura reutilice literalmente los flags de forma de "Classic" (`classicSlots = true`, retrato cuadrado sin mascara) y solo cambie la paleta a bronce/dorado, en vez de mantener un diseno plano independiente (antes usaba `roundPortrait = true`, casi identico a `kui`). De paso, el color de los iconos de slot clasicos estaba hardcodeado (`0.78, 0.65, 0.40`) igual para Classic y Forever; ahora sale de `kit.border` para que cada tema se vea con su propio tono.
+
+16. **Adaptador de Damage Meter apuntaba a texturas que no existen**: `seed()` asignaba `barTexture = "Blizzard"` / `"Blizzard Raid Bar"` para classic/retail, pero esos nombres nunca estuvieron en la whitelist real (`DAMAGE_METER_TEXTURE_PATHS` en `Enhancements_DamageMeter.lua` / `DAMAGE_METER_TEXTURES` en `Enhancements_Options.lua`), asi que `GetDamageMeterBarTexture` caia siempre al Melli por defecto sin avisar. Se registro una textura nativa real y sin coste de asset, `Interface\TargetingFrame\UI-StatusBar`, con el nombre visible "Blizzard", y se usa para classic/retail/forever por igual (el cromado, no la textura, es lo que distingue a Forever). Pendiente decidir si Classic merece su propia textura distinta mas adelante; de momento comparte la misma con Retail, como pidio el usuario ("blizzard o forever").
+
+17. **Cromado dorado/bronce del Damage Meter, alcance deliberadamente acotado**: se anadio `KT.VisualThemes:GetDamageMeterAccentColor()` en `ThemeEngine.lua` (dorado fijo para classic/retail, bronce fijo para forever, `nil` para kui, que sigue el acento manual del usuario). Solo se aplico a: el fondo idle y hover de los botones de cabecera (`StyleHeaderButton`, `CreateHeaderButton`) y a `frame.accentLine` (borde superior, oculto salvo en forever, que es el "borde bronce" pedido). **No** se toco: los colores por clase de las filas, el modo "flat accent" cuando `classColors == false`, ni el panel de desglose (`BreakdownPanel`/`ApplyBreakdownBackgroundTheme`), que sigue el sistema de skin/preset normal sin distincion de tema. Si en el futuro se quiere que el desglose tambien recoloree por tema, es un cambio aparte y mas grande (ese panel usa `GetAccentColor()` en mas de una decena de sitios propios).
+
+18. **Minimapa: no hacia falta desocultar nada de Blizzard**: la sospecha inicial era que `MinimapBorder`/`MinimapBorderTop` (ocultados a proposito en `Mod:HandleBorders()`) debian mostrarse para dar identidad visual por tema. Investigando `Minimap.lua` se confirmo que el addon ya dibuja su propio borde en pixeles (`CreatePixelPerfectBorder`/`UpdatePixelPerfectBorder`), que ya soporta forma cuadrada o circular (`db.shape`) y color propio (`db.borderColor = {r,g,b,a}`) tanto para el modo circulo como cuadrado. No se toco `HandleBorders()`. Se creo `VisualThemes/Adapters/Minimap.lua` (nuevo, registrado en `KullThranUI.toc` junto a los demas adaptadores) que solo hace `seed()` de `shape = "ROUND"` + `borderColor` bronce (forever) o dorado (classic) sobre `KT.db.profile.minimap` directamente (sin pasar por `KT:GetModule("Minimap")`, para no depender del orden de carga entre el addon principal y `KullThranUI_Minimap`). Retail y kui quedan sin tocar a proposito: implementacion solo en Forever por ahora, pendiente de portar a Retail una vez validada en juego.

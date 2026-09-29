@@ -494,8 +494,15 @@ end
 
 local function RestoreGuildInviteIconTextures(textures)
     for _, icon in ipairs(textures or {}) do
-        if icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-        if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
+        -- GuildInviteFrameTabardEmblem uses a dynamically generated atlas
+        -- coordinate from SetLargeGuildTabardTextures. Replacing it with the
+        -- generic 0.08/0.92 crop displays the whole emblem sheet as a large
+        -- rectangle in the invite dialog. Other icon regions keep the shared
+        -- skin crop.
+        if icon ~= _G.GuildInviteFrameTabardEmblem and icon.SetTexCoord then
+            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        end
+        if icon.SetDrawLayer then icon:SetDrawLayer("ARTWORK", 2) end
         if icon.SetAlpha then icon:SetAlpha(1) end
         if icon.Show then icon:Show() end
     end
@@ -512,6 +519,22 @@ local function SkinGuildInvite()
         GuildInviteFrame._ktGuildInviteSkinned = true
     end
     RestoreGuildInviteIconTextures(iconTextures)
+
+    local tabard = _G.GuildInviteFrameTabardEmblem
+    local tabardBackground = _G.GuildInviteFrameTabardBackground
+    if tabard then
+        tabard:ClearAllPoints()
+        tabard:SetSize(56, 64)
+        if tabardBackground then
+            tabard:SetPoint("CENTER", tabardBackground, "CENTER", 0, 0)
+        else
+            tabard:SetPoint("CENTER", GuildInviteFrame, "CENTER", 0, -48)
+        end
+        tabard:SetDrawLayer("ARTWORK", 2)
+        tabard:SetAlpha(1)
+        tabard:Show()
+    end
+
     S:CreateBackdrop(GuildInviteFrame, true)
     if GuildInviteFrame.Points then
         GuildInviteFrame.Points:ClearAllPoints()
@@ -1089,6 +1112,12 @@ local function SkinLookingForGuild()
         S:ContentShade(_G.GuildFinderRequestMembershipFrameInputFrame)
         end
     end
+end
+
+if S:IsForeverProject() then
+    -- Forever creates GuildInviteFrame from Blizzard_FrameXML; the Retail
+    -- GuildUI callback is not the correct load boundary for this popup.
+    S.SkinFuncs["Blizzard_FrameXML"] = SkinGuildInvite
 end
 
 S.SkinFuncs["Blizzard_LookingForGuildUI"] = SkinLookingForGuild

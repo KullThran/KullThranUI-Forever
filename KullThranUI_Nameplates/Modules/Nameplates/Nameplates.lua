@@ -5313,13 +5313,22 @@ function NameplateFrame:UpdateName()
     end
 
     local displayName = UnitName(unit)
+    if ns._IsSecretValue(displayName) then
+        -- Forever can expose the visible name as a secret string during
+        -- restricted combat. Pass it straight to the FontString, but never
+        -- retain or inspect it from Lua (comparisons/length are forbidden).
+        self._displayNameText = nil
+        self.name:SetText(displayName)
+        return
+    end
+
     local nameText = type(displayName) == "string" and displayName or ""
     self._displayNameText = nameText
     self.name:SetText(nameText)
 end
 
 local function EstimateTextWidth(text, fontSize, barWidth)
-    if type(text) ~= "string" or text == "" then return 0 end
+    if ns._IsSecretValue(text) or type(text) ~= "string" or text == "" then return 0 end
 
     local size = math.max(6, tonumber(fontSize) or 11)
     local width = math.max(0, tonumber(barWidth) or 0)
@@ -5336,6 +5345,7 @@ local function ResolveLevelXOffset(frame, baseX)
     local levelText = frame._displayLevelText
     local nameSlot = FindSlotForElement("enemyName")
     if nameSlot ~= "textSlotTop"
+        or ns._IsSecretValue(nameText)
         or type(nameText) ~= "string" or nameText == ""
         or type(levelText) ~= "string" or levelText == "" then
         return baseX, nil

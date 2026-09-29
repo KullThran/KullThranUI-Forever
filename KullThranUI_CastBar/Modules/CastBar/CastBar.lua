@@ -477,6 +477,10 @@ function Mod:OnInitialize()
         }
     end
 
+    if KT.VisualThemes and KT.VisualThemes.ApplyCurrentThemeToModule then
+        KT.VisualThemes:ApplyCurrentThemeToModule("castbar")
+    end
+
     self.db = KT.db.profile.castbar
     if self.db.autoPosition == nil then self.db.autoPosition = true end
     if self.db.autoWidth    == nil then self.db.autoWidth    = false end

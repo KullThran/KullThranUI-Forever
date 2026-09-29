@@ -595,6 +595,7 @@ function AR:OnEnable()
     self:RegisterEvent('SPEED_UPDATE', 'RefreshStatsEvent')
     self:RegisterEvent('LIFESTEAL_UPDATE', 'RefreshStatsEvent')
     self:RegisterEvent('AVOIDANCE_UPDATE', 'RefreshStatsEvent')
+    self:RegisterEvent('PLAYER_REGEN_ENABLED')
     self:CreateStatsPanel()
     self:CreateConfigButton()
     if _G.CharacterModelScene then
@@ -824,9 +825,15 @@ function AR:KUIDebugCheck()
         nativeStatsShown = _G.CharacterStatsPane and _G.CharacterStatsPane:IsShown() or false,
         missingAPIs = (#missing > 0) and table.concat(missing, ",") or nil,
         lastRefreshError = self._lastRefreshError,
+        inCombat = InCombatLockdown and InCombatLockdown() or false,
+        combatRefreshPending = self._combatRefreshPending == true,
     }
 end
 function AR:SafeRefresh()
+    if InCombatLockdown and InCombatLockdown() then
+        self._combatRefreshPending = true
+        return false
+    end
     local ok, err = pcall(function()
         self:Refresh()
     end)
@@ -837,6 +844,24 @@ function AR:SafeRefresh()
     else
         self._lastRefreshError = nil
     end
+    return ok
+end
+
+function AR:PLAYER_REGEN_ENABLED()
+    if not self._combatRefreshPending then return end
+    self._combatRefreshPending = nil
+    C_Timer.After(0.1, function()
+        if not self or not self.SafeRefresh then return end
+        if InCombatLockdown and InCombatLockdown() then
+            self._combatRefreshPending = true
+            return
+        end
+        local characterShown = _G.CharacterFrame and _G.CharacterFrame.IsShown and _G.CharacterFrame:IsShown()
+        local paperDollShown = _G.PaperDollFrame and _G.PaperDollFrame.IsShown and _G.PaperDollFrame:IsShown()
+        if characterShown or paperDollShown then
+            self:SafeRefresh()
+        end
+    end)
 end
 
 function AR:RefreshEquippedItems(_, unit)
@@ -875,12 +900,24 @@ function AR:InstallVisibilityWatcher()
         if elapsed < 0.1 then return end
         elapsed = 0
 
+        -- Keep the last complete stats snapshot while WoW exposes protected
+        -- combat values. Re-layout and visibility work resumes after combat.
+        if InCombatLockdown and InCombatLockdown() then
+            self._combatRefreshPending = true
+            return
+        end
+
         local characterFrame = _G.CharacterFrame
         local paperDollFrame = _G.PaperDollFrame
+        local rightPaneCollapsed = characterFrame
+            and characterFrame.IsRightPaneCollapsed
+            and characterFrame:IsRightPaneCollapsed()
         if characterFrame then
             if not self.Header then self:CreateHeader() end
             if not self.StatsFrame then self:CreateStatsPanel() end
-            if self.StatsFrame then self:LayoutStatsPanel() end
+            if self.StatsFrame and not rightPaneCollapsed then
+                self:LayoutStatsPanel()
+            end
             if not self.configBtn then self:CreateConfigButton() end
             if not self._backgroundSelectorReady and _G.CharacterModelScene then
                 self:CreateBackgroundSelector()
@@ -894,7 +931,9 @@ function AR:InstallVisibilityWatcher()
         local nativeStatsShown = nativeStatsPane and nativeStatsPane.IsShown and nativeStatsPane:IsShown()
         -- Forever puede dejar CharacterFrame oculto mientras PaperDollFrame sigue visible.
         -- PaperDollFrame es la fuente fiable para decidir si mostrar nuestras estadisticas.
-        local shouldShow = paperDollShown and self._ktExternalPaneController ~= true
+        local shouldShow = paperDollShown
+            and not rightPaneCollapsed
+            and self._ktExternalPaneController ~= true
 
         -- Keep Blizzard's replaced stats pane hidden without hooking its Show
         -- method. This avoids entering the protected CharacterFrame path.
@@ -933,6 +972,10 @@ end
 
 function AR:RefreshStatsEvent(_, unit)
     if unit and unit ~= "player" then return end
+    if InCombatLockdown and InCombatLockdown() then
+        self._combatRefreshPending = true
+        return
+    end
     if self._statsRefreshQueued then return end
 
     self._statsRefreshQueued = true
@@ -2371,6 +2414,10 @@ function AR:CreateConfigButton()
 end
 
 function AR:Refresh()
+    if InCombatLockdown and InCombatLockdown() then
+        self._combatRefreshPending = true
+        return
+    end
     self.db = KT.db.profile.armory
     EnsureArmoryColorDefaults(self.db)
     if _G.CharacterFrame then _G.CharacterFrame:SetScale(self.db.scale) end
@@ -2397,5 +2444,8 @@ function AR:Refresh()
              if button then self:UpdateSlot(button) end
         end
         self:UpdateMyStats()
+        if self.StatsFrame and self.StatsFrame.ScrollFrame then
+            self.StatsFrame.ScrollFrame:SetVerticalScroll(0)
+        end
     end
 end

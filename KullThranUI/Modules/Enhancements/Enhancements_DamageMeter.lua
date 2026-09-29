@@ -54,6 +54,7 @@ local function DAMAGE_METER_RESOLVED_FONT()
 end
 local DAMAGE_METER_TEXTURE_PATHS = {
     [BAR_TEXTURE] = true,
+    ["Interface\\TargetingFrame\\UI-StatusBar"] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Clean.blp"] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Stripes_Thin.blp"] = true,
@@ -203,6 +204,19 @@ local function GetAccentColor()
         end
     end
     return KT.C_R or 1, KT.C_G or 0, KT.C_B or 0.3333333333
+end
+
+-- Header chrome (idle/hover icon color and the top border) follows the
+-- active Visual Theme instead of the user's accent under classic/retail/
+-- forever, so the meter reads as "Blizzard gold" or "Forever bronze" no
+-- matter which color preset is selected. kui keeps the user's own accent.
+-- Row/class colors and the breakdown popup are untouched by this.
+local function GetHeaderChromeColor()
+    if KT.VisualThemes and KT.VisualThemes.GetDamageMeterAccentColor then
+        local r, g, b = KT.VisualThemes:GetDamageMeterAccentColor()
+        if r then return r, g, b end
+    end
+    return GetAccentColor()
 end
 
 local function IsUnlockModeOpen()
@@ -682,8 +696,16 @@ local function StyleHeaderButton(button)
     if not button then
         return
     end
+    local themedR, themedG, themedB
+    if KT.VisualThemes and KT.VisualThemes.GetDamageMeterAccentColor then
+        themedR, themedG, themedB = KT.VisualThemes:GetDamageMeterAccentColor()
+    end
     if KT.AddBackdrop then
-        KT:AddBackdrop(button, 0, 0, 0, 0)
+        if themedR then
+            KT:AddBackdrop(button, themedR, themedG, themedB, 0.30)
+        else
+            KT:AddBackdrop(button, 0, 0, 0, 0)
+        end
     end
     if button.borderKT and button.borderKT.Hide then
         button.borderKT:Hide()
@@ -691,6 +713,13 @@ local function StyleHeaderButton(button)
     if button.text then
         button.text:SetTextColor(1, 1, 1, 1)
         ApplyFontReadability(button.text)
+    end
+    if button.arrow then
+        if themedR then
+            button.arrow:SetVertexColor(themedR, themedG, themedB, 1)
+        else
+            button.arrow:SetVertexColor(0.82, 0.82, 0.86, 1)
+        end
     end
 end
 
@@ -713,7 +742,7 @@ local function CreateHeaderButton(parent)
     button.text:SetPoint("RIGHT", button.arrow, "LEFT", -3, 0)
     button.text:SetJustifyH("CENTER")
     button:SetScript("OnEnter", function(self)
-        local r, g, b = GetAccentColor()
+        local r, g, b = GetHeaderChromeColor()
         if self.text then
             self.text:SetTextColor(r, g, b, 1)
         end
@@ -2667,7 +2696,15 @@ function Mod:RefreshDamageMeterStyle(useCurrentSize, targetFrame)
         frame.borderKT:Hide()
     end
     if frame.accentLine then
-        frame.accentLine:Hide()
+        -- Forever adds a bronze top border the default Blizzard/kui look
+        -- doesn't have; classic/retail/kui stay borderless as before.
+        if KT.VisualThemes and KT.VisualThemes:GetRenderedTheme() == "forever" then
+            local r, g, b = KT.VisualThemes:GetDamageMeterAccentColor()
+            frame.accentLine:SetColorTexture(r, g, b, 1)
+            frame.accentLine:Show()
+        else
+            frame.accentLine:Hide()
+        end
     end
 
     StyleHeaderButton(frame.modeButton)
