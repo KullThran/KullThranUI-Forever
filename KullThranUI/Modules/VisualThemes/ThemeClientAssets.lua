@@ -35,7 +35,12 @@ local function KTDebugDumpFrame(frame, label)
 end
 
 
-SLASH_KTFOREVERDEBUG1 = "/ktdebug"
+-- NOT /ktdebug: KullThranUI already registers its own /ktdebug ("compatibility
+-- scan") elsewhere in the addon. Same command string means SlashCmdList only
+-- keeps one handler -- confirmed live: every previous /ktdebug attempt this
+-- session actually ran THAT scan, never this code, which is why nothing here
+-- ever seemed to have any effect. Using a name that can't collide.
+SLASH_KTFOREVERDEBUG1 = "/ktforevertab"
 SlashCmdList["KTFOREVERDEBUG"] = function()
     -- Printed to normal chat (one message per line) instead of a custom
     -- window, so it lands in KullThranUI_Chat's own history and can be
