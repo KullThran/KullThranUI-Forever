@@ -3781,7 +3781,7 @@ local function ApplyClassicFrameArt(frame, unit)
 
     if VT and VT.ApplyForeverUnitFrameArt and VT.ClearForeverUnitFrameArt then
         if renderedTheme == "forever" then
-            VT:ApplyForeverUnitFrameArt(frame, portraitRegion)
+            VT:ApplyForeverUnitFrameArt(frame, portraitRegion, unit)
         else
             VT:ClearForeverUnitFrameArt(frame)
         end
