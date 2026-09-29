@@ -12,6 +12,21 @@ KT.VisualThemes = KT.VisualThemes or {}
 -- frame state directly, independent of whether that function ever ran, so
 -- it can't be silenced the same way. Delete this whole block (down to
 -- SlashCmdList) once the issue is diagnosed -- not meant to ship on.
+-- GetPoint()/GetWidth()/GetText() etc. can return a "secret" value on
+-- regions inside a secure/protected subtree (confirmed live: RightText is a
+-- tagged health-text FontString and threw here). tostring()/string.format()
+-- do NOT strip that taint -- the result string is itself secret, and
+-- table.concat then refuses it ("invalid value (secret) ... for 'concat'").
+-- This must check issecretvalue() and return a fresh literal BEFORE the
+-- value ever touches tostring/format, or the taint just propagates further.
+local function KTDebugSafeStr(value)
+    if type(issecretvalue) == "function" and issecretvalue(value) then
+        return "<secret>"
+    end
+    if value == nil then return "nil" end
+    return tostring(value)
+end
+
 local function KTDebugDumpPoints(region, label)
     if type(region) ~= "table" or type(region.GetNumPoints) ~= "function" then
         return label .. ": (no GetNumPoints)"
@@ -21,9 +36,10 @@ local function KTDebugDumpPoints(region, label)
     local parts = {}
     for i = 1, n do
         local point, relTo, relPoint, x, y = region:GetPoint(i)
+        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
         parts[#parts + 1] = string.format("%s->%s(%s) %s,%s",
-            tostring(point), tostring(relTo and (relTo.GetName and relTo:GetName() or relTo)),
-            tostring(relPoint), tostring(x), tostring(y))
+            KTDebugSafeStr(point), KTDebugSafeStr(relToName),
+            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y))
     end
     return label .. ": " .. table.concat(parts, " | ")
 end
@@ -68,13 +84,13 @@ local function KTDebugDumpFrame(frame, label)
         -- /ktforevertab already confirmed correct -- but frame.RightText (the
         -- value) and frame._kuiStatusOverlay (AFK/Ghost/Dead) were NEVER
         -- actually checked. Adding both now to close that blind spot.
-        tostring(frame.RightText and frame.RightText.IsShown and frame.RightText:IsShown()),
-        tostring(frame.RightText and frame.RightText.GetWidth and frame.RightText:GetWidth()),
-        tostring(frame.RightText and frame.RightText.GetHeight and frame.RightText:GetHeight()),
-        tostring(frame.RightText and frame.RightText.GetText and frame.RightText:GetText()),
+        KTDebugSafeStr(frame.RightText and frame.RightText.IsShown and frame.RightText:IsShown()),
+        KTDebugSafeStr(frame.RightText and frame.RightText.GetWidth and frame.RightText:GetWidth()),
+        KTDebugSafeStr(frame.RightText and frame.RightText.GetHeight and frame.RightText:GetHeight()),
+        KTDebugSafeStr(frame.RightText and frame.RightText.GetText and frame.RightText:GetText()),
         KTDebugDumpPoints(frame.RightText, "RightTextPoints"),
-        tostring(frame._kuiStatusOverlay ~= nil),
-        tostring(frame._kuiStatusOverlay and frame._kuiStatusOverlay.IsShown and frame._kuiStatusOverlay:IsShown()),
+        KTDebugSafeStr(frame._kuiStatusOverlay ~= nil),
+        KTDebugSafeStr(frame._kuiStatusOverlay and frame._kuiStatusOverlay.IsShown and frame._kuiStatusOverlay:IsShown()),
         KTDebugDumpPoints(frame._kuiStatusOverlay, "StatusOverlayPoints")
     )
 end
