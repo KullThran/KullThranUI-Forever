@@ -36,7 +36,10 @@ KT.VisualThemes:RegisterModule("cooldownmanager", {
         elseif themeKey == "retail" then
             shape, borderSize, r, g, b, frameArtKit = "csquare", 1, 0.12, 0.28, 0.50, "default"
         else
-            shape, borderSize, r, g, b = "none", 1, 0, 0, 0
+            -- kui: reset the classic-border field to the module's own default
+            -- ("default", see KUICooldownManager.lua barDefaults) so a stale
+            -- "classic" value can never survive into kui.
+            shape, borderSize, r, g, b, frameArtKit = "none", 1, 0, 0, 0, "default"
         end
         profile.reskinBorders = true
         profile.cdmBars = profile.cdmBars or {}

@@ -47,7 +47,9 @@ KT.VisualThemes:RegisterModule("resourcebars", {
             texture, borderSize, frameArtKit = "Blizzard Raid Bar", 0, "default"
             healthR, healthG, healthB = 0.12, 0.48, 0.95
         else
-            texture, borderSize = "Melli Reforged", 1
+            -- kui: reset the classic-border field to ResourceBars' own
+            -- default (KUIResourceBars.lua general defaults: frameArtKit = "default").
+            texture, borderSize, frameArtKit = "Melli Reforged", 1, "default"
         end
         profile.general = profile.general or {}
         profile.general.texture = texture
