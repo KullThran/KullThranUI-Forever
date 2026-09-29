@@ -2539,6 +2539,20 @@ local function UpdateBordersForScale(frame, unit)
         PP.SetBorderSize(frame.unifiedBorder, borderSize)
     end
 
+    -- Forever/Classic real stock geometry (ApplyClassicFrameArt, called from
+    -- CreateUnifiedBorder immediately before this function runs at every
+    -- call site) already sized frame/portrait/health/power correctly. Steps
+    -- 2-8 below assume KUI's NORMAL (unthemed) layout model and unconditionally
+    -- re-derive those same sizes from it -- confirmed live via /ktforevertab:
+    -- Health's width matched the full frame width (this function's own
+    -- TOPLEFT+RIGHT dual anchor, which derives size from the frame's edges)
+    -- instead of the real ~123px bar-track width, despite
+    -- _ktForeverLayoutActive being true. This function is what silently
+    -- undid the real geometry, every single time it ran after it.
+    if frame._ktForeverLayoutActive or frame._ktClassicLayoutActive then
+        return
+    end
+
     -- 2) Gather layout info
     local ppPos = settings.powerPosition or "below"
     local ppIsAtt = (ppPos == "below" or ppPos == "above")
