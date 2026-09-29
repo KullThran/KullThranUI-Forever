@@ -74,6 +74,9 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.healthBarTexture = "Melli Reforged"
             SetUnitValues(profile, clientFlavor == "forever", "Melli Reforged")
             if profile.target and clientFlavor == "forever" then profile.target.portraitSide = "right" end
+            -- kui: reset the classic-border field to UnitFrames' own default
+            -- (KUIUnitFrames.lua defaults: frameArtKit = "default").
+            profile.frameArtKit = "default"
         end
     end,
     validate = function(profile)

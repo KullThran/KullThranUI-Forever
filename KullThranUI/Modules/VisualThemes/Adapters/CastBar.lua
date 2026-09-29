@@ -35,6 +35,9 @@ KT.VisualThemes:RegisterModule("castbar", {
             profile.texture = "Melli"
             profile.iconShape = "SQUARE"
             profile.colorMode = "THEME"
+            -- kui: reset the classic-border field to CastBar's own default
+            -- (CastBar.lua defaults: frameArtKit = "default").
+            profile.frameArtKit = "default"
         end
     end,
     validate = function(profile)

@@ -245,6 +245,26 @@ local testProfile = { buttonStyle = "KUI", buttonShape = "INVALID" }
 abAdapter.validate(testProfile)
 expect(testProfile.buttonShape, "NONE", "actionbars invalid shape resets to NONE")
 
+-- kui must reset the classic-border field even when no kui slot exists
+-- (e.g. a module whose profile did not exist yet when the user left kui and
+-- was later late-applied under classic). Round-trip: classic -> kui with the
+-- kui slots removed, so seed("kui") is what runs.
+expect(KT.VisualThemes:ApplyAll("classic"), true, "apply classic for kui frameArtKit reset")
+expect(KT.db.profile.unitFrames.frameArtKit, "classic", "pre-reset unit frame art kit")
+expect(KT.db.profile.castbar.frameArtKit, "classic", "pre-reset cast bar frame art kit")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "classic", "pre-reset resource frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "classic", "pre-reset CDM barDefaults frame art kit")
+for _, moduleKey in ipairs({ "unitframes", "castbar", "resourcebars", "cooldownmanager" }) do
+    KT.db.profile.visualTheme.slots[moduleKey].kui = nil
+end
+expect(KT.VisualThemes:ApplyAll("kui"), true, "kui seed without kui slot")
+expect(KT.db.profile.unitFrames.frameArtKit, "default", "kui seed resets unit frame art kit")
+expect(KT.db.profile.castbar.frameArtKit, "default", "kui seed resets cast bar frame art kit")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "default", "kui seed resets resource frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "default", "kui seed resets CDM barDefaults frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "default", "kui seed resets CDM bar frame art kit")
+expect(reloads, 7, "kui frameArtKit reset reload count")
+
 local failing = { value = "stable" }
 KT.VisualThemes:RegisterModule("failure_probe", {
     getProfile = function() return failing end,
@@ -259,6 +279,6 @@ expect(KT.VisualThemes:ApplyAll("forever"), false, "failed apply result")
 expect(KT.db.profile.visualTheme.active, "kui", "failed apply active theme")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "failed apply rollback")
 expect(failing.value, "stable", "failed adapter rollback")
-expect(reloads, 5, "failed apply reload count")
+expect(reloads, 7, "failed apply reload count")
 
 print("visual theme engine tests passed")
