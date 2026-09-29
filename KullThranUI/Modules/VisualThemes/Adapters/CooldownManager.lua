@@ -9,7 +9,7 @@ local function GetProfile()
 end
 
 local function GetPaths(_, _, profile)
-    local paths = { "reskinBorders", "cdmBars.barDefaults.iconShape" }
+    local paths = { "reskinBorders", "cdmBars.barDefaults.iconShape", "cdmBars.barDefaults.frameArtKit" }
     local bars = profile and profile.cdmBars and profile.cdmBars.bars
     local barCount = math.max(4, type(bars) == "table" and #bars or 0)
     for index = 1, barCount do
@@ -18,6 +18,7 @@ local function GetPaths(_, _, profile)
         paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderR"
         paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderG"
         paths[#paths + 1] = "cdmBars.bars." .. index .. ".borderB"
+        paths[#paths + 1] = "cdmBars.bars." .. index .. ".frameArtKit"
     end
     return paths
 end
@@ -27,20 +28,26 @@ KT.VisualThemes:RegisterModule("cooldownmanager", {
     getProfile = GetProfile,
     getOwnedPaths = GetPaths,
     seed = function(profile, themeKey)
-        local shape, borderSize, r, g, b
+        local shape, borderSize, r, g, b, frameArtKit
         if themeKey == "classic" then
-            shape, borderSize, r, g, b = "square", 2, 0.55, 0.40, 0.16
+            shape, borderSize, r, g, b, frameArtKit = "square", 2, 0.55, 0.40, 0.16, "classic"
         elseif themeKey == "forever" then
-            shape, borderSize, r, g, b = "circle", 2, 0.82, 0.65, 0.23
+            shape, borderSize, r, g, b, frameArtKit = "circle", 2, 0.82, 0.65, 0.23, "default"
         elseif themeKey == "retail" then
-            shape, borderSize, r, g, b = "csquare", 1, 0.12, 0.28, 0.50
+            shape, borderSize, r, g, b, frameArtKit = "csquare", 1, 0.12, 0.28, 0.50, "default"
         else
-            shape, borderSize, r, g, b = "none", 1, 0, 0, 0
+            -- kui: reset the classic-border field to the module's own default
+            -- ("default", see KUICooldownManager.lua barDefaults) so a stale
+            -- "classic" value can never survive into kui.
+            shape, borderSize, r, g, b, frameArtKit = "none", 1, 0, 0, 0, "default"
         end
         profile.reskinBorders = true
         profile.cdmBars = profile.cdmBars or {}
         profile.cdmBars.barDefaults = profile.cdmBars.barDefaults or {}
         profile.cdmBars.barDefaults.iconShape = shape
+        if frameArtKit then
+            profile.cdmBars.barDefaults.frameArtKit = frameArtKit
+        end
         profile.cdmBars.bars = profile.cdmBars.bars or {}
         for index = 1, 4 do
             profile.cdmBars.bars[index] = profile.cdmBars.bars[index] or {}
@@ -49,6 +56,9 @@ KT.VisualThemes:RegisterModule("cooldownmanager", {
             bar.iconShape = shape
             bar.borderSize = borderSize
             bar.borderR, bar.borderG, bar.borderB = r, g, b
+            if frameArtKit then
+                bar.frameArtKit = frameArtKit
+            end
         end
     end,
     validate = function(profile)

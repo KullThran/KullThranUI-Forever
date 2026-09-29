@@ -2,7 +2,12 @@ local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
 
-KT.VisualThemes.SCHEMA_VERSION = 2
+-- 1 -> 2: legacy repair (RepairLegacyState, wipes slots and forces kui).
+-- 2 -> 3: additive backfill of the owned paths added by the honest
+--         per-theme rendering pass (MigrateAddedThemePaths); never resets
+--         the active theme and never overwrites an existing slot value.
+KT.VisualThemes.SCHEMA_VERSION = 3
+KT.VisualThemes.LEGACY_REPAIR_SCHEMA_VERSION = 2
 
 function KT.VisualThemes:InitSlots(profile)
     if type(profile) ~= "table" then return nil end
