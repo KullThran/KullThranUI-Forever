@@ -232,6 +232,19 @@ KT.db.profile.visualTheme.applied.actionbars = nil
 expect(KT.VisualThemes:ApplyCurrentThemeToModule("actionbars"), true, "late actionbars KUI restore")
 expect(KT.db.profile.actionbars.buttonShape, "HEXAGON", "late actionbars restored shape")
 
+-- Regression-lock: ActionBars buttonShape whitelist matches ActionBars_Options.lua
+-- Valid shapes per ActionBars_Options.lua lines 217-223: NONE, CIRCLE, CSQUARE, HEXAGON, DIAMOND, SHIELD
+local abAdapter = KT.VisualThemes:GetModuleAdapter("actionbars")
+for _, validShape in ipairs({"NONE", "CIRCLE", "CSQUARE", "HEXAGON", "DIAMOND", "SHIELD"}) do
+    local testProfile = { buttonStyle = "KUI", buttonShape = validShape }
+    abAdapter.validate(testProfile)
+    expect(testProfile.buttonShape, validShape, "actionbars shape " .. validShape .. " passes validation")
+end
+-- Test that invalid shape gets reset to NONE
+local testProfile = { buttonStyle = "KUI", buttonShape = "INVALID" }
+abAdapter.validate(testProfile)
+expect(testProfile.buttonShape, "NONE", "actionbars invalid shape resets to NONE")
+
 local failing = { value = "stable" }
 KT.VisualThemes:RegisterModule("failure_probe", {
     getProfile = function() return failing end,
