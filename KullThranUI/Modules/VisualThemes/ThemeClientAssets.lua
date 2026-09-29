@@ -90,3 +90,70 @@ function KT.VisualThemes:ClearClassicUnitFrameArt(frame)
         art:Hide()
     end
 end
+
+--[[
+    Forever portrait ring (PROVISIONAL -- see note below):
+
+    WoW Forever's client is already confirmed, by this session's own prior
+    research into how its atlas system behaves, to substitute a range of
+    modern unit-frame atlas names with its own bronze/ornate art under the
+    identical name -- i.e. calling SetAtlas with one of these names INSIDE
+    Forever draws Forever's own real art, not the neutral modern art the
+    same call would draw in an actual Retail client (that mismatch is
+    exactly why the Retail theme can't safely reuse these names -- see the
+    design spec's Non-goals). For the Forever theme specifically, that same
+    substitution is exactly what's wanted: a real, Forever-native portrait
+    ring, reached through a real Blizzard-defined atlas identifier.
+
+    "ui-hud-unitframe-player-portraiton" is chosen as a real, plausible name
+    from that same modern unit-frame atlas family. It has not been confirmed
+    live in this environment (no WoW client exists here) -- it is a
+    reasoned choice, not a measurement, exactly like the Classic crop above.
+    OUTSTANDING MANUAL QA ITEM: confirm in-game that this name actually
+    resolves via C_Texture.GetAtlasInfo inside this Forever client, and that
+    it reads as a portrait ring once applied. If it doesn't resolve, the
+    guard below already falls back to today's already-correct fixed-accent
+    look silently -- nothing breaks either way, but the ring simply won't
+    show until the name is corrected post-QA.
+]]
+local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
+
+--- Applies the Forever theme's real per-client UnitFrame art: creates
+--- (once, cached on `frame`) a portrait ring texture on `unitRegion` from a
+--- real Forever-native atlas piece, gated on that atlas name actually
+--- resolving in this client. Falls back to ClearForeverUnitFrameArt (i.e.
+--- today's already-shipped fixed-accent-color look, with no ring) when the
+--- atlas name doesn't resolve, rather than erroring or half-applying.
+--- @param frame Frame|Region the unit frame's outer frame (owns the cache)
+--- @param unitRegion Frame|Region the portrait/backdrop region to frame
+function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
+    if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
+    if type(unitRegion) ~= "table" then return end
+
+    if not (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(FOREVER_PORTRAIT_ATLAS)) then
+        self:ClearForeverUnitFrameArt(frame)
+        return
+    end
+
+    local art = frame._ktForeverPortraitArt
+    if not art then
+        art = frame:CreateTexture(nil, "OVERLAY")
+        frame._ktForeverPortraitArt = art
+    end
+    art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
+
+    art:ClearAllPoints()
+    art:SetAllPoints(unitRegion)
+    art:Show()
+end
+
+--- Hides (does not destroy) the Forever portrait ring created by
+--- ApplyForeverUnitFrameArt, if any. Nil-safe if it was never created.
+--- @param frame Frame|Region the unit frame passed to ApplyForeverUnitFrameArt
+function KT.VisualThemes:ClearForeverUnitFrameArt(frame)
+    if type(frame) ~= "table" then return end
+    local art = frame._ktForeverPortraitArt
+    if art then
+        art:Hide()
+    end
+end
