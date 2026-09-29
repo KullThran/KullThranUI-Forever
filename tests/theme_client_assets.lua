@@ -22,6 +22,8 @@ local function NewRegion(parent)
         masks = {},
     }
 
+    function region:SetParent(newParent) self.parent = newParent end
+    function region:GetParent() return self.parent end
     function region:SetAllPoints(relative) self.allPoints = relative or true end
     function region:ClearAllPoints() self.points = {} end
     function region:SetPoint(...) self.points[#self.points + 1] = { ... } end
@@ -150,6 +152,7 @@ near(player.Health.points[1][4], 85 * playerScale, "player health x")
 near(player.Health.points[1][5], -40 * playerScale, "player health y")
 near(player.LeftText.points[1][4], 88 * playerScale, "player name x")
 near(player.LeftText.points[1][5], -27 * playerScale, "player name y sign")
+expect(player.LeftText:GetParent(), player._ktForeverArtHost, "player name reparented off Health's clipped hierarchy")
 expect(player.Buffs.points[1][1], "BOTTOMLEFT", "player buffs anchor point")
 near(player.Buffs.points[1][4], 88 * playerScale, "player buffs x")
 near(player.Buffs.points[1][5], -27 * playerScale, "player buffs y (same tab as name)")
@@ -210,6 +213,7 @@ near(classic._ktClassicPortraitArt:GetHeight(), 99 * classicScale, "classic art 
 near(classic.Health:GetWidth(), 119 * classicScale, "classic health width")
 near(classic.Power:GetWidth(), 119 * classicScale, "classic power width")
 near(classic.LeftText.points[1][5], 15 * classicScale, "classic name y")
+expect(classic.LeftText:GetParent(), classic._ktClassicArtHost, "classic name reparented off Health's clipped hierarchy")
 
 KT.VisualThemes:ClearForeverUnitFrameArt(player)
 expect(player._ktForeverPortraitArt.shown, false, "clear art")
