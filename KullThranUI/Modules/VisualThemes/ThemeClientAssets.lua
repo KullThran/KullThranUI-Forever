@@ -381,6 +381,18 @@ local FOREVER_FRAME_GEOMETRY = {
     target = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Target-PortraitOn",
+        -- EXPERIMENTAL, unverified: live QA reported target's box art not
+        -- filling the portrait ring and not reading as mirrored the other
+        -- way. The code never manually flips either unit -- it trusts each
+        -- real atlas to already be correctly mirrored (this is how
+        -- EllesmereUI itself uses these same two atlases, unflipped). If
+        -- Forever's client substitutes its own bronze art under this name
+        -- without keeping a distinct, correctly-mirrored target variant,
+        -- forcing a flip here could fix it -- or, if Forever's substituted
+        -- art is already mirrored, this would flip it the WRONG way. Only
+        -- in-game verification can tell which; revert this one field to
+        -- `false` if the result looks worse, not better.
+        mirror = true,
         portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
         health = {
             x = 23, y = 40, w = 126, h = 20,
@@ -486,7 +498,17 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         UnsnapTexture(art)
         frame._ktForeverPortraitArt = art
     end
-    art:SetAtlas(geom.art)
+    -- SetAtlas alone can't be flipped (its own SetTexCoord addresses the
+    -- atlas's normalized sub-rect, not the sheet -- see EllesmereUI's own
+    -- documented reason for resolving to the real file first). geom.mirror
+    -- is EXPERIMENTAL (see the comment on FOREVER_FRAME_GEOMETRY.target).
+    if geom.mirror and info.leftTexCoord and info.rightTexCoord
+        and info.topTexCoord and info.bottomTexCoord and (info.file or info.filename) then
+        art:SetTexture(info.file or info.filename)
+        art:SetTexCoord(info.rightTexCoord, info.leftTexCoord, info.topTexCoord, info.bottomTexCoord)
+    else
+        art:SetAtlas(geom.art)
+    end
     art:ClearAllPoints()
     art:SetPoint("CENTER", host, "CENTER", 0, 0)
     art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
