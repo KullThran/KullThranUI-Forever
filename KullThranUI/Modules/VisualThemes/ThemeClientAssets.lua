@@ -403,6 +403,18 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
     local nameText = frame._ktStockNameText or frame.LeftText
     if nameText and geom.name then
+        -- frame.Health has SetClipsChildren(true) (CreateAbsorbBar, so the
+        -- absorb shield never overflows the bar) -- nameText's own parent
+        -- chain (frame.LeftText -> _textOverlay -> frame.Health) inherits
+        -- that clip. Positioning it in the real name tab, ABOVE Health's own
+        -- rectangle, put it outside that clip region -- confirmed live: the
+        -- FontString's own position/size/text were all correct, it was
+        -- simply invisible. EllesmereUI's own equivalent (ns.UF_BlizzTextPass)
+        -- anchors its name text directly to the frame, never inside any
+        -- bar-clipping container, for the same reason. Reparenting onto
+        -- `host` (already correctly leveled by SyncArtLayers, and never
+        -- clipped) escapes Health's clip without losing proper stacking.
+        if nameText.SetParent then nameText:SetParent(host) end
         nameText:ClearAllPoints()
         nameText:SetPoint(geom.name.point, frame, geom.name.point,
             geom.name.x * scale, geom.name.y * scale)
@@ -646,6 +658,13 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     local nameText = frame._ktStockNameText or frame.LeftText
     if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
         local point = geom.name.point or "TOPLEFT"
+        -- frame.Health has SetClipsChildren(true) (CreateAbsorbBar); nameText's
+        -- normal parent chain (frame.LeftText -> _textOverlay -> frame.Health)
+        -- inherits that clip. See the identical comment in
+        -- ApplyClassicUnitFrameArt for why this reparent is needed -- confirmed
+        -- live, the name was correctly positioned/sized/texted and still
+        -- invisible until this fix.
+        if nameText.SetParent then nameText:SetParent(host) end
         nameText:ClearAllPoints()
         nameText:SetPoint(point, frame, point,
             geom.name.x * scale, geom.name.y * scale)
