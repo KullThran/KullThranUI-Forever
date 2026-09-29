@@ -59,12 +59,20 @@ local function NewRegion(parent)
         self.lastMask = mask
         return mask
     end
+    function region:CreateFontString()
+        local fs = NewRegion(self)
+        function fs:SetText(text) self.text = text end
+        function fs:SetTextColor(r, g, b, a) self.r, self.g, self.b, self.a = r, g, b, a end
+        self.lastFontString = fs
+        return fs
+    end
     function region:GetStatusBarTexture() return self.fill end
 
     return region
 end
 
 _G.CreateFrame = function(_, _, parent) return NewRegion(parent) end
+_G.UIParent = NewRegion(nil)
 _G.C_Texture = {
     GetAtlasInfo = function(atlas)
         if atlas:find("%-Mask$") then return { width = 132, height = 32 } end

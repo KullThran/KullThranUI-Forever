@@ -2,12 +2,35 @@ local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
 
--- TEMPORARY debug switch: prints one line to chat every time
--- ApplyForeverUnitFrameArt runs, showing whether the name/buffs objects it
--- expects actually exist and what it resolved them to. Set back to false
--- (or delete this block and the print call below it) once the name-tab/
--- buffs issue is diagnosed -- this is not meant to ship on.
+-- TEMPORARY debug switch: shows a bright on-screen text marker every time
+-- ApplyForeverUnitFrameArt runs, reporting whether the name/buffs objects it
+-- expects actually exist. A chat print was tried first and never appeared
+-- at all (not even a Lua error) -- an on-screen marker sidesteps whatever
+-- chat-related quirk this client has, and shows up directly in a
+-- screenshot. Set back to false (or delete this block, ShowForeverDebugMarker,
+-- and its call sites) once the name-tab/buffs issue is diagnosed -- this is
+-- not meant to ship on.
 local KT_DEBUG_FOREVER_TAB = true
+local _ktDebugMarkers = {}
+local function ShowForeverDebugMarker(unit, msg)
+    local key = tostring(unit)
+    local fs = _ktDebugMarkers[key]
+    if not fs then
+        local host = CreateFrame("Frame", nil, UIParent)
+        host:SetFrameStrata("TOOLTIP")
+        host:SetSize(600, 20)
+        local slot = 0
+        for _ in pairs(_ktDebugMarkers) do slot = slot + 1 end
+        host:SetPoint("TOP", UIParent, "TOP", 0, -40 - (slot * 22))
+        fs = host:CreateFontString(nil, "OVERLAY")
+        fs:SetAllPoints(host)
+        fs:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+        fs:SetTextColor(1, 1, 0, 1)
+        _ktDebugMarkers[key] = fs
+    end
+    fs:SetText("[KT DEBUG " .. key .. "] " .. msg)
+    fs:Show()
+end
 
 --[[
     ThemeClientAssets.lua
@@ -557,13 +580,13 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- (e.g. in the test harness, or before KUIUnitFrames.lua resolves it).
     local nameText = frame._ktStockNameText or frame.LeftText
     if KT_DEBUG_FOREVER_TAB then
-        print(string.format(
-            "[KT DEBUG] unit=%s frame=%s geom.name=%s nameText=%s(%s) LeftText=%s(%s) stockNameText=%s Buffs=%s(%s) scale=%.3f",
-            tostring(unit), tostring(frame), tostring(geom.name),
-            tostring(nameText), type(nameText),
-            tostring(frame.LeftText), type(frame.LeftText),
-            tostring(frame._ktStockNameText),
-            tostring(frame.Buffs), type(frame.Buffs),
+        ShowForeverDebugMarker(unit, string.format(
+            "u=%s name=%s(%s) Left=%s Stock=%s Buffs=%s scale=%.2f",
+            tostring(unit),
+            tostring(nameText ~= nil), type(nameText),
+            tostring(frame.LeftText ~= nil),
+            tostring(frame._ktStockNameText ~= nil),
+            tostring(frame.Buffs ~= nil),
             scale))
     end
     if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
@@ -597,12 +620,6 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- itself is the name's real rect, not the buffs' rect, so buffs sit
     -- immediately above it rather than overlapping the name text.
     local buffs = frame.Buffs
-    if KT_DEBUG_FOREVER_TAB then
-        print(string.format(
-            "[KT DEBUG] unit=%s buffs guard: geom.name=%s buffsIsTable=%s hasClearAllPoints=%s",
-            tostring(unit), tostring(geom.name ~= nil), tostring(type(buffs) == "table"),
-            tostring(type(buffs) == "table" and type(buffs.ClearAllPoints) == "function")))
-    end
     if geom.name and type(buffs) == "table" and buffs.ClearAllPoints then
         local tabW = geom.name.w * scale
         local iconSize = math.max(8, geom.name.h * scale)
