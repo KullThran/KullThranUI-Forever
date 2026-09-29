@@ -142,10 +142,14 @@ end
 local function KTShortStack()
     local ok, stack = pcall(debugstack)
     if not ok or type(stack) ~= "string" then return "(no stack)" end
+    -- 5 lines wasn't enough: it cut off right at hooksecurefunc's own C
+    -- dispatch boundary/pcall wrapper, before ever reaching the real caller
+    -- (confirmed live -- every capture ended in "[C]: ? <- [C]: in function
+    -- 'pcall'" with nothing but this file's own hook frames before it).
     local lines = {}
     for line in stack:gmatch("[^\n]+") do
         lines[#lines + 1] = line
-        if #lines >= 5 then break end
+        if #lines >= 18 then break end
     end
     return table.concat(lines, " <- ")
 end
