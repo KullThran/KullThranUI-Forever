@@ -3816,10 +3816,14 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
         frame.LeftText:SetJustifyH("LEFT")
     end
     if frame.RightText and rightContent ~= "none" and rightContent ~= "name" then
+        -- Explicit user request: the value/status text (health percent, or
+        -- whatever oUF status tag like "AFK" currently occupies this same
+        -- FontString) reads centered on the real Blizzard bar, not
+        -- right-aligned near its edge.
         frame.RightText:ClearAllPoints()
-        frame.RightText:SetPoint("RIGHT", health, "RIGHT", -2, 0)
+        frame.RightText:SetPoint("CENTER", health, "CENTER", 0, 0)
         frame.RightText:SetWidth(width)
-        frame.RightText:SetJustifyH("RIGHT")
+        frame.RightText:SetJustifyH("CENTER")
     end
 end
 local function ApplyClassicFrameArt(frame, unit)
