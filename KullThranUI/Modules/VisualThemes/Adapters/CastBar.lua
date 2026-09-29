@@ -10,7 +10,7 @@ KT.VisualThemes:RegisterModule("castbar", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
     getOwnedPaths = function()
-        return { "texture", "iconShape", "colorMode", "color" }
+        return { "texture", "iconShape", "colorMode", "color", "frameArtKit" }
     end,
     seed = function(profile, themeKey)
         if themeKey == "classic" then
@@ -18,16 +18,19 @@ KT.VisualThemes:RegisterModule("castbar", {
             profile.iconShape = "SQUARE"
             profile.colorMode = "CUSTOM"
             profile.color = { r = 0.86, g = 0.62, b = 0.16, a = 1 }
+            profile.frameArtKit = "classic"
         elseif themeKey == "forever" then
             profile.texture = "Melli Dark"
             profile.iconShape = "CIRCLE"
             profile.colorMode = "CUSTOM"
             profile.color = { r = 0.82, g = 0.65, b = 0.23, a = 1 }
+            profile.frameArtKit = "default"
         elseif themeKey == "retail" then
             profile.texture = "Blizzard Raid Bar"
             profile.iconShape = "SQUARE"
             profile.colorMode = "CUSTOM"
             profile.color = { r = 0.12, g = 0.48, b = 0.95, a = 1 }
+            profile.frameArtKit = "default"
         else
             profile.texture = "Melli"
             profile.iconShape = "SQUARE"

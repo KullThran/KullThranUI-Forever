@@ -474,6 +474,7 @@ function Mod:OnInitialize()
             showIcon      = true,
             iconPosition  = "LEFT",
             iconShape     = "SQUARE",
+            frameArtKit   = "default",
         }
     end
 
@@ -486,6 +487,7 @@ function Mod:OnInitialize()
     if self.db.autoWidth    == nil then self.db.autoWidth    = false end
     if self.db.classColor   == nil then self.db.classColor   = false end
     if self.db.colorMode    == nil then self.db.colorMode    = "THEME" end
+    if self.db.frameArtKit  == nil then self.db.frameArtKit  = "default" end
     self.isDummy = false
 end
 
@@ -1016,6 +1018,27 @@ function Mod:ScheduleBarFailsafe(endTime, castID)
     end)
 end
 
+-- Fase 3 (VisualThemes): aplica o retira el marco clasico opcional del tema
+-- "classic". Es puramente decorativo: se ancla justo fuera de la propia barra
+-- (sin tocar backdrop/tamano/anclajes existentes). db.frameArtKit es un valor
+-- de perfil normal (mismo patron que unitFrames.frameArtKit de la Tarea 2).
+local function ApplyClassicFrameArt(bar, db)
+    local VT = KT.VisualThemes
+    if not (VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder) then
+        return
+    end
+    local wantClassic = db and db.frameArtKit == "classic"
+    if wantClassic then
+        bar.classicBorder = bar.classicBorder or VT:CreateClassicBorder(bar)
+        if bar.classicBorder then
+            VT:SeatClassicBorder(bar.classicBorder, bar, 1)
+            VT:ShowClassicBorder(bar.classicBorder, true)
+        end
+    elseif bar.classicBorder then
+        VT:ShowClassicBorder(bar.classicBorder, false)
+    end
+end
+
 -- ============================================================================
 -- ApplySettings
 -- ============================================================================
@@ -1099,6 +1122,8 @@ function Mod:ApplySettings()
     else
         self:ClearChannelTicks()
     end
+
+    ApplyClassicFrameArt(bar, db)
 end
 
 -- ============================================================================
@@ -1438,6 +1463,7 @@ function Mod:Refresh()
             font = KT and KT.DEFAULT_FONT_NAME or "AAA_ITC_Avant_Garde",
             fontSize = 16, fontOutline = "OUTLINE",
             showIcon = true, iconPosition = "LEFT", iconShape = "SQUARE",
+            frameArtKit = "default",
         }
     end
     self.db = KT.db.profile.castbar
@@ -1446,6 +1472,9 @@ function Mod:Refresh()
     end
     if self.db.colorMode == nil then
         self.db.colorMode = "THEME"
+    end
+    if self.db.frameArtKit == nil then
+        self.db.frameArtKit = "default"
     end
     if type(self.db.color) ~= "table" then
         local r, g, b = GetThemeAccentColor()
