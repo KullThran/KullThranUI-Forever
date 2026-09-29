@@ -35,12 +35,13 @@ local function KTDebugDumpFrame(frame, label)
     local health = frame.Health
     local buffs = frame.Buffs
     local nameFS = frame._ktStockNameText or frame.LeftText
+    local art = frame._ktForeverPortraitArt or frame._ktClassicPortraitArt
     return string.format(
         "%s: LeftText=%s RightText=%s CenterText=%s Buffs=%s\n" ..
         "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
-        "  Health=%s (%sx%s) frame=%sx%s\n" ..
-        "  %s\n  %s\n  %s\n" ..
-        "  HealthCalc=%s\n",
+        "  Health=%s (%sx%s) frame=%sx%s Art=%sx%s\n" ..
+        "  %s\n  %s\n  %s\n  %s\n" ..
+        "  HealthCalc=%s\n  ArtCalc=%s\n  NameCalc=%s\n  BuffsCalc=%s\n",
         label,
         tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
         tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
@@ -51,10 +52,16 @@ local function KTDebugDumpFrame(frame, label)
         tostring(health and health.GetHeight and health:GetHeight()),
         tostring(frame.GetWidth and frame:GetWidth()),
         tostring(frame.GetHeight and frame:GetHeight()),
+        tostring(art and art.GetWidth and art:GetWidth()),
+        tostring(art and art.GetHeight and art:GetHeight()),
         KTDebugDumpPoints(health, "HealthPoints"),
         KTDebugDumpPoints(buffs, "BuffsPoints"),
         KTDebugDumpPoints(nameFS, "NamePoints"),
-        tostring(frame._ktDebugHealthCalc)
+        KTDebugDumpPoints(art, "ArtPoints"),
+        tostring(frame._ktDebugHealthCalc),
+        tostring(frame._ktDebugArtCalc),
+        tostring(frame._ktDebugNameCalc),
+        tostring(frame._ktDebugBuffsCalc)
     )
 end
 
@@ -588,6 +595,11 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     art:SetPoint("CENTER", host, "CENTER", 0, 0)
     art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
     art:Show()
+    frame._ktDebugArtCalc = string.format(
+        "mirrored=%s infoW=%s infoH=%s setW=%.4f setH=%.4f postSetGetWidth=%s postSetGetHeight=%s",
+        tostring(geom.mirror and info.leftTexCoord ~= nil), tostring(info.width), tostring(info.height),
+        (info.width or geom.w) * scale, (info.height or geom.h) * scale,
+        tostring(art.GetWidth and art:GetWidth()), tostring(art.GetHeight and art:GetHeight()))
 
     -- The outer frame is now the stable stock box. Portrait and bars are all
     -- siblings anchored to that same box, so no element depends on Health
@@ -639,6 +651,11 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
             geom.name.x * scale, geom.name.y * scale)
         if nameText.SetWidth then nameText:SetWidth(geom.name.w * scale) end
         if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify or "LEFT") end
+        frame._ktDebugNameCalc = string.format(
+            "point=%s x=%.4f y=%.4f w=%.4f postSetGetWidth=%s postSetText=%s",
+            tostring(point), geom.name.x * scale, geom.name.y * scale, geom.name.w * scale,
+            tostring(nameText.GetWidth and nameText:GetWidth()),
+            tostring(nameText.GetText and nameText:GetText()))
     end
 
     ScaleStockBarText(frame.LeftText, scale)
@@ -675,6 +692,10 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         buffs.spacing = gap
         buffs["size-x"] = math.max(1, math.floor((tabW + gap) / (iconSize + gap)))
         if buffs.ForceUpdate then buffs:ForceUpdate() end
+        frame._ktDebugBuffsCalc = string.format(
+            "tabW=%.4f iconSize=%.4f x=%.4f y=%.4f postSetGetWidth=%s postSetGetHeight=%s",
+            tabW, iconSize, geom.name.x * scale, geom.name.y * scale,
+            tostring(buffs.GetWidth and buffs:GetWidth()), tostring(buffs.GetHeight and buffs:GetHeight()))
     end
 
     frame._ktForeverLayoutActive = true
