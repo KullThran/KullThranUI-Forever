@@ -103,7 +103,10 @@ function KT.VisualThemes:RepairLegacyState(profile)
     local state = self:InitSlots(profile)
     if not state then return end
     local version = tonumber(state.schemaVersion) or 0
-    if version >= self.SCHEMA_VERSION then return end
+    -- Only the original pre-system migration (schema < 2) wipes slots and
+    -- forces kui. Schema 2 -> 3 is handled additively by
+    -- MigrateAddedThemePaths below and must never reach this wipe.
+    if version >= self.LEGACY_REPAIR_SCHEMA_VERSION then return end
 
     local registry, order = self:GetAllAdapters()
     for _, moduleKey in ipairs(order or {}) do
@@ -126,14 +129,128 @@ function KT.VisualThemes:RepairLegacyState(profile)
     state.schemaVersion = self.SCHEMA_VERSION
 end
 
+-- Owned paths added in schema 3 (honest per-theme rendering). Slots saved
+-- under schema 2 do not contain them, and the live profile of the active
+-- non-kui theme was never seeded with them. Scoped per module on purpose:
+-- e.g. nameplates already owned its own borderColor before schema 3.
+local SCHEMA3_ADDED_PATH_PATTERNS = {
+    unitframes = { "^frameArtKit$", "%.borderColor%.[rgb]$" },
+    castbar = { "^frameArtKit$" },
+    resourcebars = { "^general%.frameArtKit$", "^health%.fill[RGB]$" },
+    cooldownmanager = { "frameArtKit$" },
+    partyframes = { "%.absorbBarColor%.[rgb]$" },
+}
+
+local function FilterAddedPaths(paths, patterns)
+    local added = {}
+    for _, path in ipairs(paths or {}) do
+        for _, pattern in ipairs(patterns) do
+            if string.find(path, pattern) then
+                added[#added + 1] = path
+                break
+            end
+        end
+    end
+    return added
+end
+
+local function SeededCopy(adapter, moduleProfile, themeKey, clientFlavor)
+    local scratch = DeepCopy(moduleProfile)
+    adapter.seed(scratch, themeKey, clientFlavor)
+    return scratch
+end
+
+-- Additive schema 2 -> 3 step for one module. Never changes state.active,
+-- never overwrites a value already stored in any slot, and on the live
+-- profile only writes the schema-3 paths (so any other customization of
+-- the active theme is kept).
+function KT.VisualThemes:MigrateAddedThemePaths(state, moduleKey)
+    local adapter = self:GetModuleAdapter(moduleKey)
+    local patterns = SCHEMA3_ADDED_PATH_PATTERNS[moduleKey]
+    if not adapter or not patterns then return true end
+    local clientFlavor = GetClientFlavor()
+    if not AdapterAvailable(adapter, clientFlavor) then return false end
+    local moduleProfile = AdapterProfile(adapter)
+    if not moduleProfile then return false end
+    if type(adapter.seed) ~= "function" or type(adapter.getOwnedPaths) ~= "function" then return true end
+
+    local activeTheme = state.active
+    local ok, err = pcall(function()
+        local added = FilterAddedPaths(adapter.getOwnedPaths(activeTheme, clientFlavor, moduleProfile), patterns)
+        if #added == 0 then return end
+
+        -- 1) Existing slots of the other themes: fill only the missing keys.
+        --    Before schema 3 none of these paths was theme-owned, so the
+        --    live value is the user's own value, i.e. what kui showed.
+        --    Other themes get their own seed() value.
+        local moduleSlots = state.slots[moduleKey]
+        if type(moduleSlots) == "table" then
+            for themeKey, slot in pairs(moduleSlots) do
+                if type(slot) == "table" and themeKey ~= activeTheme and self:IsKnownTheme(themeKey) then
+                    local seeded = SeededCopy(adapter, moduleProfile, themeKey, clientFlavor)
+                    for _, path in ipairs(added) do
+                        if slot[path] == nil then
+                            local value = GetPath(seeded, path)
+                            if themeKey == "kui" and GetPath(moduleProfile, path) ~= nil then
+                                value = GetPath(moduleProfile, path)
+                            end
+                            slot[path] = PackValue(value)
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2) Live profile of the active theme: backfill only the added
+        --    paths from that theme's own seed().
+        local seeded = SeededCopy(adapter, moduleProfile, activeTheme, clientFlavor)
+        for _, path in ipairs(added) do
+            local value = GetPath(seeded, path)
+            if value ~= nil and value ~= GetPath(moduleProfile, path) then
+                SetPath(moduleProfile, path, value)
+            end
+        end
+    end)
+    if not ok and KT.Print then
+        KT:Print("Visual theme migration failed in " .. moduleKey .. ": " .. tostring(err))
+    end
+    -- A failure is not retried forever: the module keeps its current data.
+    return true
+end
+
+function KT.VisualThemes:RunPendingThemeMigrations(state)
+    local pending = state.pendingPathMigration
+    if type(pending) ~= "table" then
+        state.pendingPathMigration = nil
+        return
+    end
+    for moduleKey in pairs(pending) do
+        -- A module whose profile does not exist yet (addon disabled or not
+        -- loaded) stays pending and is migrated the first time it appears.
+        if self:MigrateAddedThemePaths(state, moduleKey) then
+            pending[moduleKey] = nil
+        end
+    end
+    if next(pending) == nil then state.pendingPathMigration = nil end
+end
+
 function KT.VisualThemes:EnsureInitialized()
     local profile = KT.db and KT.db.profile
     if not profile then return nil end
     self:RepairLegacyState(profile)
     local state = self:InitSlots(profile)
+    local version = tonumber(state.schemaVersion) or 0
+    if version < 3 then
+        local pending = {}
+        for moduleKey in pairs(SCHEMA3_ADDED_PATH_PATTERNS) do pending[moduleKey] = true end
+        state.pendingPathMigration = pending
+    end
     state.schemaVersion = self.SCHEMA_VERSION
     if not self:IsKnownTheme(state.active) then state.active = "kui" end
     if not self:IsKnownTheme(state.requested) then state.requested = state.active end
+    if state.pendingPathMigration ~= nil then
+        self:RunPendingThemeMigrations(state)
+    end
     return profile, state
 end
 

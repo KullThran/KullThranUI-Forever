@@ -125,7 +125,7 @@ loadAddonFile("KullThranUI/Modules/VisualThemes/Adapters/PartyFrames.lua")
 loadAddonFile("KullThranUI/Modules/VisualThemes/Adapters/Skin.lua")
 
 KT.VisualThemes:EnsureInitialized()
-expect(KT.db.profile.visualTheme.schemaVersion, 2, "schema migration")
+expect(KT.db.profile.visualTheme.schemaVersion, 3, "schema migration")
 expect(KT.db.profile.visualTheme.active, "kui", "legacy active theme")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "legacy KUI action style")
 expect(KT.db.profile.actionbars.buttonShape, "HEXAGON", "legacy KUI action shape")
@@ -280,5 +280,94 @@ expect(KT.db.profile.visualTheme.active, "kui", "failed apply active theme")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "failed apply rollback")
 expect(failing.value, "stable", "failed adapter rollback")
 expect(reloads, 7, "failed apply reload count")
+
+-- Schema 2 -> 3: a profile saved before the honest-rendering pass. Active
+-- theme is forever, module profiles look like the OLD forever seed left
+-- them (no frameArtKit, the user's own borderColor/fillRGB/absorbBarColor),
+-- and the slots were saved with the OLD owned-path lists.
+do
+    -- Unregister the intentional-failure probe so the round trip below can apply.
+    local registry, order = KT.VisualThemes:GetAllAdapters()
+    registry.failure_probe = nil
+    for index = #order, 1, -1 do
+        if order[index] == "failure_probe" then table.remove(order, index) end
+    end
+end
+KT.db.profile.visualTheme = {
+    active = "forever",
+    requested = "forever",
+    schemaVersion = 2,
+    modules = {},
+    applied = { unitframes = "forever", castbar = "forever", resourcebars = "forever", cooldownmanager = "forever", partyframes = "forever" },
+    slots = {
+        castbar = {
+            kui = { texture = "User Texture", iconShape = "CIRCLE", colorMode = "THEME", color = { r = 0.4, g = 0.5, b = 0.6, a = 1 } },
+            classic = { texture = "User Classic Texture", iconShape = "SQUARE", colorMode = "CUSTOM", color = { r = 0.5, g = 0.5, b = 0.5, a = 1 } },
+        },
+        unitframes = {
+            kui = { portraitStyle = "circular", darkTheme = false, healthBarTexture = "User Texture", ["player.healthBarTexture"] = "User Texture" },
+        },
+    },
+}
+KT.db.profile.unitFrames = {
+    portraitStyle = "circular", darkTheme = true, healthBarTexture = "Melli Dark",
+    player = { showPortrait = true, healthBarTexture = "Melli Dark", borderColor = { r = 0.55, g = 0.33, b = 0.77 } },
+    target = { showPortrait = true, portraitSide = "right", healthBarTexture = "Melli Dark" },
+}
+KT.db.profile.resourceBars = {
+    general = { texture = "Melli Dark" },
+    health = { texture = "Melli Dark", borderSize = 2, fillR = 0.4, fillG = 0.5, fillB = 0.6 },
+    primary = { texture = "Melli Dark", borderSize = 2 },
+    secondary = { texture = "Melli Dark", borderSize = 2 },
+}
+KT.db.profile.cooldownManager = { reskinBorders = true, cdmBars = { barDefaults = { iconShape = "circle" }, bars = { { iconShape = "circle", borderSize = 2 } } } }
+KT.db.profile.partyFrames = { party = { healthTexture = "Melli Dark", absorbBarTexture = "Melli Dark", absorbBarColor = { r = 0.4, g = 0.5, b = 0.6 } } }
+local savedCastbar = { texture = "User Forever Texture", iconShape = "CIRCLE", colorMode = "CUSTOM", color = { r = 0.82, g = 0.65, b = 0.23, a = 1 } }
+KT.db.profile.castbar = nil -- CastBar addon not loaded yet at first init
+
+KT.VisualThemes:EnsureInitialized()
+local migrated = KT.db.profile.visualTheme
+expect(migrated.schemaVersion, 3, "schema 2 -> 3 version")
+expect(migrated.active, "forever", "schema 3 migration keeps active theme")
+expect(migrated.requested, "forever", "schema 3 migration keeps requested theme")
+expect(migrated.applied.unitframes, "forever", "schema 3 migration keeps applied state")
+expect(KT.db.profile.unitFrames.frameArtKit, "default", "schema 3 backfills forever unit frame art kit")
+expect(KT.db.profile.unitFrames.player.borderColor.r, 0.82, "schema 3 backfills forever unit border color")
+expect(KT.db.profile.unitFrames.healthBarTexture, "Melli Dark", "schema 3 leaves other unit paths alone")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "default", "schema 3 backfills forever resource frame art kit")
+expect(KT.db.profile.resourceBars.health.fillR, 0.82, "schema 3 backfills forever resource health color")
+expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "default", "schema 3 backfills CDM barDefaults frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "default", "schema 3 backfills CDM bar frame art kit")
+expect(KT.db.profile.cooldownManager.cdmBars.bars[1].borderSize, 2, "schema 3 leaves other CDM paths alone")
+expect(KT.db.profile.partyFrames.party.absorbBarColor.r, 0.82, "schema 3 backfills forever party absorb color")
+expect(migrated.pendingPathMigration.castbar, true, "unavailable castbar stays pending")
+-- kui slot gains the user's own pre-schema-3 values for the new paths only.
+local kuiUnitSlot = migrated.slots.unitframes.kui
+expect(kuiUnitSlot["player.borderColor.r"], 0.55, "schema 3 kui slot keeps user border color")
+expect(kuiUnitSlot.healthBarTexture, "User Texture", "schema 3 kui slot existing value untouched")
+
+KT.db.profile.castbar = savedCastbar -- CastBar addon loads later
+KT.VisualThemes:EnsureInitialized()
+expect(migrated.pendingPathMigration, nil, "late castbar migration clears pending")
+expect(KT.db.profile.castbar.frameArtKit, "default", "late castbar backfills forever frame art kit")
+expect(KT.db.profile.castbar.texture, "User Forever Texture", "late castbar keeps active-theme customization")
+local classicCastSlot = migrated.slots.castbar.classic
+expect(classicCastSlot.texture, "User Classic Texture", "other theme slot texture untouched")
+expect(classicCastSlot.color.r, 0.5, "other theme slot color untouched")
+expect(classicCastSlot.iconShape, "SQUARE", "other theme slot shape untouched")
+expect(classicCastSlot.frameArtKit, "classic", "other theme slot gains its own missing frame art kit")
+expect(migrated.slots.castbar.kui.texture, "User Texture", "castbar kui slot texture untouched")
+expect(migrated.slots.castbar.kui.frameArtKit, "default", "castbar kui slot gains default frame art kit")
+
+-- Round trip after migration: kui shows the user's own values, classic
+-- shows its border with the user's saved classic customization.
+expect(KT.VisualThemes:ApplyAll("kui"), true, "post-migration kui")
+expect(KT.db.profile.unitFrames.player.borderColor.r, 0.55, "post-migration kui unit border color")
+expect(KT.db.profile.unitFrames.frameArtKit, "default", "post-migration kui unit frame art kit")
+expect(KT.db.profile.castbar.texture, "User Texture", "post-migration kui cast texture")
+expect(KT.db.profile.castbar.frameArtKit, "default", "post-migration kui cast frame art kit")
+expect(KT.VisualThemes:ApplyAll("classic"), true, "post-migration classic")
+expect(KT.db.profile.castbar.frameArtKit, "classic", "post-migration classic cast border")
+expect(KT.db.profile.castbar.texture, "User Classic Texture", "post-migration classic keeps user slot")
 
 print("visual theme engine tests passed")
