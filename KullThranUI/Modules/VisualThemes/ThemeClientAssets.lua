@@ -218,25 +218,30 @@ end
     look silently -- nothing breaks either way, but the ring simply won't
     show until the name is corrected post-QA.
 
-    Sizing (fixed after live testing): an earlier version forced this piece
-    into a square matching the portrait container's own size, which visibly
-    warped it -- an atlas piece has its own real native pixel dimensions,
-    reported by C_Texture.GetAtlasInfo's `width`/`height` fields, and
-    stretching it to an unrelated external size distorts it. This now sizes
-    the texture to the atlas's own native width/height and centers it on
-    `unitRegion`, rather than forcing any external size onto it.
+    Sizing (fixed twice after live testing):
+    1. An earlier version forced this piece into a square matching the
+       portrait container's own size, which visibly warped it -- an atlas
+       piece has its own real native pixel dimensions, reported by
+       C_Texture.GetAtlasInfo's `width`/`height` fields, and stretching it
+       to an unrelated external size distorts it.
+    2. Using those native dimensions as-is (no scaling) rendered a correctly
+       *shaped* but far too large ring -- this atlas is sized for a real
+       Retail-scale unit frame, much bigger than this addon's own compact
+       portrait. The fix keeps the atlas's aspect ratio (never distorts it)
+       but scales it uniformly so its larger dimension matches `unitRegion`'s
+       own size, then centers it.
 ]]
 local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
 
 --- Applies the Forever theme's real per-client UnitFrame art: creates
 --- (once, cached on `frame`) a portrait ring texture centered on
 --- `unitRegion` (the real portrait region -- same convention as
---- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, sized
---- to that atlas's own native pixel dimensions (never stretched to fit
---- `unitRegion`), gated on the atlas name actually resolving in this
---- client. Falls back to ClearForeverUnitFrameArt (i.e. today's
---- already-shipped fixed-accent-color look, with no ring) when the atlas
---- name doesn't resolve, rather than erroring or half-applying.
+--- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, scaled
+--- uniformly (aspect ratio preserved, never distorted) to fit `unitRegion`'s
+--- own size, gated on the atlas name actually resolving in this client.
+--- Falls back to ClearForeverUnitFrameArt (i.e. today's already-shipped
+--- fixed-accent-color look, with no ring) when the atlas name doesn't
+--- resolve, rather than erroring or half-applying.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
 --- @param unitRegion Frame|Region the real portrait region to center on
 function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
@@ -260,8 +265,20 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
 
     art:ClearAllPoints()
-    if info.width and info.height and info.width > 0 and info.height > 0 then
-        art:SetSize(info.width, info.height)
+    local nativeW, nativeH = info.width, info.height
+    if nativeW and nativeH and nativeW > 0 and nativeH > 0 then
+        local targetSize = (unitRegion.GetHeight and unitRegion:GetHeight()) or 0
+        if not targetSize or targetSize <= 0 then
+            targetSize = (unitRegion.GetWidth and unitRegion:GetWidth()) or 0
+        end
+        if targetSize and targetSize > 0 then
+            local scale = targetSize / math.max(nativeW, nativeH)
+            art:SetSize(nativeW * scale, nativeH * scale)
+        else
+            -- unitRegion has no usable size yet -- fall back to the atlas's
+            -- own native size rather than a zero/invalid one.
+            art:SetSize(nativeW, nativeH)
+        end
     end
     art:SetPoint("CENTER", unitRegion, "CENTER", 0, 0)
     art:Show()
