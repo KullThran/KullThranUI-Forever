@@ -34,54 +34,18 @@ local function KTDebugDumpFrame(frame, label)
     )
 end
 
-local function KTShowDebugWindow(text)
-    local f = _G.KT_ForeverDebugWindow
-    if not f then
-        f = CreateFrame("Frame", "KT_ForeverDebugWindow", UIParent)
-        f:SetSize(520, 320)
-        f:SetPoint("CENTER")
-        f:SetFrameStrata("DIALOG")
-        f:SetMovable(true)
-        f:EnableMouse(true)
-        f:RegisterForDrag("LeftButton")
-        f:SetScript("OnDragStart", f.StartMoving)
-        f:SetScript("OnDragStop", f.StopMovingOrSizing)
-
-        local bg = f:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0, 0, 0, 0.9)
-
-        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        title:SetPoint("TOPLEFT", 10, -8)
-        title:SetText("KT Forever Debug -- select all, copy, paste back")
-
-        local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-        if closeBtn.SetPoint then
-            closeBtn:SetPoint("TOPRIGHT", 2, 2)
-        end
-
-        local edit = CreateFrame("EditBox", nil, f)
-        edit:SetMultiLine(true)
-        edit:SetSize(490, 270)
-        edit:SetPoint("TOPLEFT", 10, -30)
-        edit:SetFontObject(GameFontNormal)
-        edit:SetAutoFocus(true)
-        edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        f._edit = edit
-
-        _G.KT_ForeverDebugWindow = f
-    end
-    f._edit:SetText(text)
-    f._edit:HighlightText()
-    f._edit:SetFocus()
-    f:Show()
-end
 
 SLASH_KTFOREVERDEBUG1 = "/ktdebug"
 SlashCmdList["KTFOREVERDEBUG"] = function()
+    -- Printed to normal chat (one message per line) instead of a custom
+    -- window, so it lands in KullThranUI_Chat's own history and can be
+    -- grabbed with its existing "Copy Chat" dialog, which the user already
+    -- has and prefers over a bespoke EditBox.
     local text = KTDebugDumpFrame(_G.KullThranUI_UF_Player, "Player")
         .. KTDebugDumpFrame(_G.KullThranUI_UF_Target, "Target")
-    KTShowDebugWindow(text)
+    for line in text:gmatch("[^\n]+") do
+        print(line)
+    end
 end
 
 --[[
