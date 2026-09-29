@@ -2705,6 +2705,7 @@ local DEFAULTS = {
                 bgA = 0.6,
                 iconZoom = 0.08,
                 iconShape = "none",
+                frameArtKit = "default",
                 growDirection = "RIGHT",
                 verticalOrientation = false,
                 barBgEnabled = false,
@@ -8003,6 +8004,62 @@ icon:SetSize(iconW, iconH)
 end
 
 -------------------------------------------------------------------------------
+--  VisualThemes: optional classic 8-piece frame art around a CDM icon
+-------------------------------------------------------------------------------
+-- Ring size (in on-screen pixels) of ThemeBorderKit.lua's shared 8-piece
+-- classic border at scale = 1. That file does not expose BASE_RING_SIZE as
+-- a public constant (it is a private local there), so the value is mirrored
+-- here deliberately; keep this in sync if ThemeBorderKit.lua's own value
+-- ever changes.
+local CDM_CLASSIC_BORDER_BASE_RING_SIZE = 16
+
+-- CDM icons sit far closer together (default spacing = 2px, icons as small
+-- as 28px) than the other 3 modules this shared border kit is used on
+-- (frames of 100px+), so reusing scale = 1 (a 16px outward ring on every
+-- side) overlaps the neighboring icon by roughly 2*16 - spacing pixels --
+-- not a maybe, that is the actual arithmetic at the module's own defaults.
+-- Scale the ring down per-bar so its outward reach stays within half of
+-- that bar's own on-screen icon spacing, closing the gap instead of
+-- spilling past it into the next icon.
+local function ComputeClassicBorderScale(barData)
+    local barScale = (barData and barData.barScale) or 1.0
+    if not barScale or barScale < 0.1 then barScale = 1.0 end
+    local spacing = ((barData and barData.spacing) or 2) * barScale
+    local scale = (spacing / 2) / CDM_CLASSIC_BORDER_BASE_RING_SIZE
+    if scale > 1 then scale = 1 end
+    -- Keep a hairline ring instead of 0 (or less, for a bar configured with
+    -- negative/overlapping spacing): ThemeBorderKit.lua's own SeatClassicBorder
+    -- treats scale <= 0 as "unset" and resets it to a full-size scale = 1 ring,
+    -- which would reintroduce the exact overlap this function exists to avoid.
+    if scale < 0.02 then scale = 0.02 end
+    return scale
+end
+
+-- Applies or removes the "classic" theme's shared border kit around a single
+-- CDM icon. Purely decorative: anchored just outside the icon itself (same
+-- pattern as CastBar/ResourceBars/UnitFrames -- see ESTUDIO_SELECTOR_ESTILOS_
+-- INSTALLER_RETAIL.md seccion 30 for the audit trail). barData.frameArtKit is
+-- a normal per-bar profile field (same name as unitFrames.frameArtKit /
+-- castbar.frameArtKit / resourceBars general.frameArtKit).
+local function ApplyClassicFrameArt(icon, barData)
+    if not icon then return end
+    local VT = KT.VisualThemes
+    if not (VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder) then
+        return
+    end
+    local wantClassic = barData and barData.frameArtKit == "classic"
+    if wantClassic then
+        icon.classicBorder = icon.classicBorder or VT:CreateClassicBorder(icon)
+        if icon.classicBorder then
+            VT:SeatClassicBorder(icon.classicBorder, icon, ComputeClassicBorderScale(barData))
+            VT:ShowClassicBorder(icon.classicBorder, true)
+        end
+    elseif icon.classicBorder then
+        VT:ShowClassicBorder(icon.classicBorder, false)
+    end
+end
+
+-------------------------------------------------------------------------------
 --  Create a single icon frame for a CDM bar
 -------------------------------------------------------------------------------
 local function CreateCDMIcon(barKey, index)
@@ -8232,6 +8289,7 @@ local function CreateCDMIcon(barKey, index)
     if shape ~= "none" then
         ApplyShapeToCDMIcon(icon, shape, barData)
     end
+    ApplyClassicFrameArt(icon, barData)
 
     ns.SetCDMIconShown(icon, false)
     return icon
@@ -10351,6 +10409,7 @@ local function RefreshCDMIconAppearance(barKey)
         -- Apply custom shape
         local shape = barData.iconShape or "none"
         ApplyShapeToCDMIcon(icon, shape, barData)
+        ApplyClassicFrameArt(icon, barData)
 
         -- Reset active state so glow type change takes effect on next tick
         if icon._glowOverlay and not ns._nativeCDMFrameData[icon] then
@@ -12970,6 +13029,20 @@ ns.initFrame:SetScript("OnEvent", function(self, event, arg1)
             end
             p.migratedCDM_v40 = true
         end
+
+        -- v41: VisualThemes classic border kit (frameArtKit) is a new field;
+        -- profiles saved before this task never got it from barDefaults, and
+        -- AceDB will not retroactively add a new key into an already-existing
+        -- bars[] entry. Backfill it explicitly, same pattern as v29.
+        if p and p.cdmBars and p.cdmBars.bars and not p.migratedCDM_v41 then
+            if p.cdmBars.barDefaults and p.cdmBars.barDefaults.frameArtKit == nil then
+                p.cdmBars.barDefaults.frameArtKit = "default"
+            end
+            for _, b in ipairs(p.cdmBars.bars) do
+                if b.frameArtKit == nil then b.frameArtKit = "default" end
+            end
+            p.migratedCDM_v41 = true
+        end
         KUI_CDM._needsCapture = not KUI_CDM.db.profile._capturedOnce
         _G._KUI_CDM_AceDB = KUI_CDM.db
         _G._KUI_CDM_Apply = function()
@@ -13294,8 +13367,7 @@ ns.eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
         -- local is always legal; only *testing* it errors. So bind the fields,
         -- issecretvalue-gate every use, and when unreadable assume duration/
         -- stack-only churn: skip the viewer refresh rather than rebuild on the
-        -- off chance (pool hooks remain the primary composition signal). Same
-        -- guard shape as EllesmereUI.
+        -- off chance (pool hooks remain the primary composition signal).
         local updateInfo = ...
         local compositionChanged = true
         if type(updateInfo) == "table" and issecretvalue and not issecretvalue(updateInfo) then
