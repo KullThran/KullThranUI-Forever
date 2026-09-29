@@ -2041,6 +2041,13 @@ local MASK_INSETS = {
     square   = 17,
 }
 
+function KT:FitStockUFPortraitMask(backdrop)
+    if not (backdrop and backdrop._ktStockPortraitAnchor and backdrop._shapeMask) then return end
+    local expand = backdrop._ktStockPortraitMaskExpand or 0
+    backdrop._shapeMask:ClearAllPoints()
+    backdrop._shapeMask:SetPoint("TOPLEFT", backdrop, "TOPLEFT", -expand, expand)
+    backdrop._shapeMask:SetPoint("BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", expand, -expand)
+end
 local function AnchorCircularPortrait(backdrop, uSettings, unitToken)
     if not (backdrop and backdrop:GetParent()) then return end
 
@@ -2291,6 +2298,10 @@ local function ApplyDetachedPortraitShape(backdrop, uSettings, unitToken)
         PP.Point(backdrop._3d, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
     end
 
+    if backdrop._ktStockPortraitAnchor then
+        KT:FitStockUFPortraitMask(backdrop)
+    end
+
     if isCircular and not backdrop._ktStockPortraitAnchor then
         AnchorCircularPortrait(backdrop, uSettings, unitToken)
         C_Timer.After(0, function()
@@ -2309,6 +2320,7 @@ local function UpdateCircularPortraitBorder(frame)
 
     local backdrop = frame.Portrait.backdrop
     if backdrop._ktStockPortraitAnchor then
+        KT:FitStockUFPortraitMask(backdrop)
         if backdrop._shapeBorderTex then backdrop._shapeBorderTex:Hide() end
         return
     end
@@ -3798,6 +3810,20 @@ end
 -- fallback for units without verified full-frame geometry. Player/target use
 -- their real Classic or Forever stock box below; those kits replace both the
 -- fallback and KUI's generic unified border.
+function KT:FitStockUFTextToWidth(fontString, maxWidth)
+    if not (fontString and fontString.GetStringWidth and fontString.GetFont and fontString.SetFont) then return end
+    local textWidth = fontString:GetStringWidth()
+    -- A FontString showing text derived from a secure/protected context (e.g.
+    -- certain unit names) can return a tainted "secret" number here -- Blizzard's
+    -- own security model forbids comparing it with plain Lua operators.
+    -- Confirmed live: this exact comparison threw "attempt to compare ... a
+    -- secret number value" and broke the addon on enable.
+    if IsForeverSecretValue(textWidth) then return end
+    if not textWidth or textWidth <= 0 or textWidth <= maxWidth then return end
+    local path, size, flags = fontString:GetFont()
+    if not path or not size then return end
+    fontString:SetFont(path, math.max(6, size * (maxWidth / textWidth)), flags)
+end
 function KT:ApplyStockUFHealthTextGeometry(frame, unit)
     local health = frame and frame.Health
     if not health then return end
@@ -3819,6 +3845,7 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
             frame.CenterText:SetPoint("CENTER", health, "CENTER", 0, 0)
             frame.CenterText:SetWidth(width)
             frame.CenterText:SetJustifyH("CENTER")
+            KT:FitStockUFTextToWidth(frame.CenterText, width)
         end
         return
     end
@@ -3828,6 +3855,7 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
         frame.LeftText:SetPoint("LEFT", health, "LEFT", 2, 0)
         frame.LeftText:SetWidth(width)
         frame.LeftText:SetJustifyH("LEFT")
+        KT:FitStockUFTextToWidth(frame.LeftText, width)
     end
     if frame.RightText and rightContent ~= "none" and rightContent ~= "name" then
         -- Explicit user request: the value/status text (health percent, or
@@ -3838,6 +3866,7 @@ function KT:ApplyStockUFHealthTextGeometry(frame, unit)
         frame.RightText:SetPoint("CENTER", health, "CENTER", 0, 0)
         frame.RightText:SetWidth(width)
         frame.RightText:SetJustifyH("CENTER")
+        KT:FitStockUFTextToWidth(frame.RightText, width)
     end
 end
 local function ApplyClassicFrameArt(frame, unit)
