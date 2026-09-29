@@ -52,7 +52,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             SetUnitValues(profile, true, "Blizzard")
             SetUnitBorderColor(profile, 0.92, 0.72, 0.22)
             profile.frameArtKit = "classic"
-            if profile.target then profile.target.portraitSide = "left" end
+            if profile.target then profile.target.portraitSide = "right" end
         elseif themeKey == "forever" then
             profile.portraitStyle = "circular"
             profile.darkTheme = true

@@ -133,6 +133,7 @@ expect(KT.db.profile.skin.stylePreset, "user_palette", "legacy palette recovery"
 
 expect(KT.VisualThemes:ApplyAll("classic"), true, "apply classic")
 expect(KT.db.profile.unitFrames.portraitStyle, "attached", "classic portraits")
+expect(KT.db.profile.unitFrames.target.portraitSide, "right", "classic target portrait side")
 expect(KT.db.profile.actionbars.buttonStyle, "BLIZZARD", "classic action style")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard", "classic resource texture")
 expect(KT.db.profile.resourceBars.general.frameArtKit, "classic", "classic resource frame art kit")

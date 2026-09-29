@@ -9,39 +9,16 @@ KT.VisualThemes = KT.VisualThemes or {}
     KullThranUI's own custom-built UnitFrame widgets. Rendering TOOLS only --
     no saved-variable reads/writes, no opinion about which theme calls them.
 
-    Classic: a real, fixed-path (non-atlas) Blizzard-shipped sheet,
-    Interface\TargetingFrame\UI-TargetingFrame, sliced for a portrait/frame
-    ring. This is not an atlas name, so it carries none of the
-    atlas-substitution risk the Retail theme is blocked on.
-
-    Texture-coordinate derivation for UI-TargetingFrame (PROVISIONAL -- see
-    note below): this environment has no running WoW client, so the crop
-    below could not be confirmed by eye, and it was derived independently
-    (never by reusing another addon's own reverse-engineered pixel values for
-    this file). UI-TargetingFrame is assumed to be a 256x128px sheet (the
-    common size for this vintage of classic-era Blizzard UI texture sheets);
-    the portrait/frame ring piece is assumed to occupy a square region in the
-    sheet's top-left corner, sized 58x58px of that 256x128 sheet.
-    OUTSTANDING MANUAL QA ITEM: both the assumed sheet dimensions and the
-    crop are unverified. They must be checked in-game (apply this to a
-    throwaway unit frame, look at it, adjust PORTRAIT_ART_* below if the
-    piece looks stretched, cut off, or shows the wrong part of the sheet)
-    before this is considered visually correct.
-
-    Both this file's decorative pieces are seated on a dedicated child frame
-    (see EnsureArtHost below), not directly on the caller's outer `frame` --
-    a Frame's own textures always render behind its child frames, and the
-    portrait/health/border widgets this art is meant to sit over are all
-    child frames, so a texture created directly on the outer frame would be
-    invisible underneath them. The host frame matches CreatePortrait's own
-    backdrop STRATA ("MEDIUM") and clears its fixed LEVEL (50, set literally
-    at creation in KUIUnitFrames.lua, not derived from the outer frame) with
-    an equally fixed, higher level of its own -- a relative offset from the
-    outer frame's own level was tried first and confirmed live, via /fstack,
-    to sit BELOW that fixed 50 whenever the outer frame's own level is low,
-    which let the portrait's own opaque background draw over this art and
-    left only its square corners peeking out past the portrait's circular
-    mask.
+    Classic uses the real fixed-path Blizzard sheet
+    Interface\TargetingFrame\UI-TargetingFrame. Player and target use its
+    verified 230x99 stock frame samples and exact 232x100 layout rectangles.
+    Units without a verified full-frame entry retain the older provisional
+    58x58 portrait-only crop; that fallback still requires in-game visual QA.
+    Decorative art is seated on a dedicated child frame (see EnsureArtHost),
+    because textures created directly on the outer frame render behind its
+    child bars and portrait. Its strata and level are resolved from the live
+    Health bar on every pass: portrait, art, bars and text therefore remain
+    in one local stack even when UnitFrames changes the frame tree's strata.
 ]]
 
 local PORTRAIT_FRAME_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame]]
@@ -70,25 +47,28 @@ local PORTRAIT_ART_TEXCOORD = {
     PORTRAIT_ART_CROP_H / PORTRAIT_ART_SHEET_HEIGHT,
 }
 
--- Strata/level this file's decorative hosts use to draw above the
--- Health/Portrait/border child frames. MEDIUM matches CreatePortrait's own
--- backdrop (KUIUnitFrames.lua: `backdrop:SetFrameStrata("MEDIUM")` /
--- `backdrop:SetFrameLevel(50)`, both fixed absolute values set at creation,
--- not derived from the outer frame) -- an EARLIER version of this file used
--- `frame:GetFrameLevel() + 20`, a RELATIVE offset, which in-game testing
--- showed lands below that fixed 50 whenever the outer frame's own level is
--- low (as confirmed live via /fstack: the art rendered, correctly sized and
--- anchored, but hidden behind the portrait's own opaque background/mask,
--- only its square corners peeking out past the portrait's circular mask).
--- ART_HOST_LEVEL is an absolute level for this same reason -- it must clear
--- Portrait's fixed 50, not just whatever the outer frame's own level is.
-local ART_HOST_STRATA = "MEDIUM"
-local ART_HOST_LEVEL = 60
-
+local CLASSIC_FRAME_GEOMETRY = {
+    player = {
+        w = 232, h = 100,
+        art = { l = 1, r = 0.1015625, t = 0.0078125, b = 0.78125, w = 230, h = 99, x = -18.5, y = -4 },
+        portrait = { point = "TOPLEFT", x = 24, y = -16, size = 64 },
+        health = { x = 90, y = 45, w = 119, h = 12 },
+        power = { x = 90, y = 56, w = 119, h = 12 },
+        name = { point = "CENTER", x = 34, y = 15, w = 100, justify = "CENTER" },
+    },
+    target = {
+        w = 232, h = 100,
+        art = { l = 0.1015625, r = 1, t = 0.0078125, b = 0.78125, w = 230, h = 99, x = 18.5, y = -4 },
+        portrait = { point = "TOPRIGHT", x = -24, y = -16, size = 64 },
+        health = { x = 23, y = 45, w = 119, h = 12 },
+        power = { x = 23, y = 56, w = 119, h = 12 },
+        name = { point = "CENTER", x = -34, y = 15, w = 100, justify = "CENTER" },
+    },
+}
 --- Creates (once, cached on `frame[cacheKey]`) a child frame positioned to
---- fully cover `frame` and elevated to ART_HOST_STRATA/ART_HOST_LEVEL so
---- textures created on it draw above the outer frame's own child widgets,
---- including the portrait's own fixed-level-50 backdrop.
+--- fully cover `frame`. Its actual strata/level is resolved by
+--- SyncArtLayers from the live Health bar; hardcoded strata are incorrect
+--- here because UnitFrames can move the whole tree to another strata.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
 --- @param cacheKey string the field name this host is cached under on `frame`
 --- @return Frame|nil host
@@ -98,30 +78,99 @@ local function EnsureArtHost(frame, cacheKey)
 
     host = CreateFrame("Frame", nil, frame)
     host:SetAllPoints(frame)
-    host:SetFrameStrata(ART_HOST_STRATA)
-    host:SetFrameLevel(ART_HOST_LEVEL)
+    host:EnableMouse(false)
+    host._kuiThemeArtHost = true
     frame[cacheKey] = host
     return host
 end
 
+--- Keeps the stock-art stack internally ordered without assuming a global
+--- strata or an absolute frame level. The intended order is:
+--- portrait -> frame art -> bars -> text. Classic's opaque window frame is
+--- the one exception: its art belongs immediately above the bars.
+local function SyncArtLayers(frame, host, artAboveBars)
+    local health = frame and frame.Health
+    if not (health and host) then return end
+
+    local strata = (health.GetFrameStrata and health:GetFrameStrata())
+        or (frame.GetFrameStrata and frame:GetFrameStrata())
+        or "LOW"
+    local healthLevel = (health.GetFrameLevel and health:GetFrameLevel()) or 2
+    local power = frame.Power
+    local powerLevel = (power and power.GetFrameLevel and power:GetFrameLevel()) or healthLevel
+    local topBarLevel = math.max(healthLevel, powerLevel)
+    local artLevel = artAboveBars and (topBarLevel + 1) or math.max(0, healthLevel - 1)
+
+    host:SetFrameStrata(strata)
+    host:SetFrameLevel(artLevel)
+
+    local portrait = frame.Portrait and frame.Portrait.backdrop
+    if portrait then
+        portrait:SetFrameStrata(strata)
+        portrait:SetFrameLevel(math.max(0, math.min(healthLevel, artLevel) - 1))
+    end
+
+    local textOverlay = frame._textOverlay
+    if textOverlay then
+        textOverlay:SetFrameStrata(strata)
+        textOverlay:SetFrameLevel(math.max(topBarLevel + 12, artLevel + 1))
+    end
+end
 --- Scales a health/power text FontString's font size by `scale`, from its
 --- OWN unscaled base size (cached on the FontString the first time this
 --- runs), never from its current size -- reapplying this on every render
 --- pass must never compound (shrinking further each time), and the base
 --- must survive `scale` changing between calls (e.g. the user adjusting
 --- portrait size). Nil-safe; does nothing if `fs` has no font set yet.
-local function ScaleForeverBarText(fs, scale)
+local function ScaleStockBarText(fs, scale)
     if type(fs) ~= "table" or type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
     local path, currentSize, flags = fs:GetFont()
     if not path or not currentSize then return end
-    local base = fs._ktForeverBaseFontSize
+    local base = fs._ktStockBaseFontSize
     if not base then
         base = currentSize
-        fs._ktForeverBaseFontSize = base
+        fs._ktStockBaseFontSize = base
     end
     fs:SetFont(path, base * scale, flags)
 end
 
+--- Shrinks a FontString's font size further, on top of whatever it already
+--- is, only when its CURRENT rendered text actually overflows `maxWidth` --
+--- e.g. a long character name that doesn't fit the real name tab's real
+--- width even at the theme's normal uniform scale. Never grows text back;
+--- a short name at the normal scale is left alone. Nil-safe/no-op if the
+--- FontString has no text or font yet, or if it already fits.
+local function FitTextToWidth(fs, maxWidth)
+    if type(fs) ~= "table" or type(fs.GetStringWidth) ~= "function" then return end
+    if type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
+    if not maxWidth or maxWidth <= 0 then return end
+    local width = fs:GetStringWidth()
+    if not width or width <= 0 or width <= maxWidth then return end
+    local path, size, flags = fs:GetFont()
+    if not path or not size then return end
+    fs:SetFont(path, math.max(6, size * (maxWidth / width)), flags)
+end
+
+local function ResolveStockScale(frame, geom)
+    local width = frame.GetWidth and frame:GetWidth()
+    local height = frame.GetHeight and frame:GetHeight()
+    local desiredWidth = width
+
+    -- KUI's attached layout adds the portrait width to the outer frame.
+    -- Before the stock pass its aspect ratio therefore differs sharply from
+    -- the stock box; in that state the configured Health width is the stable
+    -- width control shared by attached, circular and portrait-free presets.
+    local health = frame.Health
+    local healthWidth = health and health.GetWidth and health:GetWidth()
+    local ratio = (width and width > 0 and height) and (height / width) or nil
+    local stockRatio = geom.h / geom.w
+    if ratio and math.abs(ratio - stockRatio) > 0.05
+        and healthWidth and healthWidth > 0 then
+        desiredWidth = healthWidth
+    end
+
+    return (desiredWidth and desiredWidth > 0) and (desiredWidth / geom.w) or 1
+end
 --- Sizes and anchors `art` as a SQUARE centered on `unitRegion`, instead of
 --- stretching it to whatever rect `unitRegion` happens to have. A portrait
 --- ring/frame piece reads as distorted the moment its container isn't
@@ -149,6 +198,26 @@ local function SeatSquareArt(art, unitRegion)
     end
 end
 
+local function SeatStockPortrait(unitRegion, frame, portrait, scale)
+    unitRegion._ktStockPortraitAnchor = true
+    unitRegion._ktStockPortraitMaskExpand = 5 * scale
+    if unitRegion._shapeBorderTex then unitRegion._shapeBorderTex:Hide() end
+    unitRegion:ClearAllPoints()
+    unitRegion:SetPoint(portrait.point, frame, portrait.point,
+        portrait.x * scale, portrait.y * scale)
+    unitRegion:SetSize(portrait.size * scale, portrait.size * scale)
+    if unitRegion._shapeMask then
+        local expand = unitRegion._ktStockPortraitMaskExpand
+        unitRegion._shapeMask:ClearAllPoints()
+        unitRegion._shapeMask:SetPoint("TOPLEFT", unitRegion, "TOPLEFT", -expand, expand)
+        unitRegion._shapeMask:SetPoint("BOTTOMRIGHT", unitRegion, "BOTTOMRIGHT", expand, -expand)
+    end
+end
+
+local function ReleaseStockPortrait(frame)
+    local backdrop = frame and frame.Portrait and frame.Portrait.backdrop
+    if backdrop then backdrop._ktStockPortraitAnchor = nil end
+end
 --- Creates (once, cached on `host[cacheKey]`) a circular mask matching
 --- PORTRAIT_MASK_TEXTURE and applies it to `art`, then keeps the mask
 --- anchored to `art`'s current rect (SetAllPoints tracks `art` live, so this
@@ -168,38 +237,98 @@ local function ApplyCircleMask(art, host, cacheKey)
     mask:SetAllPoints(art)
 end
 
---- Applies the Classic theme's real per-client UnitFrame art: creates (once,
---- cached on `frame`) a portrait/frame ring texture anchored to `unitRegion`
---- (the real portrait region -- pass `frame.Portrait.backdrop` when it
---- exists, falling back to `frame` only when no portrait region exists for
---- this unit) from the real UI-TargetingFrame sheet. Does not touch any
---- health-bar texture choice -- the `classic` theme's own seed already sets
---- a real, correct health bar texture, and retexturing it again here would
---- silently override whatever a user picks while `classic` is active. Safe
---- to call every refresh -- the ring texture is created once and
---- repositioned/shown on repeat calls, never recreated.
---- @param frame Frame the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the real portrait region to frame
-function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion)
+--- Applies the Classic theme's verified player/target stock box from the
+--- real UI-TargetingFrame sheet. The outer box, portrait, health, power and
+--- name all share one uniform scale; KUI keeps ownership of bar fills and
+--- gameplay behavior. Units without verified full geometry retain the older
+--- portrait-only fallback.
+--- @param frame Frame the unit frame's outer frame
+--- @param unitRegion Frame|Region the portrait region
+--- @param unit string|nil unit key
+function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
 
     local host = EnsureArtHost(frame, "_ktClassicArtHost")
     if not host then return end
 
-    local art = frame._ktClassicPortraitArt
-    if not art then
-        art = host:CreateTexture(nil, "OVERLAY")
-        art:SetTexture(PORTRAIT_FRAME_TEXTURE)
-        art:SetTexCoord(PORTRAIT_ART_TEXCOORD[1], PORTRAIT_ART_TEXCOORD[2], PORTRAIT_ART_TEXCOORD[3], PORTRAIT_ART_TEXCOORD[4])
-        frame._ktClassicPortraitArt = art
+    local geom = unit and CLASSIC_FRAME_GEOMETRY[unit]
+    if not geom then
+        -- Verified full-frame geometry currently exists only for player and
+        -- target. Other units keep the earlier portrait-only fallback.
+        SyncArtLayers(frame, host, true)
+        local art = frame._ktClassicPortraitArt
+        if not art then
+            art = host:CreateTexture(nil, "OVERLAY")
+            art:SetTexture(PORTRAIT_FRAME_TEXTURE)
+            art:SetTexCoord(PORTRAIT_ART_TEXCOORD[1], PORTRAIT_ART_TEXCOORD[2], PORTRAIT_ART_TEXCOORD[3], PORTRAIT_ART_TEXCOORD[4])
+            frame._ktClassicPortraitArt = art
+        end
+        SeatSquareArt(art, unitRegion)
+        ApplyCircleMask(art, host, "_ktClassicPortraitMask")
+        art:Show()
+        return
     end
 
-    SeatSquareArt(art, unitRegion)
-    ApplyCircleMask(art, host, "_ktClassicPortraitMask")
-    art:Show()
-end
+    local scale = ResolveStockScale(frame, geom)
 
+    frame:SetSize(geom.w * scale, geom.h * scale)
+    SyncArtLayers(frame, host, true)
+
+    local art = frame._ktClassicPortraitArt
+    if not art then
+        art = host:CreateTexture(nil, "BACKGROUND")
+        frame._ktClassicPortraitArt = art
+    end
+    local artGeom = geom.art
+    art:SetTexture(PORTRAIT_FRAME_TEXTURE)
+    art:SetTexCoord(artGeom.l, artGeom.r, artGeom.t, artGeom.b)
+    art:ClearAllPoints()
+    art:SetPoint("CENTER", frame, "CENTER", artGeom.x * scale, artGeom.y * scale)
+    art:SetSize(artGeom.w * scale, artGeom.h * scale)
+    art:Show()
+
+    local portrait = geom.portrait
+    SeatStockPortrait(unitRegion, frame, portrait, scale)
+
+    local health = frame.Health
+    if health then
+        health:ClearAllPoints()
+        health:SetPoint("TOPLEFT", frame, "TOPLEFT",
+            geom.health.x * scale, -geom.health.y * scale)
+        health:SetSize(geom.health.w * scale, geom.health.h * scale)
+        health._xOffset = geom.health.x * scale
+        health._rightInset = (geom.w - geom.health.x - geom.health.w) * scale
+        health._topOffset = geom.health.y * scale
+        local absorb = frame.HealthPrediction and frame.HealthPrediction.damageAbsorb
+        if absorb and absorb.SetSize then
+            absorb:SetSize(geom.health.w * scale, geom.health.h * scale)
+        end
+    end
+
+    local power = frame.Power
+    if power then
+        power:ClearAllPoints()
+        power:SetPoint("TOPLEFT", frame, "TOPLEFT",
+            geom.power.x * scale, -geom.power.y * scale)
+        power:SetSize(geom.power.w * scale, geom.power.h * scale)
+    end
+
+    local nameText = frame.LeftText
+    if nameText and geom.name then
+        nameText:ClearAllPoints()
+        nameText:SetPoint(geom.name.point, frame, geom.name.point,
+            geom.name.x * scale, geom.name.y * scale)
+        if nameText.SetWidth then nameText:SetWidth(geom.name.w * scale) end
+        if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify) end
+    end
+
+    ScaleStockBarText(frame.LeftText, scale)
+    ScaleStockBarText(frame.RightText, scale)
+    ScaleStockBarText(frame.CenterText, scale)
+    frame._ktClassicLayoutActive = true
+    return true
+end
 --- Hides (does not destroy) the Classic portrait/frame art created by
 --- ApplyClassicUnitFrameArt, if any. Nil-safe if it was never created.
 --- @param frame Frame|Region the unit frame passed to ApplyClassicUnitFrameArt
@@ -209,98 +338,105 @@ function KT.VisualThemes:ClearClassicUnitFrameArt(frame)
     if art then
         art:Hide()
     end
+    ReleaseStockPortrait(frame)
+    frame._ktClassicLayoutActive = nil
 end
 
 --[[
-    Forever real UnitFrame art (see ESTUDIO log entries 33-37 for the full
-    history -- 5 prior attempts at a "portrait ring" were all wrong, in two
-    different ways, before this version):
+    Forever stock UnitFrame art.
 
-    1-4. Earlier versions treated the atlas as if it were a small circular
-       "portrait ring" -- forcing it into a square, using its raw native
-       size, growing the portrait to match it, and a fudge-scaled version of
-       that growth. All four were confirmed broken via live screenshots.
-    5. The atlas name itself ("ui-hud-unitframe-player-portraiton") was
-       never actually wrong -- it's a real, case-insensitive match for
-       Blizzard's own `UI-HUD-UnitFrame-Player-PortraitOn`. What was wrong
-       was the ASSUMPTION about its shape: this atlas is not a ring at all,
-       it's the ENTIRE player-frame art box (232x100px native -- wide and
-       short, not square), with the portrait/health-bar/power-bar each
-       positioned at fixed offsets INSIDE that box. Fitting a 232x100 image
-       into a small square portrait region necessarily produces a thin
-       sliver -- confirmed exactly via a live screenshot.
-    6. This version uses the real box geometry (FOREVER_FRAME_GEOMETRY
-       below): real Blizzard-defined atlas names and their real native
-       pixel offsets, both facts about the game client (not anyone's
-       original work) identified by reading how these same real atlas
-       names and offsets are consumed elsewhere for exactly this purpose,
-       for technique/data only -- no code, comment, or identifier from that
-       source is reused here. The player/target boxes are the only ones
-       with confirmed real geometry; any other unit (focus, pet, boss) has
-       no entry in the table and gets no art (ClearForeverUnitFrameArt),
-       rather than guessing another wrong shape onto it.
-    The box is scaled UNIFORMLY (never distorted) so its own internal
-    portrait sub-rect lines up with `unitRegion`'s real on-screen position
-    and size -- the ratio between `unitRegion`'s size and the box's known
-    portrait sub-size IS the scale factor, applied to both the box's overall
-    size and its anchor offset.
-    Entry 38 adds the real health/power bar-track rectangles from the same
-    real geometry table and re-anchors the frame's ACTUAL Health/Power
-    StatusBars to sit inside them (same uniform scale as the box itself),
-    after KUIUnitFrames.lua's own normal layout has already positioned them
-    for this render pass -- never touching that shared computation itself,
-    only re-anchoring its result for forever+player/target. Safe to do
-    unconditionally on every apply because a theme switch in this addon
-    always goes through a full ReloadUI (confirmed elsewhere in this
-    codebase), so there is never a stale Forever-anchored bar left behind
-    after switching away -- the next render pass recomputes it fresh before
-    this function would run again. Bar-track atlas backgrounds themselves
-    (the actual `-Bar-Health`/`-Bar-Mana` art) are still not drawn -- the
-    bars are repositioned/resized onto the real rectangle, but keep KUI's
-    own fill texture/mask, matching how Classic's health bar already keeps
-    the user's own texture choice instead of being overridden.
+    The atlas is the visible artwork inside a 232x100 layout box; it is not
+    itself the box. Player and target use fixed portrait, health, power and
+    name rectangles in that coordinate space. One uniform scale is applied
+    to all of them, the real atlas is centred at its native visible size, and
+    the stock masks shape KUI's existing bar textures without replacing their
+    colors or fills.
+
+    Only player and target have verified geometry. Other units deliberately
+    keep KUI's normal rendering instead of receiving guessed artwork.
 ]]
+
 local FOREVER_FRAME_GEOMETRY = {
     player = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Player-PortraitOn",
         portrait = { point = "TOPLEFT", x = 24, y = -19, size = 60 },
-        health = { x = 85, y = 40, w = 124, h = 20 },
-        power = { x = 85, y = 61, w = 124, h = 10 },
-        name = { x = 88, y = -27, w = 96 },
+        health = {
+            x = 85, y = 40, w = 124, h = 20,
+            mask = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Mask",
+            mx = -2, my = 6,
+        },
+        power = {
+            x = 85, y = 61, w = 124, h = 10,
+            mask = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana-Mask",
+            mx = -2, my = 2,
+        },
+        name = { x = 88, y = -27, w = 96, h = 14 },
     },
     target = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Target-PortraitOn",
         portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
-        health = { x = 23, y = 40, w = 126, h = 20 },
-        power = { x = 23, y = 61, w = 134, h = 10 },
-        name = { x = 30, y = -26, w = 120 },
+        health = {
+            x = 23, y = 40, w = 126, h = 20,
+            mask = "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Mask",
+            mx = -1, my = 6,
+        },
+        power = {
+            x = 23, y = 61, w = 134, h = 10,
+            mask = "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana-Mask",
+            mx = -61, my = 3,
+        },
+        name = { x = 30, y = -26, w = 120, h = 14 },
     },
 }
 
--- Uniform fudge factor on top of the real geometric scale: a live
--- screenshot showed the ring sitting slightly loose around KUI's own
--- portrait rather than hugging it tightly. Applied to the SAME `scale`
--- used for the box, bars, and name text (never independently), so
--- everything shrinks together and stays aligned -- a per-piece fudge would
--- misalign the ring against the bars again. Tuned by eye, not derived;
--- expect to adjust after the next in-game look.
-local FOREVER_BOX_FUDGE_SCALE = 0.92
-
---- Converts a geometry entry's `portrait` rect (given corner-relative, as
---- Blizzard's own reference data expresses it -- TOPLEFT for player,
---- TOPRIGHT for target) into its CENTER point in box-local coordinates
---- (measured from the box's own top-left, y increasing downward),
---- regardless of which corner it was expressed from. This is what lets the
---- box be anchored by matching centers instead of assuming a corner.
-local function PortraitCenterInBox(geom)
-    local p = geom.portrait
-    local left = (p.point == "TOPRIGHT") and (geom.w + p.x - p.size) or p.x
-    local top = -p.y
-    return left + p.size / 2, top + p.size / 2
+local function UnsnapTexture(texture)
+    if not texture then return end
+    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
+    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
 end
 
+local function SeatMaskOnTexture(texture, mask)
+    if not (texture and mask and texture.AddMaskTexture) then return end
+    if texture.RemoveMaskTexture then
+        pcall(texture.RemoveMaskTexture, texture, mask)
+    end
+    texture:AddMaskTexture(mask)
+end
+
+local function ApplyForeverBarMask(bar, geom, scale)
+    if not (bar and geom and geom.mask and C_Texture and C_Texture.GetAtlasInfo) then return end
+    local info = C_Texture.GetAtlasInfo(geom.mask)
+    if not info then return end
+
+    local mask = bar._ktForeverMask
+    if not mask then
+        mask = bar:CreateMaskTexture()
+        bar._ktForeverMask = mask
+    end
+    mask:SetAtlas(geom.mask, true)
+    mask:Show()
+    UnsnapTexture(mask)
+    mask:ClearAllPoints()
+    mask:SetPoint("TOPLEFT", bar, "TOPLEFT", (geom.mx or 0) * scale, (geom.my or 0) * scale)
+    if info.width and info.height then
+        mask:SetSize(info.width * scale, info.height * scale)
+    end
+
+    SeatMaskOnTexture(bar.GetStatusBarTexture and bar:GetStatusBarTexture(), mask)
+    SeatMaskOnTexture(bar.bg, mask)
+end
+
+local function ResizeHealthPrediction(frame, width, height)
+    local absorb = frame.HealthPrediction and frame.HealthPrediction.damageAbsorb
+    if not absorb then return end
+    if absorb.SetSize then absorb:SetSize(width, height) end
+    local mask = frame.Health and frame.Health._ktForeverMask
+    if mask and absorb.GetStatusBarTexture then
+        SeatMaskOnTexture(absorb:GetStatusBarTexture(), mask)
+    end
+end
 --- Applies the Forever theme's real per-client UnitFrame art: creates
 --- (once, cached on `frame`) the real player/target frame-art box texture,
 --- scaled and anchored so its own known internal portrait sub-rect lines up
@@ -329,114 +465,126 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         return
     end
 
+    -- The same stock-box scale resolver is shared with Classic, so attached
+    -- and circular layouts interpret the configured width identically.
+    local scale = ResolveStockScale(frame, geom)
+
+    frame:SetSize(geom.w * scale, geom.h * scale)
+
     local host = EnsureArtHost(frame, "_ktForeverArtHost")
     if not host then return end
+    SyncArtLayers(frame, host, false)
 
     local art = frame._ktForeverPortraitArt
     if not art then
-        art = host:CreateTexture(nil, "OVERLAY")
+        art = host:CreateTexture(nil, "BACKGROUND")
+        UnsnapTexture(art)
         frame._ktForeverPortraitArt = art
     end
     art:SetAtlas(geom.art)
-
-    local targetSize = (unitRegion.GetHeight and unitRegion:GetHeight())
-        or (unitRegion.GetWidth and unitRegion:GetWidth())
-    local scale = (targetSize and targetSize > 0) and (targetSize / geom.portrait.size) or 1
-    scale = scale * FOREVER_BOX_FUDGE_SCALE
-
-    -- CENTER-to-CENTER anchoring, not point-to-point: KUI's own portrait can
-    -- sit on either side of the frame, on top, attached or detached --
-    -- anchoring by a hardcoded corner (assuming the portrait is always
-    -- where Blizzard's own reference frame puts it) ignores wherever KUI's
-    -- actual portrait really is, and the ring only wraps it by coincidence.
-    -- Confirmed live: it did not wrap the portrait correctly. Aligning the
-    -- box's own known internal portrait-center with unitRegion's real
-    -- CENTER works for every side/attachment, since it never assumes which
-    -- corner the portrait is anchored from.
-    local portraitCenterX, portraitCenterY = PortraitCenterInBox(geom)
-    local boxCenterX, boxCenterY = geom.w / 2, geom.h / 2
-
     art:ClearAllPoints()
+    art:SetPoint("CENTER", host, "CENTER", 0, 0)
     art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
-    art:SetPoint("CENTER", unitRegion, "CENTER",
-        (boxCenterX - portraitCenterX) * scale, (portraitCenterY - boxCenterY) * scale)
     art:Show()
 
-    -- Re-anchor the REAL health/power bars onto the box's own real
-    -- bar-track rectangle (same scale as the box itself), overriding the
-    -- position KUIUnitFrames.lua's normal layout just gave them for this
-    -- render pass. Only the anchor/size changes -- fill texture, color,
-    -- and mask stay whatever the user (or the theme's own seed) chose.
-    --
-    -- Anchored to `frame`, NOT to `art` (or unitRegion): in some portrait
-    -- layouts (portraitSide "top"/detached) KUIUnitFrames.lua itself anchors
-    -- frame.Portrait.backdrop relative to frame.Health -- confirmed live via
-    -- "Cannot anchor to a region dependent on it" (health -> art ->
-    -- unitRegion(=Portrait.backdrop) -> health, a real cycle). `frame` is
-    -- always a safe target -- it never depends on its own Health/Portrait
-    -- children. `art`'s resolved on-screen position (read once via
-    -- GetLeft/GetTop, not a live anchor dependency) supplies the same
-    -- origin without creating a new dependency edge.
-    local artLeft, artTop = art:GetLeft(), art:GetTop()
-    local frameLeft, frameTop = frame.GetLeft and frame:GetLeft(), frame.GetTop and frame:GetTop()
-    if artLeft and artTop and frameLeft and frameTop then
-        local originX, originY = artLeft - frameLeft, artTop - frameTop
-        local health = frame.Health
-        if geom.health and type(health) == "table" and health.ClearAllPoints then
-            health:ClearAllPoints()
-            health:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                originX + geom.health.x * scale, originY - geom.health.y * scale)
-            health:SetSize(geom.health.w * scale, geom.health.h * scale)
-        end
-        local power = frame.Power
-        if geom.power and type(power) == "table" and power.ClearAllPoints then
-            power:ClearAllPoints()
-            power:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                originX + geom.power.x * scale, originY - geom.power.y * scale)
-            power:SetSize(geom.power.w * scale, geom.power.h * scale)
-        end
+    -- The outer frame is now the stable stock box. Portrait and bars are all
+    -- siblings anchored to that same box, so no element depends on Health
+    -- while Health is being repositioned (the previous portrait -> art ->
+    -- health feedback loop could drift on every refresh).
+    local portrait = geom.portrait
+    SeatStockPortrait(unitRegion, frame, portrait, scale)
 
-        -- Real Blizzard UI gives the name its OWN tab above the portrait,
-        -- separate from the health bar entirely -- not crammed onto the bar
-        -- alongside the percentage, which is what was overlapping in a live
-        -- screenshot. Moves frame.LeftText (the name text in KUI's DEFAULT
-        -- text-content configuration -- leftTextContent = "name") out to
-        -- that real tab rect; frame.RightText (the value/percentage) stays
-        -- on the bar, which now has the bar's full width to itself. A user
-        -- who reassigned leftTextContent away from "name" keeps their own
-        -- layout unaffected, since this only ever moves frame.LeftText,
-        -- whatever content it currently holds.
-        local nameText = frame.LeftText
-        if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
-            nameText:ClearAllPoints()
-            nameText:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                originX + geom.name.x * scale, originY - geom.name.y * scale)
-            if nameText.SetWidth then
-                nameText:SetWidth(geom.name.w * scale)
-            end
-        end
-
-        -- The health bar's own name/value text (frame.LeftText/RightText/
-        -- CenterText) tracks frame.Health's new size live -- textOverlay is
-        -- SetAllPoints(frame.Health) -- but its FONT SIZE stays whatever the
-        -- user configured for the bar's OLD, usually wider, width, and
-        -- overlaps once the bar shrinks to the real bar-track's width.
-        -- Confirmed via a live screenshot. Scaled down by the same factor.
-        ScaleForeverBarText(frame.LeftText, scale)
-        ScaleForeverBarText(frame.RightText, scale)
-        ScaleForeverBarText(frame.CenterText, scale)
+    local health = frame.Health
+    if geom.health and type(health) == "table" and health.ClearAllPoints then
+        health:ClearAllPoints()
+        health:SetPoint("TOPLEFT", frame, "TOPLEFT",
+            geom.health.x * scale, -geom.health.y * scale)
+        health:SetSize(geom.health.w * scale, geom.health.h * scale)
+        health._xOffset = geom.health.x * scale
+        health._rightInset = (geom.w - geom.health.x - geom.health.w) * scale
+        health._topOffset = geom.health.y * scale
+        ApplyForeverBarMask(health, geom.health, scale)
+        ResizeHealthPrediction(frame, geom.health.w * scale, geom.health.h * scale)
     end
 
+    local power = frame.Power
+    if geom.power and type(power) == "table" and power.ClearAllPoints then
+        power:ClearAllPoints()
+        power:SetPoint("TOPLEFT", frame, "TOPLEFT",
+            geom.power.x * scale, -geom.power.y * scale)
+        power:SetSize(geom.power.w * scale, geom.power.h * scale)
+        ApplyForeverBarMask(power, geom.power, scale)
+    end
+
+    local nameText = frame.LeftText
+    if geom.name and type(nameText) == "table" and nameText.ClearAllPoints then
+        local point = geom.name.point or "TOPLEFT"
+        nameText:ClearAllPoints()
+        nameText:SetPoint(point, frame, point,
+            geom.name.x * scale, geom.name.y * scale)
+        if nameText.SetWidth then nameText:SetWidth(geom.name.w * scale) end
+        if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify or "LEFT") end
+    end
+
+    ScaleStockBarText(frame.LeftText, scale)
+    ScaleStockBarText(frame.RightText, scale)
+    ScaleStockBarText(frame.CenterText, scale)
+    -- Explicit user rule: a name long enough to overflow the real tab's
+    -- real width shrinks further, on top of the uniform theme scale above,
+    -- rather than spilling past the tab or overlapping the buffs below it.
+    if geom.name then
+        FitTextToWidth(frame.LeftText, geom.name.w * scale)
+    end
+
+    -- Buffs move into the same real name tab, per explicit user request --
+    -- Forever-only for now (Classic/Retail keep their existing Health-bar-
+    -- relative anchor untouched). Anchored so the icon ROW's bottom edge
+    -- sits on the tab's own top edge, growing upward from it -- the tab
+    -- itself is the name's real rect, not the buffs' rect, so buffs sit
+    -- immediately above it rather than overlapping the name text.
+    local buffs = frame.Buffs
+    if geom.name and type(buffs) == "table" and buffs.ClearAllPoints then
+        local tabW = geom.name.w * scale
+        local iconSize = math.max(8, geom.name.h * scale)
+        local gap = buffs.spacing or 1
+        buffs:ClearAllPoints()
+        buffs:SetPoint("BOTTOMLEFT", frame, "TOPLEFT",
+            geom.name.x * scale, geom.name.y * scale)
+        buffs:SetSize(tabW, iconSize)
+        buffs.size = iconSize
+        buffs.spacing = gap
+        buffs["size-x"] = math.max(1, math.floor((tabW + gap) / (iconSize + gap)))
+        if buffs.ForceUpdate then buffs:ForceUpdate() end
+    end
+
+    frame._ktForeverLayoutActive = true
     return true
 end
-
 --- Hides (does not destroy) the Forever frame-art box created by
 --- ApplyForeverUnitFrameArt, if any. Nil-safe if it was never created.
 --- @param frame Frame|Region the unit frame passed to ApplyForeverUnitFrameArt
 function KT.VisualThemes:ClearForeverUnitFrameArt(frame)
     if type(frame) ~= "table" then return end
     local art = frame._ktForeverPortraitArt
-    if art then
-        art:Hide()
+    if art then art:Hide() end
+
+    local function ClearBarMask(bar)
+        local mask = bar and bar._ktForeverMask
+        if not mask then return end
+        local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+        if fill and fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, mask) end
+        if bar.bg and bar.bg.RemoveMaskTexture then pcall(bar.bg.RemoveMaskTexture, bar.bg, mask) end
+        mask:Hide()
     end
+
+    ClearBarMask(frame.Health)
+    ClearBarMask(frame.Power)
+    local absorb = frame.HealthPrediction and frame.HealthPrediction.damageAbsorb
+    local healthMask = frame.Health and frame.Health._ktForeverMask
+    local absorbFill = absorb and absorb.GetStatusBarTexture and absorb:GetStatusBarTexture()
+    if healthMask and absorbFill and absorbFill.RemoveMaskTexture then
+        pcall(absorbFill.RemoveMaskTexture, absorbFill, healthMask)
+    end
+    ReleaseStockPortrait(frame)
+    frame._ktForeverLayoutActive = nil
 end
