@@ -475,18 +475,12 @@ local FOREVER_FRAME_GEOMETRY = {
     target = {
         w = 232, h = 100,
         art = "UI-HUD-UnitFrame-Target-PortraitOn",
-        -- EXPERIMENTAL, unverified: live QA reported target's box art not
-        -- filling the portrait ring and not reading as mirrored the other
-        -- way. The code never manually flips either unit -- it trusts each
-        -- real atlas to already be correctly mirrored (this is how
-        -- EllesmereUI itself uses these same two atlases, unflipped). If
-        -- Forever's client substitutes its own bronze art under this name
-        -- without keeping a distinct, correctly-mirrored target variant,
-        -- forcing a flip here could fix it -- or, if Forever's substituted
-        -- art is already mirrored, this would flip it the WRONG way. Only
-        -- in-game verification can tell which; revert this one field to
-        -- `false` if the result looks worse, not better.
-        mirror = true,
+        -- The experimental mirror = true (tried after live QA reported the
+        -- box art not filling the portrait ring) was confirmed live to make
+        -- it WORSE: the ring moved to the opposite side, no longer aligned
+        -- with the real portrait at all -- i.e. this atlas was already
+        -- correctly oriented, matching how EllesmereUI itself uses it
+        -- (unflipped). Reverted to the default: no manual flip.
         portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
         health = {
             x = 23, y = 40, w = 126, h = 20,
@@ -700,8 +694,8 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- immediately above it rather than overlapping the name text.
     local buffs = frame.Buffs
     if geom.name and type(buffs) == "table" and buffs.ClearAllPoints then
-        local tabW = geom.name.w * scale
-        local iconSize = math.max(8, geom.name.h * scale)
+        local tabW = geom.health.w * scale
+        local iconSize = math.max(8, geom.health.h * scale)
         local gap = buffs.spacing or 1
         buffs:ClearAllPoints()
         buffs:SetPoint("BOTTOMLEFT", frame, "TOPLEFT",

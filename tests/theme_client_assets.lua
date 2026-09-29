@@ -156,9 +156,9 @@ expect(player.LeftText:GetParent(), player._ktForeverArtHost, "player name repar
 expect(player.Buffs.points[1][1], "BOTTOMLEFT", "player buffs anchor point")
 near(player.Buffs.points[1][4], 88 * playerScale, "player buffs x")
 near(player.Buffs.points[1][5], -27 * playerScale, "player buffs y (same tab as name)")
-near(player.Buffs:GetWidth(), 96 * playerScale, "player buffs width (tab width)")
-near(player.Buffs:GetHeight(), 14 * playerScale, "player buffs height (tab height)")
-near(player.Buffs.size, 14 * playerScale, "player buffs icon size")
+near(player.Buffs:GetWidth(), 124 * playerScale, "player buffs width (health width)")
+near(player.Buffs:GetHeight(), 20 * playerScale, "player buffs height (health height)")
+near(player.Buffs.size, 20 * playerScale, "player buffs icon size")
 expect(player.Health.fill.masks[player.Health._ktForeverMask], true, "health fill mask")
 expect(player.Health.bg.masks[player.Health._ktForeverMask], true, "health background mask")
 expect(player.HealthPrediction.damageAbsorb.fill.masks[player.Health._ktForeverMask], true, "absorb mask")
@@ -187,15 +187,11 @@ near(target.Health:GetWidth(), 126 * targetScale, "target health width")
 near(target.Power:GetWidth(), 134 * targetScale, "target power width")
 near(target.Portrait.backdrop.points[1][4], -26 * targetScale, "target portrait x")
 near(target.LeftText.points[1][5], -26 * targetScale, "target name y sign")
--- EXPERIMENTAL mirror flag (see FOREVER_FRAME_GEOMETRY.target's own
--- comment): target resolves to the real file with left/right texcoords
--- swapped, never SetAtlas, since SetAtlas can't be flipped.
-expect(target._ktForeverPortraitArt.atlas, nil, "target art never uses SetAtlas while mirrored")
-expect(target._ktForeverPortraitArt.texture, "Interface\\Fake\\StockArt", "target art resolves to the real file")
-near(target._ktForeverPortraitArt.texCoord[1], 0.9, "target art flipped left coord")
-near(target._ktForeverPortraitArt.texCoord[2], 0.1, "target art flipped right coord")
-near(target._ktForeverPortraitArt.texCoord[3], 0.2, "target art top coord unchanged")
-near(target._ktForeverPortraitArt.texCoord[4], 0.8, "target art bottom coord unchanged")
+-- The mirror experiment (see FOREVER_FRAME_GEOMETRY.target's own comment)
+-- was confirmed live to move the ring to the wrong side and was reverted --
+-- target uses plain SetAtlas, unmirrored, same as player.
+expect(target._ktForeverPortraitArt.atlas, "UI-HUD-UnitFrame-Target-PortraitOn", "target art uses SetAtlas, unmirrored")
+expect(target._ktForeverPortraitArt.texture, nil, "target art never resolves to a raw file")
 
 local classic = MakeUnitFrame()
 classic:SetSize(282, 52) -- attached KUI width includes its portrait
