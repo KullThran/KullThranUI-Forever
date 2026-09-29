@@ -1959,8 +1959,16 @@ local function ApplyClassIconTexture(tex, classToken, style)
 end
 
 local function GetDefaultPortraitFacing(unit)
-    if unit == "target" then
+    -- Player and target still face each other ("look inward" toward their
+    -- own frame content), but swapped from the previous defaults per
+    -- explicit user request after live QA: player now faces the direction
+    -- target used to, and vice versa. Other units (focus/pet/boss) keep
+    -- their previous "normal" default, unaffected by this swap.
+    if unit == "player" then
         return "flipped"
+    end
+    if unit == "target" then
+        return "normal"
     end
     return "normal"
 end
@@ -3812,6 +3820,21 @@ end
 -- fallback and KUI's generic unified border.
 function KT:FitStockUFTextToWidth(fontString, maxWidth)
     if not (fontString and fontString.GetStringWidth and fontString.GetFont and fontString.SetFont) then return end
+    local path, currentSize, flags = fontString:GetFont()
+    if not path or not currentSize then return end
+    -- Cache the ORIGINAL font size once, and always re-measure from THAT
+    -- size, never from whatever size the last call left behind. Confirmed
+    -- live: clicking a target fires ApplyClassicFrameArt (and this function
+    -- through it) more than once in the same refresh; without resetting to
+    -- a fixed base first, each call shrank an already-shrunk font further,
+    -- so the text kept getting smaller and never recovered ("se queda ahi
+    -- bugueado todo el rato").
+    local base = fontString._ktStockFitBaseFontSize
+    if not base then
+        base = currentSize
+        fontString._ktStockFitBaseFontSize = base
+    end
+    fontString:SetFont(path, base, flags)
     local textWidth = fontString:GetStringWidth()
     -- A FontString showing text derived from a secure/protected context (e.g.
     -- certain unit names) can return a tainted "secret" number here -- Blizzard's
@@ -3820,9 +3843,7 @@ function KT:FitStockUFTextToWidth(fontString, maxWidth)
     -- secret number value" and broke the addon on enable.
     if IsForeverSecretValue(textWidth) then return end
     if not textWidth or textWidth <= 0 or textWidth <= maxWidth then return end
-    local path, size, flags = fontString:GetFont()
-    if not path or not size then return end
-    fontString:SetFont(path, math.max(6, size * (maxWidth / textWidth)), flags)
+    fontString:SetFont(path, math.max(6, base * (maxWidth / textWidth)), flags)
 end
 function KT:ApplyStockUFHealthTextGeometry(frame, unit)
     local health = frame and frame.Health
