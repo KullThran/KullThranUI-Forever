@@ -13,29 +13,52 @@ KT.VisualThemes:RegisterModule("resourcebars", {
     getProfile = GetProfile,
     getOwnedPaths = function()
         return {
-            "general.texture",
+            "general.texture", "general.frameArtKit",
             "health.texture", "health.borderSize",
+            "health.fillR", "health.fillG", "health.fillB",
             "primary.texture", "primary.borderSize",
             "secondary.texture", "secondary.borderSize",
         }
     end,
     seed = function(profile, themeKey)
-        local texture, borderSize
+        -- health/primary/secondary share one texture+borderSize seed (already
+        -- true before this task) and now one shared classic-border toggle
+        -- (general.frameArtKit): the three sub-bars stack into a single
+        -- resource-bar identity, not three independent widgets, so one
+        -- switch framing all three is the honest choice -- see audit notes
+        -- in ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md section 30.
+        --
+        -- Only health gets a per-theme accent color: it is the one section
+        -- with a real, always-rendered static color field (fillR/fillG/fillB,
+        -- confirmed at KUIResourceBars.lua:1770) with no gameplay meaning
+        -- attached. primary/secondary default to colorMode == "power" (a
+        -- real, currently-accurate class/power-type color -- e.g. mana blue,
+        -- rage red) and are left untouched so re-theming doesn't strip that
+        -- information from the player.
+        local texture, borderSize, frameArtKit
+        local healthR, healthG, healthB
         if themeKey == "classic" then
-            texture, borderSize = "Blizzard", 1
+            texture, borderSize, frameArtKit = "Blizzard", 1, "classic"
+            healthR, healthG, healthB = 0.86, 0.62, 0.16
         elseif themeKey == "forever" then
-            texture, borderSize = "Melli Dark", 2
+            texture, borderSize, frameArtKit = "Melli Dark", 2, "default"
+            healthR, healthG, healthB = 0.82, 0.65, 0.23
         elseif themeKey == "retail" then
-            texture, borderSize = "Blizzard Raid Bar", 0
+            texture, borderSize, frameArtKit = "Blizzard Raid Bar", 0, "default"
+            healthR, healthG, healthB = 0.12, 0.48, 0.95
         else
             texture, borderSize = "Melli Reforged", 1
         end
         profile.general = profile.general or {}
         profile.general.texture = texture
+        if frameArtKit then profile.general.frameArtKit = frameArtKit end
         for _, key in ipairs({ "health", "primary", "secondary" }) do
             profile[key] = profile[key] or {}
             profile[key].texture = texture
             profile[key].borderSize = borderSize
+        end
+        if healthR then
+            profile.health.fillR, profile.health.fillG, profile.health.fillB = healthR, healthG, healthB
         end
     end,
     validate = function(profile)

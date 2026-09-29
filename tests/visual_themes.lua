@@ -44,8 +44,8 @@ local KT = {
                 buttonShape = "rounded",
             },
             resourceBars = {
-                general = { texture = "User Texture" },
-                health = { texture = "User Texture", borderSize = 3 },
+                general = { texture = "User Texture", frameArtKit = "user_kit" },
+                health = { texture = "User Texture", borderSize = 3, fillR = 0.4, fillG = 0.5, fillB = 0.6 },
                 primary = { texture = "User Texture", borderSize = 3 },
                 secondary = { texture = "User Texture", borderSize = 3 },
             },
@@ -135,6 +135,8 @@ expect(KT.VisualThemes:ApplyAll("classic"), true, "apply classic")
 expect(KT.db.profile.unitFrames.portraitStyle, "attached", "classic portraits")
 expect(KT.db.profile.actionbars.buttonStyle, "BLIZZARD", "classic action style")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard", "classic resource texture")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "classic", "classic resource frame art kit")
+expect(KT.db.profile.resourceBars.health.fillR, 0.86, "classic resource health color")
 expect(KT.db.profile.castbar.texture, "Blizzard", "classic cast texture")
 expect(KT.db.profile.castbar.colorMode, "CUSTOM", "classic cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.86, "classic cast bar color")
@@ -149,6 +151,8 @@ expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art 
 expect(KT.VisualThemes:ApplyAll("retail"), true, "apply retail")
 expect(KT.db.profile.unitFrames.portraitStyle, "none", "retail portraits")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard Raid Bar", "retail resource texture")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "default", "retail resource frame art kit")
+expect(KT.db.profile.resourceBars.health.fillR, 0.12, "retail resource health color")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "none", "retail nameplate border")
 expect(KT.db.profile.unitFrames.player.borderColor.r, 0.20, "retail unit border color")
 expect(KT.db.profile.unitFrames.frameArtKit, "default", "retail unit frame art kit")
@@ -161,6 +165,10 @@ expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style
 expect(KT.db.profile.actionbars.buttonShape, "HEXAGON", "restore action shape")
 expect(KT.db.profile.unitFrames.healthBarTexture, "User Texture", "restore unit texture")
 expect(KT.db.profile.resourceBars.primary.texture, "User Texture", "restore resource texture")
+expect(KT.db.profile.resourceBars.general.frameArtKit, "user_kit", "restore resource frame art kit")
+expect(KT.db.profile.resourceBars.health.fillR, 0.4, "restore resource health color r")
+expect(KT.db.profile.resourceBars.health.fillG, 0.5, "restore resource health color g")
+expect(KT.db.profile.resourceBars.health.fillB, 0.6, "restore resource health color b")
 expect(KT.db.profile.castbar.texture, "User Texture", "restore cast texture")
 expect(KT.db.profile.castbar.colorMode, "THEME", "restore cast bar color mode")
 expect(KT.db.profile.castbar.color.r, 0.4, "restore cast bar color")

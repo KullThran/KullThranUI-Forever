@@ -1033,7 +1033,7 @@ local function GetSafeDB()
     if not KT.db.profile.resourceBars then
         KT.db.profile.resourceBars = {
             enabled    = true,
-            general   = { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION },
+            general   = { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION, frameArtKit = "default" },
             powerColors = {},
             health    = { enabled = false, height = 25, borderSize = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, textFormat = "both", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE },
             primary   = { enabled = true,  height = 25, borderSize = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00, fillA = 1, textFormat = "curpp", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE, classColor = true, colorMode = "power", specColors = {}, hideManaBySpec = {}, markers = { enabled = false, values = "", width = 2, colorR = 1, colorG = 1, colorB = 1, colorA = 0.95 } },
@@ -1043,7 +1043,7 @@ local function GetSafeDB()
 
     local db = KT.db.profile.resourceBars
     if db.enabled == nil then db.enabled = true end
-    db.general   = db.general   or { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION }
+    db.general   = db.general   or { anchorGap = 4, matchCooldownWidth = false, manualWidth = 135, strata = "MEDIUM", hideOOC = false, xOffset = 0, bgA = 0.8, previewMode = "stack", texture = DEFAULT_BAR_TEXTURE, textureDefaultVersion = BAR_TEXTURE_DEFAULT_VERSION, frameArtKit = "default" }
     if db.general.anchorGap == nil         then db.general.anchorGap          = 4    end
     if db.general.matchCooldownWidth == nil then db.general.matchCooldownWidth = false end
     if db.general.manualWidth == nil        then db.general.manualWidth        = 135  end
@@ -1052,6 +1052,7 @@ local function GetSafeDB()
     if db.general.xOffset == nil            then db.general.xOffset            = 0 end
     if db.general.bgA == nil                then db.general.bgA                = 0.8 end
     if db.general.previewMode == nil        then db.general.previewMode        = "stack" end
+    if db.general.frameArtKit == nil        then db.general.frameArtKit        = "default" end
 
     -- Match the castbar's new fixed default width without overriding custom resource widths.
     if not db.general._ktResourceBarsDefaultMigrated_v2 then
@@ -1599,6 +1600,33 @@ function KRB:DebugDump()
 end
 
 -------------------------------------------------------------------------------
+--  Fase 4 (VisualThemes): marco clasico opcional de 8 piezas
+-------------------------------------------------------------------------------
+-- Puramente decorativo: se ancla justo fuera del rect de cada barra/contenedor
+-- (sin tocar backdrop, pixel border, tamano o anclajes existentes). Un unico
+-- campo de perfil (db.general.frameArtKit) controla las tres barras a la vez
+-- -- salud/poder primario/recurso secundario forman una sola identidad visual
+-- apilada, no tres widgets independientes (ver auditoria en la entrada
+-- correspondiente de ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md seccion 30).
+local function ApplyClassicFrameArt(frame, db)
+    if not frame then return end
+    local VT = KT.VisualThemes
+    if not (VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder) then
+        return
+    end
+    local wantClassic = db and db.general and db.general.frameArtKit == "classic"
+    if wantClassic then
+        frame.classicBorder = frame.classicBorder or VT:CreateClassicBorder(frame)
+        if frame.classicBorder then
+            VT:SeatClassicBorder(frame.classicBorder, frame, 1)
+            VT:ShowClassicBorder(frame.classicBorder, true)
+        end
+    elseif frame.classicBorder then
+        VT:ShowClassicBorder(frame.classicBorder, false)
+    end
+end
+
+-------------------------------------------------------------------------------
 --  BuildBars
 -------------------------------------------------------------------------------
 function KRB:BuildBars()
@@ -1779,6 +1807,14 @@ function KRB:BuildBars()
 
     anchorFrame:SetSize(refWidth, max(totalHeight - gap, 1))
     anchorFrame:SetShown(totalHeight > gap or (EditModeManagerFrame and EditModeManagerFrame:IsEditModeActive()))
+
+    -- Fase 4 (VisualThemes): un unico interruptor (db.general.frameArtKit)
+    -- decide el marco clasico de las tres barras. secondaryFrame es el
+    -- contenedor tanto en modo barra como en modo pips, asi que un solo
+    -- marco alrededor de el cubre ambos sin depender de cuantos pips haya.
+    ApplyClassicFrameArt(healthBar, db)
+    ApplyClassicFrameArt(primaryBar, db)
+    ApplyClassicFrameArt(secondaryFrame, db)
 
     _G.KUI_ResourceBarsTop = lastAnchorFrame
 
