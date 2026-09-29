@@ -159,6 +159,8 @@ near(player.Buffs.points[1][5], (-27 + 3) * playerScale, "player buffs y (name t
 near(player.Buffs:GetWidth(), 124 * playerScale, "player buffs width (health width)")
 near(player.Buffs:GetHeight(), 20 * playerScale, "player buffs height (health height)")
 near(player.Buffs.size, 20 * playerScale, "player buffs icon size")
+local _, playerLeftFontSize = player.LeftText:GetFont()
+near(playerLeftFontSize, 14 * playerScale, "player LeftText font uncapped (20px-tall bar fits it fine)")
 expect(player.Health.fill.masks[player.Health._ktForeverMask], true, "health fill mask")
 expect(player.Health.bg.masks[player.Health._ktForeverMask], true, "health background mask")
 expect(player.HealthPrediction.damageAbsorb.fill.masks[player.Health._ktForeverMask], true, "absorb mask")
@@ -209,6 +211,8 @@ near(classic._ktClassicPortraitArt:GetHeight(), 99 * classicScale, "classic art 
 near(classic.Health:GetWidth(), 119 * classicScale, "classic health width")
 near(classic.Power:GetWidth(), 119 * classicScale, "classic power width")
 near(classic.LeftText.points[1][5], 15 * classicScale, "classic name y")
+local _, classicLeftFontSize = classic.LeftText:GetFont()
+near(classicLeftFontSize, 12 * classicScale * 0.8, "classic LeftText font capped to its real 12px-tall bar")
 expect(classic.LeftText:GetParent(), classic._ktClassicArtHost, "classic name reparented off Health's clipped hierarchy")
 
 KT.VisualThemes:ClearForeverUnitFrameArt(player)
