@@ -56,6 +56,7 @@ Modules\VisualThemes\ThemeSlots.lua
 Modules\VisualThemes\ThemeRegistry.lua
 Modules\VisualThemes\ThemeEngine.lua
 Modules\VisualThemes\ThemeBorderKit.lua
+Modules\VisualThemes\ThemeClientAssets.lua
 Modules\VisualThemes\ThemePreview.lua
 Modules\VisualThemes\ThemeSelector.lua
 Modules\VisualThemes\Adapters\UnitFrames.lua
