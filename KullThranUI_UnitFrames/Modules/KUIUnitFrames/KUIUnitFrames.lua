@@ -6748,6 +6748,13 @@ local function ReloadFrames()
                     if frame._applyTextPositions then
                         frame._applyTextPositions(settings)
                     end
+                    -- KUI's own default text layout just ran, assuming its
+                    -- normal (unthemed) health bar width -- re-apply the
+                    -- real stock geometry so themed name/value text isn't
+                    -- left at that stale, much-wider position. Confirmed
+                    -- live: without this, the health value hangs well past
+                    -- the real (narrower) bar's right edge on every reload.
+                    ApplyClassicFrameArt(frame, unit)
 
                     -- Bottom Text Bar update (player)
                     if settings.bottomTextBar then
@@ -6936,13 +6943,16 @@ local function ReloadFrames()
                         end
                     end
 
-                    -- Reposition name and health text
+                    -- Reposition name and health text (target)
                     if frame._applyTextTags then
                         frame._applyTextTags(settings.leftTextContent or "name", settings.rightTextContent or "both", settings.centerTextContent or "none")
                     end
                     if frame._applyTextPositions then
                         frame._applyTextPositions(settings)
                     end
+                    -- Same re-apply as the player block above -- see its
+                    -- comment for why this is needed on every reload.
+                    ApplyClassicFrameArt(frame, unit)
 
                     -- Bottom Text Bar update (target) ? must come before castbar so castbar can anchor to it
                     local tPpBtbAnchor = (ppIsAtt and frame.Power) or frame.Health
@@ -7249,6 +7259,10 @@ local function ReloadFrames()
                 if frame._applyTextPositions then
                     frame._applyTextPositions(settings)
                 end
+                -- Same re-apply as the player block earlier in this
+                -- function -- see its comment for why this is needed on
+                -- every reload.
+                ApplyClassicFrameArt(frame, unit)
 
                 -- Bottom Text Bar update (focus) ? must come before castbar so castbar can anchor to it
                 local fPpBtbAnchor = (fPpIsAtt and frame.Power) or frame.Health
