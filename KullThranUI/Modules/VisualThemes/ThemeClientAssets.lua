@@ -39,7 +39,8 @@ local function KTDebugDumpFrame(frame, label)
         "%s: LeftText=%s RightText=%s CenterText=%s Buffs=%s\n" ..
         "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
         "  Health=%s (%sx%s) frame=%sx%s\n" ..
-        "  %s\n  %s\n  %s\n",
+        "  %s\n  %s\n  %s\n" ..
+        "  HealthCalc=%s\n",
         label,
         tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
         tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
@@ -52,7 +53,8 @@ local function KTDebugDumpFrame(frame, label)
         tostring(frame.GetHeight and frame:GetHeight()),
         KTDebugDumpPoints(health, "HealthPoints"),
         KTDebugDumpPoints(buffs, "BuffsPoints"),
-        KTDebugDumpPoints(nameFS, "NamePoints")
+        KTDebugDumpPoints(nameFS, "NamePoints"),
+        tostring(frame._ktDebugHealthCalc)
     )
 end
 
@@ -605,6 +607,14 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         health._topOffset = geom.health.y * scale
         ApplyForeverBarMask(health, geom.health, scale)
         ResizeHealthPrediction(frame, geom.health.w * scale, geom.health.h * scale)
+        -- TEMPORARY debug: cache the exact arithmetic that just ran, and the
+        -- width immediately after SetSize, so /ktforevertab can show whether
+        -- something ELSE changes it before the user inspects it later.
+        frame._ktDebugHealthCalc = string.format(
+            "scale=%.4f geomW=%.2f geomH=%.2f setW=%.4f setH=%.4f postSetGetWidth=%s",
+            scale, geom.health.w, geom.health.h,
+            geom.health.w * scale, geom.health.h * scale,
+            tostring(health.GetWidth and health:GetWidth()))
     end
 
     local power = frame.Power
