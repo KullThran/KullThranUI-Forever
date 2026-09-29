@@ -146,6 +146,7 @@ local defaults = {
         healthBarOpacity = 90,
         powerBarOpacity = 100,
         darkTheme = false,
+        frameArtKit = "default",  -- Set to "classic" by the VisualThemes classic theme
         -- NEW: separate player sub-table (migrated from shared playerTarget)
         player = {
             frameWidth = 230,
@@ -3739,10 +3740,33 @@ local function ApplyBorderAppearance(frame, unit)
     if size == 0 then border:Hide() end
 end
 
+-- Fase 3 (VisualThemes): aplica o retira el marco clasico opcional del tema
+-- "classic". Es puramente decorativo: se ancla justo fuera del propio frame
+-- unificado (el mismo rectangulo que borderColor ya tinta arriba) sin tocar
+-- su layout/tamano. db.profile.frameArtKit es un valor global (no por
+-- unidad), asi que todas las unidades siguen el mismo interruptor.
+local function ApplyClassicFrameArt(frame, unit)
+    local VT = KT.VisualThemes
+    if not (VT and VT.CreateClassicBorder and VT.SeatClassicBorder and VT.ShowClassicBorder) then
+        return
+    end
+    local wantClassic = db and db.profile and db.profile.frameArtKit == "classic"
+    if wantClassic then
+        frame.classicBorder = frame.classicBorder or VT:CreateClassicBorder(frame)
+        if frame.classicBorder then
+            VT:SeatClassicBorder(frame.classicBorder, frame, 1)
+            VT:ShowClassicBorder(frame.classicBorder, true)
+        end
+    elseif frame.classicBorder then
+        VT:ShowClassicBorder(frame.classicBorder, false)
+    end
+end
+
 -- Función compuesta: mantiene la firma original para los 5 call sites
 local function CreateUnifiedBorder(frame, unit)
     BuildBorderFrame(frame)
     ApplyBorderAppearance(frame, unit)
+    ApplyClassicFrameArt(frame, unit)
     frame:HookScript("OnEnter", FrameBorderEnter)
     frame:HookScript("OnLeave", FrameBorderLeave)
     return frame.unifiedBorder
@@ -7305,6 +7329,7 @@ local function ReloadFrames()
                     frame.unifiedBorder:Show()
                 end
             end
+            ApplyClassicFrameArt(frame, unit)
 
             -- Helper: set font on a FontString, using donor font for mini frames
             local function SetMiniFont(fs, sz)

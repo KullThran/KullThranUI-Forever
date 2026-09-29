@@ -139,11 +139,15 @@ expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "square", "class
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "simple", "classic nameplate border")
 expect(KT.db.profile.partyFrames.party.healthTexture, "Blizzard", "classic party texture")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "palette unchanged outside KUI")
+expect(KT.db.profile.unitFrames.player.borderColor.r, 0.92, "classic unit border color")
+expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art kit")
 
 expect(KT.VisualThemes:ApplyAll("retail"), true, "apply retail")
 expect(KT.db.profile.unitFrames.portraitStyle, "none", "retail portraits")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard Raid Bar", "retail resource texture")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "none", "retail nameplate border")
+expect(KT.db.profile.unitFrames.player.borderColor.r, 0.20, "retail unit border color")
+expect(KT.db.profile.unitFrames.frameArtKit, "default", "retail unit frame art kit")
 
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore KUI")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style")
@@ -154,6 +158,7 @@ expect(KT.db.profile.castbar.texture, "User Texture", "restore cast texture")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "diamond", "restore CDM shape")
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "kullthran", "restore nameplate border")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "restore palette")
+expect(KT.db.profile.unitFrames.player.classThemeStyle, nil, "kui no longer seeds dead classThemeStyle")
 expect(reloads, 3, "successful reload count")
 
 KT.db.profile.partyFrames = nil
