@@ -12446,7 +12446,40 @@ ns.initFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 ns.initFrame:RegisterEvent("UPDATE_MACROS")
 ns.initFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
+-- KullThranUI/Modules/VisualThemes/Adapters/CooldownManager.lua already
+-- seeds bronze border color (0.82, 0.65, 0.23) for Forever's bars, but only
+-- when the user actually SWITCHES themes (ApplyAll/seed()) -- a profile
+-- that was already on Forever before that adapter code existed (or before
+-- CDM's own bars array grew past its original count) never got that seed,
+-- and AceDB defaults never overwrite an already-saved value. Explicit user
+-- report: the circular icon shape is already correct, only the border
+-- color is still stuck at the module's own hardcoded black default (see
+-- barDefaults.borderR/G/B above). One-time fix, mirroring the same
+-- "_xxxMigrated<date>" pattern KUIUnitFrames.lua uses for identical
+-- AceDB-default migrations -- only touches bars still at the literal old
+-- default, never a deliberately chosen border color.
+local function MigrateForeverBronzeCDMBorders()
+    local p = KUI_CDM.db and KUI_CDM.db.profile
+    if not p or p._cdmForeverBronzeMigrated20260930 then return end
+    p._cdmForeverBronzeMigrated20260930 = true
+
+    if not (KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme() == "forever") then
+        return
+    end
+
+    local bars = p.cdmBars and p.cdmBars.bars
+    if type(bars) ~= "table" then return end
+
+    for _, barData in ipairs(bars) do
+        if (barData.borderR or 0) == 0 and (barData.borderG or 0) == 0 and (barData.borderB or 0) == 0 then
+            barData.borderR, barData.borderG, barData.borderB = 0.82, 0.65, 0.23
+        end
+    end
+end
+
 function KUI_CDM:CDMFinishSetup()
+    MigrateForeverBronzeCDMBorders()
     ns.RebuildCdIDToCorrectSID()
     if ns.SetupNativeCDMViewerHooks then ns.SetupNativeCDMViewerHooks() end
     BuildAllCDMBars()
