@@ -217,24 +217,34 @@ end
     guard below already falls back to today's already-correct fixed-accent
     look silently -- nothing breaks either way, but the ring simply won't
     show until the name is corrected post-QA.
+
+    Sizing (fixed after live testing): an earlier version forced this piece
+    into a square matching the portrait container's own size, which visibly
+    warped it -- an atlas piece has its own real native pixel dimensions,
+    reported by C_Texture.GetAtlasInfo's `width`/`height` fields, and
+    stretching it to an unrelated external size distorts it. This now sizes
+    the texture to the atlas's own native width/height and centers it on
+    `unitRegion`, rather than forcing any external size onto it.
 ]]
 local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
 
 --- Applies the Forever theme's real per-client UnitFrame art: creates
---- (once, cached on `frame`) a portrait ring texture anchored to
+--- (once, cached on `frame`) a portrait ring texture centered on
 --- `unitRegion` (the real portrait region -- same convention as
---- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, gated
---- on that atlas name actually resolving in this client. Falls back to
---- ClearForeverUnitFrameArt (i.e. today's already-shipped fixed-accent-color
---- look, with no ring) when the atlas name doesn't resolve, rather than
---- erroring or half-applying.
+--- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, sized
+--- to that atlas's own native pixel dimensions (never stretched to fit
+--- `unitRegion`), gated on the atlas name actually resolving in this
+--- client. Falls back to ClearForeverUnitFrameArt (i.e. today's
+--- already-shipped fixed-accent-color look, with no ring) when the atlas
+--- name doesn't resolve, rather than erroring or half-applying.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the real portrait region to frame
+--- @param unitRegion Frame|Region the real portrait region to center on
 function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
 
-    if not (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(FOREVER_PORTRAIT_ATLAS)) then
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(FOREVER_PORTRAIT_ATLAS)
+    if not info then
         self:ClearForeverUnitFrameArt(frame)
         return
     end
@@ -249,8 +259,11 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     end
     art:SetAtlas(FOREVER_PORTRAIT_ATLAS)
 
-    SeatSquareArt(art, unitRegion)
-    ApplyCircleMask(art, host, "_ktForeverPortraitMask")
+    art:ClearAllPoints()
+    if info.width and info.height and info.width > 0 and info.height > 0 then
+        art:SetSize(info.width, info.height)
+    end
+    art:SetPoint("CENTER", unitRegion, "CENTER", 0, 0)
     art:Show()
 end
 
