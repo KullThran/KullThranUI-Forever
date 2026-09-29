@@ -227,6 +227,11 @@ local function FitTextToWidth(fs, maxWidth)
     if type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
     if not maxWidth or maxWidth <= 0 then return end
     local width = fs:GetStringWidth()
+    -- A FontString showing text derived from a secure/protected context can
+    -- return a tainted "secret" number here -- confirmed live, an identical
+    -- comparison in KUIUnitFrames.lua's own equivalent helper threw "attempt
+    -- to compare ... a secret number value" and broke the addon on enable.
+    if type(issecretvalue) == "function" and issecretvalue(width) then return end
     if not width or width <= 0 or width <= maxWidth then return end
     local path, size, flags = fs:GetFont()
     if not path or not size then return end
