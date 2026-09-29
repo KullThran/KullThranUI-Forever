@@ -3379,11 +3379,7 @@ local function CreatePortrait(frame, side, frameHeight, unit)
     ApplyDetachedPortraitShape(backdrop, uSettings, unit)
     if frame.Health then
         frame.Health.PostUpdate = function(self)
-            local owner = self.__owner or frame
-            UpdateCircularPortraitBorder(owner)
-            if owner._ktReapplyThemeGeometry then
-                owner._ktReapplyThemeGeometry()
-            end
+            UpdateCircularPortraitBorder(self.__owner or frame)
         end
         UpdateCircularPortraitBorder(frame)
     end
@@ -3935,17 +3931,6 @@ local function CreateUnifiedBorder(frame, unit)
     BuildBorderFrame(frame)
     ApplyBorderAppearance(frame, unit)
     ApplyClassicFrameArt(frame, unit)
-    -- Confirmed live: PLAYER_TARGET_CHANGED (and likely other events) still
-    -- clobber Health's real Forever/Classic geometry via a path this session
-    -- never fully tracked down -- every one of the 6 known re-anchor sites
-    -- was already guarded, yet Health reverted to the full frame width after
-    -- switching target. Self-healing instead of chasing more call sites:
-    -- frame.Health.PostUpdate (CreatePortrait, fires on every health value
-    -- change -- very frequent) calls this closure whenever it exists, so
-    -- whatever else touches Health gets corrected again within moments.
-    frame._ktReapplyThemeGeometry = function()
-        ApplyClassicFrameArt(frame, unit)
-    end
     frame:HookScript("OnEnter", FrameBorderEnter)
     frame:HookScript("OnLeave", FrameBorderLeave)
     return frame.unifiedBorder
