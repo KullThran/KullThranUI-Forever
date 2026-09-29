@@ -2533,7 +2533,7 @@ local function UpdateBordersForScale(frame, unit)
     local expectedFrameH = barHeight + btbH
     local pSizeAdj = settings.portraitSize or 0
     if not isAttached then pSizeAdj = pSizeAdj + 10 end
-    local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (barHeight + pSizeAdj)
+    local adjPortraitH = barHeight + pSizeAdj
     if adjPortraitH < 8 then adjPortraitH = 8 end
 
     local expectedFrameW
@@ -4764,7 +4764,7 @@ local function StyleFullFrame(frame, unit)
         local playerHeightWithCp = playerTargetHeight + cpAboveH
         -- Apply portrait size adjustment
         local pSizeAdj = settings.portraitSize or 0
-        local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (playerHeightWithCp + pSizeAdj)
+        local adjPortraitH = playerHeightWithCp + pSizeAdj
         if adjPortraitH < 8 then adjPortraitH = 8 end
         if not isAttached then pSizeAdj = pSizeAdj + 10 end
         if not showPortrait then
@@ -4863,7 +4863,7 @@ local function StyleFullFrame(frame, unit)
         local effectiveSide = pSide
         if isAttached and pSide == "top" then effectiveSide = "right" end
         local pSizeAdj = settings.portraitSize or 0
-        local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (playerTargetHeight + pSizeAdj)
+        local adjPortraitH = playerTargetHeight + pSizeAdj
         if not isAttached then pSizeAdj = pSizeAdj + 10 end
         if adjPortraitH < 8 then adjPortraitH = 8 end
         if not showPortrait then
@@ -5136,7 +5136,7 @@ local function StyleFocusFrame(frame, unit)
     if isAttached and pSide == "top" then effectiveSide = "right" end
     local pSizeAdj = settings.portraitSize or 0
     if not isAttached then pSizeAdj = pSizeAdj + 10 end
-    local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (focusBarHeight + pSizeAdj)
+    local adjPortraitH = focusBarHeight + pSizeAdj
     if adjPortraitH < 8 then adjPortraitH = 8 end
 
     if not showPortrait then
@@ -6301,7 +6301,7 @@ local function ReloadFrames()
                     local pSide = settings.portraitSide or "left"
                     local effectiveSide = pSide
                     if isAttached and pSide == "top" then effectiveSide = "left" end
-                    local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (playerTargetHeightWithCp + pSizeAdj)
+                    local adjPortraitH = playerTargetHeightWithCp + pSizeAdj
                     if adjPortraitH < 8 then adjPortraitH = 8 end
                     if not showPortrait then
                         totalWidth = settings.frameWidth
@@ -6619,7 +6619,7 @@ local function ReloadFrames()
                     local pSide = settings.portraitSide or "right"
                     local effectiveSide = pSide
                     if isAttached and pSide == "top" then effectiveSide = "right" end
-                    local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (playerTargetHeight + pSizeAdj)
+                    local adjPortraitH = playerTargetHeight + pSizeAdj
                     if adjPortraitH < 8 then adjPortraitH = 8 end
                     if not showPortrait then
                         totalWidth = settings.frameWidth
@@ -6944,7 +6944,7 @@ local function ReloadFrames()
                 local pXOff = settings.portraitX or 0
                 local pYOff = settings.portraitY or 0
                 if not isAttached then pYOff = pYOff + 5 end
-                local adjPortraitH = (KT.VisualThemes and KT.VisualThemes.GetPortraitSizeOverride and KT.VisualThemes:GetPortraitSizeOverride()) or (focusBarHeight + pSizeAdj)
+                local adjPortraitH = focusBarHeight + pSizeAdj
                 if adjPortraitH < 8 then adjPortraitH = 8 end
 
                 if not showPortrait then

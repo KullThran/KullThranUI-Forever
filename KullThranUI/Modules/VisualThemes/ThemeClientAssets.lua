@@ -218,46 +218,44 @@ end
     look silently -- nothing breaks either way, but the ring simply won't
     show until the name is corrected post-QA.
 
-    Sizing (settled after live testing -- do not re-shrink this):
+    Sizing (settled after live testing -- do not re-shrink or re-grow this
+    without reading ESTUDIO log entries 33-36 first, all 4 prior attempts
+    are documented there):
     1. An earlier version forced this piece into a square matching the
        portrait container's own size, which visibly warped it -- an atlas
        piece has its own real native pixel dimensions, reported by
        C_Texture.GetAtlasInfo's `width`/`height` fields, and stretching it
        to an unrelated external size distorts it.
-    2. A later version scaled the atlas DOWN to fit the portrait's own
-       (KUI-configurable, generally small) size. The user confirmed this
-       looked WORSE, not better -- the atlas's true NATIVE size already fit
-       correctly next to a small comparison bar, and the actual intent is
-       for the surrounding bars/portrait to grow to match this real size,
-       not the other way around (see ESTUDIO log entry 33's "peticion
-       pendiente"). That growth is wired via GetPortraitSizeOverride below.
-    3. Growing the portrait to the atlas's raw, unscaled native pixel size
-       (entry 34, first attempt) confirmed via live screenshot that this
-       atlas was authored for a full Retail-scale frame: the ring dwarfed
-       the health bar and swallowed the rest of the compact frame. Actual
-       Blizzard Retail layout also has a specific ring-to-bar size ratio
-       baked into its own frame XML, not into this atlas alone -- matching
-       raw pixels doesn't reproduce that ratio. FOREVER_ATLAS_SCALE below
-       is a uniform (aspect-preserving) fudge factor applied identically to
-       both the visual art size and the portrait-region-growth override, so
-       the ring is bigger and more real-feeling than the old fixed-accent
-       ceiling without devouring the frame. It is a tuned constant, not a
-       derived one -- expect to adjust it after the next in-game look.
+    2. Growing the surrounding portrait/frame to match the atlas's raw
+       native pixel size (with or without a fudge scale factor) was tried
+       and confirmed broken via live screenshots: this atlas was authored
+       for a full Retail-scale frame, so its native size (even scaled down
+       by a constant) still dwarfed a compact KUI frame and its health bar.
+    3. Per explicit user direction (ESTUDIO entry 36): the PORTRAIT stays at
+       its normal, existing, KUI-configured size -- nothing grows. The ring
+       is instead scaled DOWN, preserving its real aspect ratio (never
+       distorted into a square), to fit inside that existing portrait's own
+       size. This is the "copy Blizzard's default UI, adapted to a KUI
+       frame" approach: Blizzard's own default UnitFrame draws its portrait
+       art at the portrait's own size and positions health/mana bars
+       relative to it -- separately adapting bar geometry to that same
+       reference is tracked as its own follow-up (see ESTUDIO entry 36),
+       not handled by this function.
 ]]
 local FOREVER_PORTRAIT_ATLAS = "ui-hud-unitframe-player-portraiton"
-local FOREVER_ATLAS_SCALE = 0.55
 
 --- Applies the Forever theme's real per-client UnitFrame art: creates
 --- (once, cached on `frame`) a portrait ring texture centered on
 --- `unitRegion` (the real portrait region -- same convention as
 --- ApplyClassicUnitFrameArt) from a real Forever-native atlas piece, scaled
---- uniformly (aspect ratio preserved, never distorted) to fit `unitRegion`'s
---- own size, gated on the atlas name actually resolving in this client.
+--- uniformly (aspect ratio preserved, never distorted, never grown past its
+--- own native size) to FIT inside `unitRegion`'s own existing size, gated on
+--- the atlas name actually resolving in this client.
 --- Falls back to ClearForeverUnitFrameArt (i.e. today's already-shipped
 --- fixed-accent-color look, with no ring) when the atlas name doesn't
 --- resolve, rather than erroring or half-applying.
 --- @param frame Frame the unit frame's outer frame (owns the cache)
---- @param unitRegion Frame|Region the real portrait region to center on
+--- @param unitRegion Frame|Region the real portrait region to center on and fit inside
 function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
     if type(frame) ~= "table" or type(frame.CreateTexture) ~= "function" then return end
     if type(unitRegion) ~= "table" then return end
@@ -280,12 +278,15 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion)
 
     art:ClearAllPoints()
     local nativeW, nativeH = info.width, info.height
-    if nativeW and nativeH and nativeW > 0 and nativeH > 0 then
-        -- Scaled by FOREVER_ATLAS_SCALE, not raw native size (see the
-        -- comment block above this function for why) -- and by the SAME
-        -- factor GetPortraitSizeOverride uses, so the ring always matches
-        -- the region it grew to fit, never overflowing or leaving gaps.
-        art:SetSize(nativeW * FOREVER_ATLAS_SCALE, nativeH * FOREVER_ATLAS_SCALE)
+    local targetSize = (unitRegion.GetHeight and unitRegion:GetHeight())
+        or (unitRegion.GetWidth and unitRegion:GetWidth())
+    if nativeW and nativeH and nativeW > 0 and nativeH > 0 and targetSize and targetSize > 0 then
+        -- Fit inside the EXISTING portrait bounds, preserving the atlas's
+        -- own real aspect ratio -- never distorted, never grown past it.
+        local fitScale = targetSize / math.max(nativeW, nativeH)
+        art:SetSize(nativeW * fitScale, nativeH * fitScale)
+    elseif nativeW and nativeH then
+        art:SetSize(nativeW, nativeH)
     end
     art:SetPoint("CENTER", unitRegion, "CENTER", 0, 0)
     art:Show()
@@ -300,31 +301,4 @@ function KT.VisualThemes:ClearForeverUnitFrameArt(frame)
     if art then
         art:Hide()
     end
-end
-
---[[
-    Portrait size override: per explicit user direction, when a theme has a
-    real per-client portrait asset, the PORTRAIT (and everything anchored
-    relative to it -- frame width, health/power bar width) should grow or
-    shrink to match that asset's own real size, instead of shrinking the
-    real asset down to whatever size the portrait happens to already be.
-
-    KUIUnitFrames.lua computes its own portrait height (`adjPortraitH`)
-    independently at 7 call sites (one per unit x initial-creation-vs-later-
-    refresh), not through one shared function -- there is no single existing
-    choke point to hook. GetPortraitSizeOverride is designed to be layered
-    on top of each of those 7 sites' own existing computation with a single,
-    uniform, mechanical change: `override or (the site's own existing
-    expression)`. It returns nil for kui/retail (and for forever/classic
-    whenever the real asset info isn't available), so every call site's
-    existing behavior is completely unchanged for every case except forever
-    (for now) with a resolved atlas -- this is deliberately the SMALLEST
-    change that can drive real sizing from a single new function, rather
-    than duplicating theme-lookup logic at all 7 sites.
-]]
-function KT.VisualThemes:GetPortraitSizeOverride()
-    if self:GetRenderedTheme() ~= "forever" then return nil end
-    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(FOREVER_PORTRAIT_ATLAS)
-    if not info or not info.width or not info.height then return nil end
-    return math.max(info.width, info.height) * FOREVER_ATLAS_SCALE
 end
