@@ -127,6 +127,56 @@ local function KTHookRightTextCalls(frame, label)
     end)
 end
 
+-- CONFIRMED LIVE via /ktforevertab pasted twice: frame.Health itself jumps
+-- from the correct narrow Forever width (~123-125) to the full frame width
+-- (~230) between two dumps, for player AND target simultaneously, while
+-- ApplyForeverUnitFrameArt's own cached debug strings still show the old
+-- correct numbers -- i.e. something resets Health AFTER Forever's apply
+-- last ran, and nothing reruns to fix it. RightText/_kuiStatusOverlay are
+-- anchored live to Health (CENTER/0,0) -- they never needed their own
+-- SetPoint call to visually "move"; they just followed Health passively,
+-- which is exactly why the RightText hook above never fired. All 6 known
+-- Health-clobber sites (grep "_ktForeverLayoutActive" in KUIUnitFrames.lua)
+-- are still properly guarded, so a 7th, not-yet-found site must exist.
+-- Hooking Health itself, with a short stack trace, to find it.
+local function KTShortStack()
+    local ok, stack = pcall(debugstack)
+    if not ok or type(stack) ~= "string" then return "(no stack)" end
+    local lines = {}
+    for line in stack:gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+        if #lines >= 5 then break end
+    end
+    return table.concat(lines, " <- ")
+end
+
+local ktHookedHealth = {}
+local function KTHookHealthCalls(frame, label)
+    if type(frame) ~= "table" or type(frame.Health) ~= "table" then return end
+    local health = frame.Health
+    if ktHookedHealth[health] then return end
+    ktHookedHealth[health] = true
+    if type(hooksecurefunc) ~= "function" then return end
+    hooksecurefunc(health, "SetPoint", function(_, point, relTo, relPoint, x, y)
+        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
+        print(string.format("[%s Health:SetPoint] %s->%s(%s) %s,%s",
+            label, KTDebugSafeStr(point), KTDebugSafeStr(relToName),
+            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y)))
+        print("  from: " .. KTShortStack())
+    end)
+    hooksecurefunc(health, "ClearAllPoints", function()
+        print(string.format("[%s Health:ClearAllPoints]", label))
+    end)
+    hooksecurefunc(health, "SetWidth", function(_, width)
+        print(string.format("[%s Health:SetWidth] %s", label, KTDebugSafeStr(width)))
+        print("  from: " .. KTShortStack())
+    end)
+    hooksecurefunc(health, "SetSize", function(_, width, height)
+        print(string.format("[%s Health:SetSize] %s x %s", label, KTDebugSafeStr(width), KTDebugSafeStr(height)))
+        print("  from: " .. KTShortStack())
+    end)
+end
+
 -- NOT /ktdebug: KullThranUI already registers its own /ktdebug ("compatibility
 -- scan") elsewhere in the addon. Same command string means SlashCmdList only
 -- keeps one handler -- confirmed live: every previous /ktdebug attempt this
@@ -140,6 +190,8 @@ SlashCmdList["KTFOREVERDEBUG"] = function()
     -- has and prefers over a bespoke EditBox.
     KTHookRightTextCalls(_G.KullThranUI_UF_Player, "Player")
     KTHookRightTextCalls(_G.KullThranUI_UF_Target, "Target")
+    KTHookHealthCalls(_G.KullThranUI_UF_Player, "Player")
+    KTHookHealthCalls(_G.KullThranUI_UF_Target, "Target")
     local text = KTDebugDumpFrame(_G.KullThranUI_UF_Player, "Player")
         .. KTDebugDumpFrame(_G.KullThranUI_UF_Target, "Target")
     for line in text:gmatch("[^\n]+") do
