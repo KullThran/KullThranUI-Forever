@@ -68,7 +68,11 @@ _G.CreateFrame = function(_, _, parent) return NewRegion(parent) end
 _G.C_Texture = {
     GetAtlasInfo = function(atlas)
         if atlas:find("%-Mask$") then return { width = 132, height = 32 } end
-        return { width = 198, height = 71 }
+        return {
+            width = 198, height = 71, file = "Interface\\Fake\\StockArt",
+            leftTexCoord = 0.1, rightTexCoord = 0.9,
+            topTexCoord = 0.2, bottomTexCoord = 0.8,
+        }
     end,
 }
 
@@ -125,6 +129,8 @@ near(player:GetWidth(), 230, "player box width")
 near(player:GetHeight(), 100 * playerScale, "player box height")
 near(player._ktForeverPortraitArt:GetWidth(), 198 * playerScale, "player visible atlas width")
 near(player._ktForeverPortraitArt:GetHeight(), 71 * playerScale, "player visible atlas height")
+expect(player._ktForeverPortraitArt.atlas, "UI-HUD-UnitFrame-Player-PortraitOn", "player art uses SetAtlas, unmirrored")
+expect(player._ktForeverPortraitArt.texture, nil, "player art never resolves to a raw file")
 expect(player._ktForeverArtHost:GetFrameStrata(), "LOW", "art follows bar strata")
 expect(player._ktForeverArtHost:GetFrameLevel(), 1, "art below health")
 expect(player.Portrait.backdrop:GetFrameLevel(), 0, "portrait below art")
@@ -169,6 +175,15 @@ near(target.Health:GetWidth(), 126 * targetScale, "target health width")
 near(target.Power:GetWidth(), 134 * targetScale, "target power width")
 near(target.Portrait.backdrop.points[1][4], -26 * targetScale, "target portrait x")
 near(target.LeftText.points[1][5], -26 * targetScale, "target name y sign")
+-- EXPERIMENTAL mirror flag (see FOREVER_FRAME_GEOMETRY.target's own
+-- comment): target resolves to the real file with left/right texcoords
+-- swapped, never SetAtlas, since SetAtlas can't be flipped.
+expect(target._ktForeverPortraitArt.atlas, nil, "target art never uses SetAtlas while mirrored")
+expect(target._ktForeverPortraitArt.texture, "Interface\\Fake\\StockArt", "target art resolves to the real file")
+near(target._ktForeverPortraitArt.texCoord[1], 0.9, "target art flipped left coord")
+near(target._ktForeverPortraitArt.texCoord[2], 0.1, "target art flipped right coord")
+near(target._ktForeverPortraitArt.texCoord[3], 0.2, "target art top coord unchanged")
+near(target._ktForeverPortraitArt.texCoord[4], 0.8, "target art bottom coord unchanged")
 
 local classic = MakeUnitFrame()
 classic:SetSize(282, 52) -- attached KUI width includes its portrait
