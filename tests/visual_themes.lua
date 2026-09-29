@@ -33,7 +33,7 @@ local KT = {
                 portraitStyle = "circular",
                 darkTheme = false,
                 healthBarTexture = "User Texture",
-                player = { showPortrait = true, healthBarTexture = "User Texture" },
+                player = { showPortrait = true, healthBarTexture = "User Texture", borderColor = { r = 0.55, g = 0.33, b = 0.77 } },
                 target = { showPortrait = true, portraitSide = "right", healthBarTexture = "User Texture" },
                 focus = { showPortrait = true, healthBarTexture = "User Texture" },
                 pet = { showPortrait = true, healthBarTexture = "User Texture" },
@@ -159,6 +159,9 @@ expect(KT.db.profile.cooldownManager.cdmBars.bars[1].iconShape, "diamond", "rest
 expect(_G.KullThranUINameplatesDB_Forever.borderStyle, "kullthran", "restore nameplate border")
 expect(KT.db.profile.skin.stylePreset, "user_palette", "restore palette")
 expect(KT.db.profile.unitFrames.player.classThemeStyle, nil, "kui no longer seeds dead classThemeStyle")
+expect(KT.db.profile.unitFrames.player.borderColor.r, 0.55, "restore custom unit border color r")
+expect(KT.db.profile.unitFrames.player.borderColor.g, 0.33, "restore custom unit border color g")
+expect(KT.db.profile.unitFrames.player.borderColor.b, 0.77, "restore custom unit border color b")
 expect(reloads, 3, "successful reload count")
 
 KT.db.profile.partyFrames = nil
