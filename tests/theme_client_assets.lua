@@ -151,6 +151,17 @@ expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop
 near(player.Health.points[1][4], 85 * playerScale, "player stable health x")
 near(player.Portrait.backdrop.points[1][4], 24 * playerScale, "player stable portrait x")
 
+-- frame._ktStockNameText lets KUIUnitFrames.lua (which has access to the
+-- profile's leftTextContent/rightTextContent/centerTextContent) tell this
+-- file which FontString actually holds the name, for a profile where that
+-- isn't frame.LeftText -- confirmed live as a real bug: the name silently
+-- never appeared in the tab for such a profile.
+local renamed = MakeUnitFrame()
+renamed._ktStockNameText = renamed.RightText
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(renamed, renamed.Portrait.backdrop, "player"), true, "renamed-slot apply")
+near(renamed.RightText.points[1][4], 88 * playerScale, "renamed-slot name x lands on the override, not LeftText")
+expect(#renamed.LeftText.points, 0, "renamed-slot LeftText left untouched by the tab move")
+
 local target = MakeUnitFrame()
 expect(KT.VisualThemes:ApplyForeverUnitFrameArt(target, target.Portrait.backdrop, "target"), true, "target apply")
 local targetScale = 230 / 232
