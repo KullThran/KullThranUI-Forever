@@ -6261,17 +6261,17 @@ function ns.KTTargetCombo:Refresh(frame)
     local portraitSize = portrait:GetWidth()
     if type(portraitSize) ~= "number" or portraitSize < 1 then portraitSize = 46 end
     local pipSize = math.max(7, math.min(11, portraitSize * 0.16))
-    local radius = math.max(portraitSize * 0.5 + 7, pipSize + 8)
-    -- Explicit user request: an arc around the portrait's own edge, roughly
-    -- from where the level badge sits (near the top) around to the faction
-    -- icon (bottom-right) -- not a full 360-degree spread (which scattered
-    -- most pips out of sight) and not a flat row below the portrait either
-    -- (which the user also asked to move). Angles in standard math
-    -- convention (0=right/3 o'clock, 90=top/12 o'clock), swept clockwise
-    -- from just past 12 down to just past 3 o'clock. A first-pass arc (no
-    -- client here to align it to the exact level/faction icon positions);
-    -- adjust these two constants if manual QA finds it off.
-    local arcStartDeg, arcEndDeg = 100, -25
+    -- Confirmed live via screenshot: the previous wide arc (125 degrees,
+    -- radius reaching well past the ring) overlapped both the level badge
+    -- and the target's PvP icon, which sit further out near the top of the
+    -- portrait. Pulled the pips in closer to the ring itself (smaller
+    -- radius) and narrowed the arc so they cluster together lower on the
+    -- right side, clear of both badges. Angles in standard math convention
+    -- (0=right/3 o'clock, 90=top/12 o'clock). Still a first-pass estimate
+    -- (no client here to align it exactly); adjust these constants if
+    -- manual QA finds it still overlapping.
+    local radius = math.max(portraitSize * 0.5 + 2, pipSize + 4)
+    local arcStartDeg, arcEndDeg = 55, 5
     ring:SetSize((radius + pipSize) * 2, (radius + pipSize) * 2)
     ring:ClearAllPoints()
     ring:SetPoint("CENTER", portrait, "CENTER", 0, 0)
