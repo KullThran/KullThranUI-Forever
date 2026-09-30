@@ -455,13 +455,16 @@ local function ApplyClassicButtonArt(btn, db)
     -- normal/border keep the retail button template's own point/size by
     -- default, which doesn't match the classic art's own proportions --
     -- confirmed live via screenshot, textures bleeding outside the button's
-    -- own edges. Matched to the button's own bounds, same as
-    -- pushed/highlight/checked already do below.
+    -- own edges. An exact SetAllPoints match (tried first) made the frame
+    -- read as noticeably smaller than a real classic slot border, which
+    -- always extends a little beyond the icon itself -- a small overhang
+    -- instead of an exact or 66x66-oversized match.
     local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
     if normal then
         SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
         normal:ClearAllPoints()
-        normal:SetAllPoints(btn)
+        normal:SetPoint("TOPLEFT", btn, "TOPLEFT", -4, 4)
+        normal:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 4, -4)
     end
 
     local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
@@ -648,20 +651,18 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     end
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
     _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
-    -- Reverted the Classic-specific left-cap placement (leftCapAnchor is
-    -- still accepted as a parameter for the call site, but no longer read):
-    -- it was originally motivated by a theory that this widget was
-    -- overlapping and hiding action button icons, but that turned out to be
-    -- a completely separate bug (ApplyClassicButtonArt's oversized border
-    -- texture, fixed elsewhere) -- the two were never related. Two live
-    -- attempts at repositioning this widget near the left cap failed (one a
-    -- real crash anchoring to the cap texture directly, one left the widget
-    -- simply not rendering anywhere visible), so it's back to the
-    -- original, proven-working micro-menu-relative anchor rather than
-    -- guessing a third position blind.
-    local _ = leftCapAnchor
+    -- Explicit user request: the page selector belongs next to Action Bar
+    -- 1's FIRST slot, not its last. Earlier attempts anchored to a custom
+    -- texture we created (host.left, nested under the real, protected
+    -- MainActionBar) and threw "Cannot anchor protected frames to
+    -- regions" -- owner/microMenu (pre-existing Blizzard frames) were safe
+    -- anchor targets, so the caller now passes ActionButton1 itself here
+    -- (also a pre-existing Blizzard frame, not one we created) instead of
+    -- that texture.
     _kuiPagingFrame:ClearAllPoints()
-    if microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
+    if leftCapAnchor and leftCapAnchor.GetWidth and leftCapAnchor:GetWidth() > 1 then
+        _kuiPagingFrame:SetPoint("RIGHT", leftCapAnchor, "LEFT", -4, 0)
+    elseif microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
         _kuiPagingFrame:SetPoint("RIGHT", microMenu, "LEFT", -4, 0)
     else
         _kuiPagingFrame:SetPoint("LEFT", owner, "RIGHT", 4, 0)
@@ -767,7 +768,16 @@ local function ApplyClassicActionBarCaps(db)
     SetClassicCapTexture(left, false)
     SetClassicCapTexture(right, true)
     host:Show()
-    EnsureKUIActionBarPaging(owner, microMenu, left)
+    -- Deferred to the next tick: the previous live crash ("Cannot anchor
+    -- protected frames to regions") happened calling this synchronously
+    -- from within the same EnableAddon chain that also hides Blizzard's
+    -- own protected EndCaps/BorderArt just above (HideNativeActionBarChrome)
+    -- -- genuinely unclear whether that specific anchor target or shared
+    -- taint from that surrounding call chain caused it, so escaping the
+    -- current call stack entirely is the safer bet regardless of which.
+    C_Timer.After(0, function()
+        EnsureKUIActionBarPaging(owner, microMenu, first)
+    end)
 end
 
 function Mod:ApplyProtectedSafeVisualStyle(btn)
