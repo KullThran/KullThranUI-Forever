@@ -468,6 +468,13 @@ local function ReleaseStockPortrait(frame)
     if backdrop then backdrop._ktStockPortraitAnchor = nil end
 end
 
+-- Classic's own border/background accent (bronze/gold), matching the same
+-- color already used for its unit-frame border (SetUnitBorderColor in
+-- Adapters/UnitFrames.lua). Explicit user request: the cast bar used a
+-- generic black border/background shared with every other theme.
+local CLASSIC_CASTBAR_BORDER = { r = 0.92, g = 0.72, b = 0.22, a = 1 }
+local CLASSIC_CASTBAR_BG = { r = 0.20, g = 0.14, b = 0.04, a = 0.6 }
+
 --- Widens/narrows the player/target cast bar's own background frame
 --- (CreateCastBar in KUIUnitFrames.lua returns the StatusBar; its parent is
 --- the actual sized/anchored background) to match the real stock Power
@@ -476,7 +483,10 @@ end
 --- dual TOPLEFT+TOPRIGHT anchor), so changing only the width is safe and
 --- keeps the left edges aligned. Confirmed live: without this, the cast bar
 --- used KUI's generic (much wider) frameWidth setting, extending well past
---- the real narrow stock Power bar it sits under.
+--- the real narrow stock Power bar it sits under. Also gives Classic its
+--- own bronze border/background instead of the generic black one shared
+--- with every other theme (explicit user request), restoring the plain
+--- black look if the frame later switches to a different theme.
 --- @param frame Frame the unit frame's outer frame
 --- @param geom table this unit's FOREVER_FRAME_GEOMETRY/CLASSIC_FRAME_GEOMETRY entry
 --- @param scale number the resolved stock box scale
@@ -485,6 +495,32 @@ local function SeatStockCastbar(frame, geom, scale)
     local bg = castbar and castbar.GetParent and castbar:GetParent()
     if not (bg and bg.SetWidth and geom.power) then return end
     bg:SetWidth(geom.power.w * scale)
+
+    local isClassic = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme() == "classic"
+    if isClassic then
+        if bg._bgTex then bg._bgTex:SetColorTexture(
+            CLASSIC_CASTBAR_BG.r, CLASSIC_CASTBAR_BG.g, CLASSIC_CASTBAR_BG.b, CLASSIC_CASTBAR_BG.a) end
+        if bg._ppBorders then
+            for i = 1, #bg._ppBorders do
+                bg._ppBorders[i]:SetColorTexture(
+                    CLASSIC_CASTBAR_BORDER.r, CLASSIC_CASTBAR_BORDER.g, CLASSIC_CASTBAR_BORDER.b, CLASSIC_CASTBAR_BORDER.a)
+            end
+            bg._ppBorderColor = CLASSIC_CASTBAR_BORDER
+        end
+    elseif bg._ktCastbarThemed then
+        -- Switched away from Classic after having themed it -- restore the
+        -- generic black look so a later theme switch doesn't leave the
+        -- bronze accent behind.
+        if bg._bgTex then bg._bgTex:SetColorTexture(0, 0, 0, 0.5) end
+        if bg._ppBorders then
+            for i = 1, #bg._ppBorders do
+                bg._ppBorders[i]:SetColorTexture(0, 0, 0, 1)
+            end
+            bg._ppBorderColor = { r = 0, g = 0, b = 0, a = 1 }
+        end
+    end
+    bg._ktCastbarThemed = isClassic or nil
 end
 --- Creates (once, cached on `host[cacheKey]`) a circular mask matching
 --- PORTRAIT_MASK_TEXTURE and applies it to `art`, then keeps the mask

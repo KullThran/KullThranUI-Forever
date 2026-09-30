@@ -41,6 +41,7 @@ local function NewRegion(parent)
     function region:Hide() self.shown = false end
     function region:SetAtlas(atlas) self.atlas = atlas end
     function region:SetTexture(texture) self.texture = texture end
+    function region:SetColorTexture(r, g, b, a) self.colorTexture = { r, g, b, a } end
     function region:SetTexCoord(...) self.texCoord = { ... } end
     function region:SetSnapToPixelGrid(value) self.snap = value end
     function region:SetTexelSnappingBias(value) self.bias = value end
@@ -88,6 +89,8 @@ _G.C_Texture = {
 }
 
 local KT = { VisualThemes = {} }
+local mockRenderedTheme = nil
+function KT.VisualThemes:GetRenderedTheme() return mockRenderedTheme end
 local ace = {}
 function ace:GetAddon() return KT end
 function _G.LibStub() return ace end
@@ -130,12 +133,15 @@ local function MakeUnitFrame()
     frame.Buffs.spacing = 1
     local castbarBg = NewRegion(frame)
     castbarBg:SetSize(230, 14)
+    castbarBg._bgTex = NewRegion(castbarBg)
+    castbarBg._ppBorders = { NewRegion(castbarBg), NewRegion(castbarBg), NewRegion(castbarBg), NewRegion(castbarBg) }
     frame.Castbar = NewRegion(castbarBg)
     return frame
 end
 
 LoadAssets()
 
+mockRenderedTheme = "forever"
 local player = MakeUnitFrame()
 expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop, "player"), true, "player apply")
 local playerScale = 230 / 232
@@ -152,6 +158,7 @@ expect(player.Portrait.backdrop._ktStockPortraitAnchor, true, "stock portrait ow
 near(player.Health:GetWidth(), 124 * playerScale, "player health width")
 near(player.Power:GetWidth(), 124 * playerScale, "player power width")
 near(player.Castbar:GetParent():GetWidth(), 124 * playerScale, "player castbar matches real power width")
+expect(player.Castbar:GetParent()._bgTex.colorTexture, nil, "player castbar background untouched (not Classic)")
 near(player.Health.points[1][4], 85 * playerScale, "player health x")
 near(player.Health.points[1][5], -40 * playerScale, "player health y")
 near(player.LeftText.points[1][4], 88 * playerScale, "player name x")
@@ -201,6 +208,7 @@ expect(target._ktForeverPortraitArt.texture, "Interface\\Fake\\StockArt", "targe
 expect(target._ktForeverPortraitArt.texCoord[1], 0.9, "target art texcoord left/right swapped (mirrored)")
 expect(target._ktForeverPortraitArt.texCoord[2], 0.1, "target art texcoord left/right swapped (mirrored)")
 
+mockRenderedTheme = "classic"
 local classic = MakeUnitFrame()
 classic:SetSize(282, 52) -- attached KUI width includes its portrait
 classic.Health:SetSize(230, 46)
@@ -217,6 +225,8 @@ near(classic._ktClassicPortraitArt:GetHeight(), 99 * classicScale, "classic art 
 near(classic.Health:GetWidth(), 119 * classicScale, "classic health width")
 near(classic.Power:GetWidth(), 119 * classicScale, "classic power width")
 near(classic.Castbar:GetParent():GetWidth(), 119 * classicScale, "classic castbar matches real power width")
+near(classic.Castbar:GetParent()._bgTex.colorTexture[1], 0.20, "classic castbar gets its own bronze background")
+near(classic.Castbar:GetParent()._ppBorders[1].colorTexture[1], 0.92, "classic castbar gets its own bronze border")
 near(classic.LeftText.points[1][5], 15 * classicScale, "classic name y")
 near(classic.Portrait.backdrop.points[1][4], 20 * classicScale, "classic player portrait x")
 near(classic.Portrait.backdrop.points[1][5], -12 * classicScale, "classic player portrait y")
