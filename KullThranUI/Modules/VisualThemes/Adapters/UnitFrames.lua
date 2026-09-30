@@ -27,9 +27,9 @@ local function SetUnitBorderColor(profile, colorR, colorG, colorB)
     end
 end
 
--- Explicit user request: player/target default 15% bigger under
--- Retail/Classic/Forever (module's own default frameScale is 100).
-local PLAYER_TARGET_FRAME_SCALE = 115
+-- Explicit user request: player/target default frameScale under
+-- Retail/Classic/Forever (module's own baseline default is 100).
+local PLAYER_TARGET_FRAME_SCALE = 132
 local function SetPlayerTargetScale(profile, scale)
     for _, key in ipairs({ "player", "target" }) do
         profile[key] = type(profile[key]) == "table" and profile[key] or {}
