@@ -674,12 +674,19 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
     _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
     _kuiPagingFrame:ClearAllPoints()
-    if leftCapAnchor and leftCapAnchor.GetWidth and leftCapAnchor:GetWidth() > 1 then
-        -- Explicit user request (Classic): the page selector belongs on the
-        -- bar's own left decorative cap, not floating near the micro menu
-        -- on the opposite side -- confirmed live via screenshot, it was
-        -- also overlapping/hiding actual action button icons over there.
-        _kuiPagingFrame:SetPoint("CENTER", leftCapAnchor, "CENTER", 0, 0)
+    -- Explicit user request (Classic): the page selector belongs near the
+    -- bar's own left decorative cap, not floating near the micro menu on
+    -- the opposite side -- confirmed live via screenshot, it was also
+    -- overlapping/hiding actual action button icons over there.
+    -- IMPORTANT: anchoring this frame to leftCapAnchor (a texture created on
+    -- a frame parented to the real, protected MainActionBar) threw "Cannot
+    -- anchor protected frames to regions" live during EnableAddon -- some
+    -- part of that texture's own parent chain is treated as protected in a
+    -- way owner/microMenu (both already-existing Blizzard system frames)
+    -- are not. Anchoring to `owner` itself instead (already proven safe by
+    -- the pre-existing fallback below) with a left-ward offset avoids that.
+    if leftCapAnchor then
+        _kuiPagingFrame:SetPoint("RIGHT", owner, "LEFT", -36, -3)
     elseif microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
         _kuiPagingFrame:SetPoint("RIGHT", microMenu, "LEFT", -4, 0)
     else
