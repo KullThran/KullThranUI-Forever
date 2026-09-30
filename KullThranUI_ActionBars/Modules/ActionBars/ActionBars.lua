@@ -439,77 +439,43 @@ local function ClassicButtonHasAction(btn)
     return false
 end
 
+-- Explicit user request: applying a theme must ONLY swap the decorative
+-- texture paths, nothing else -- confirmed live via screenshot, icons went
+-- nearly invisible under the previous version. That version resized the
+-- "normal" (border) texture to 66x66 (~1.8x the button's own 36x36) with no
+-- blend mode set (opaque BLEND, not ADD), so the enlarged, still-mostly-
+-- opaque border texture visually swallowed the icon underneath; it also
+-- stripped the icon's own mask/texcoord and re-anchored its cooldown swipe,
+-- none of which is a "texture decoration". This version only calls
+-- SetClassicActionTexture on each piece and leaves every icon, size, point,
+-- blend mode, and layer exactly as Blizzard's own button template set it.
 local function ApplyClassicButtonArt(btn, db)
     if not btn or not (db and db.frameArtKit == "classic") then return end
-
-    local width, height = btn:GetSize()
-    if not width or width <= 0 then width = 36 end
-    if not height or height <= 0 then height = width end
-
-    local scaleW, scaleH = width / 36, height / 36
-    local name = btn:GetName()
-    local icon = (name and _G[name .. "Icon"]) or btn.icon or btn.Icon
-    if icon then
-        if btn.IconMask and icon.RemoveMaskTexture then
-            pcall(icon.RemoveMaskTexture, icon, btn.IconMask)
-            btn.IconMask:Hide()
-            btn.IconMask:SetTexture(nil)
-        end
-        icon:SetTexCoord(0, 1, 0, 1)
-    end
-
-    local slotBackground = (name and _G[name .. "SlotBackground"]) or btn.SlotBackground
-    if slotBackground then slotBackground:SetAlpha(0) end
-
-    if CanMutateActionButtonCooldown(btn) then
-        local cooldown = btn.cooldown or (name and _G[name .. "Cooldown"])
-        if cooldown and cooldown.ClearAllPoints and cooldown.SetAllPoints then
-            cooldown:ClearAllPoints()
-            cooldown:SetAllPoints(btn)
-        end
-    end
 
     local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
     if normal then
         SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
-        normal:ClearAllPoints()
-        normal:SetPoint("CENTER", btn, "CENTER", 0, -scaleH)
-        normal:SetSize(66 * scaleW, 66 * scaleH)
     end
 
     local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
     if pushed then
         SetClassicActionTexture(pushed, ACTIONBAR_CLASSIC_ART.pushed)
-        pushed:SetDrawLayer("OVERLAY", 7)
-        pushed:ClearAllPoints()
-        pushed:SetAllPoints(btn)
-        pushed:SetVertexColor(1, 1, 1, 1)
-        pushed:SetAlpha(1)
     end
 
     local highlight = btn.HighlightTexture or (btn.GetHighlightTexture and btn:GetHighlightTexture())
     if highlight then
         SetClassicActionTexture(highlight, ACTIONBAR_CLASSIC_ART.highlight)
-        highlight:SetBlendMode("ADD")
-        highlight:ClearAllPoints()
-        highlight:SetAllPoints(btn)
     end
 
     local checked = btn.CheckedTexture or (btn.GetCheckedTexture and btn:GetCheckedTexture())
     if checked then
         SetClassicActionTexture(checked, ACTIONBAR_CLASSIC_ART.checked)
-        checked:SetBlendMode("ADD")
-        checked:ClearAllPoints()
-        checked:SetAllPoints(btn)
     end
 
+    local name = btn:GetName()
     local border = (name and _G[name .. "Border"]) or btn.Border
     if border then
         SetClassicActionTexture(border, ACTIONBAR_CLASSIC_ART.equipped)
-        border:SetBlendMode("ADD")
-        border:ClearAllPoints()
-        border:SetPoint("CENTER", btn, "CENTER", 0, scaleH)
-        border:SetSize(62 * scaleW, 62 * scaleH)
     end
 
     btn.KT_ClassicArt = true
