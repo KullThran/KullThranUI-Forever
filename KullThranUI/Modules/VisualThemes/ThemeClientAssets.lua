@@ -478,12 +478,16 @@ local CLASSIC_CASTBAR_BG = { r = 0.20, g = 0.14, b = 0.04, a = 0.6 }
 --- Widens/narrows the player/target cast bar's own background frame
 --- (CreateCastBar in KUIUnitFrames.lua returns the StatusBar; its parent is
 --- the actual sized/anchored background) to match the real stock Power
---- bar's width, without touching its own anchor -- CreateCastBar already
---- anchors it TOPLEFT to Power's BOTTOMLEFT via an explicit SetSize (not a
---- dual TOPLEFT+TOPRIGHT anchor), so changing only the width is safe and
---- keeps the left edges aligned. Confirmed live: without this, the cast bar
---- used KUI's generic (much wider) frameWidth setting, extending well past
---- the real narrow stock Power bar it sits under. Also gives Classic its
+--- bar's width AND position. CreateCastBar's own anchor
+--- (`SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", -healthOff, 0)`, where
+--- healthOff = frame.Health._xOffset) was written for KUI's generic
+--- attached-portrait layout, where _xOffset compensates for the portrait
+--- eating into the frame's width -- it does NOT keep the left edges
+--- aligned under real stock geometry, where _xOffset instead means the
+--- health bar's own real offset within the box. Confirmed live via
+--- screenshot: both dimensions AND position were wrong for both player and
+--- target under Classic. Re-anchoring fresh, directly below Power with no
+--- extra offset, sidesteps that mismatch entirely. Also gives Classic its
 --- own bronze border/background instead of the generic black one shared
 --- with every other theme (explicit user request), restoring the plain
 --- black look if the frame later switches to a different theme.
@@ -493,7 +497,11 @@ local CLASSIC_CASTBAR_BG = { r = 0.20, g = 0.14, b = 0.04, a = 0.6 }
 local function SeatStockCastbar(frame, geom, scale)
     local castbar = frame.Castbar
     local bg = castbar and castbar.GetParent and castbar:GetParent()
-    if not (bg and bg.SetWidth and geom.power) then return end
+    if not (bg and bg.SetWidth and bg.SetPoint and geom.power) then return end
+    if frame.Power then
+        bg:ClearAllPoints()
+        bg:SetPoint("TOPLEFT", frame.Power, "BOTTOMLEFT", 0, 0)
+    end
     bg:SetWidth(geom.power.w * scale)
 
     local isClassic = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
