@@ -4811,13 +4811,19 @@ local function SetupUnitIndicators(frame, unit)
                 tonumber(profile and profile.levelX) or 2, tonumber(profile and profile.levelY) or 2)
         end
 
-        -- Classic's stock portrait has a small empty circle below its lower
-        -- corner. Put the level inside that ornament instead of above the
-        -- frame. Mirror the anchor for the target portrait on the right.
+        -- Classic AND Forever's stock portraits both have a small empty
+        -- circle below their lower corner (both share the same 232x100
+        -- native box design). Put the level inside that ornament instead
+        -- of above the frame. Mirror the anchor for the target portrait on
+        -- the right. This used to be Classic-only -- confirmed live via
+        -- screenshot, the level circle backdrop (added to fix legibility
+        -- against the elite/rare ring) never even ran for Forever, since
+        -- this whole branch was skipped and the circle stayed hidden.
         local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
             and KT.VisualThemes:GetRenderedTheme()
         local classicKit = profile and profile.frameArtKit == "classic"
-        local usingClassicLevelOrnament = (renderedTheme == "classic" or classicKit) and portraitVisible
+        local usingClassicLevelOrnament = (renderedTheme == "classic" or renderedTheme == "forever" or classicKit)
+            and portraitVisible
         if usingClassicLevelOrnament then
             -- These are the native Classic TargetingFrame anchors: the
             -- small black level ornament is centered 36/30.5 from the frame edges
