@@ -59,7 +59,11 @@ local function KTDebugDumpFrame(frame, label)
         "  %s\n  %s\n  %s\n  %s\n" ..
         "  HealthCalc=%s\n  ArtCalc=%s\n  NameCalc=%s\n  BuffsCalc=%s\n" ..
         "  RightText: shown=%s size=%sx%s text=%s\n  %s\n" ..
-        "  StatusOverlay: exists=%s shown=%s\n  %s\n",
+        "  StatusOverlay: exists=%s shown=%s\n  %s\n" ..
+        "  LevelCircle: exists=%s shown=%s size=%sx%s\n  %s\n" ..
+        "  LevelText2: shown=%s\n  %s\n" ..
+        "  ClassificationRing: exists=%s shown=%s\n" ..
+        "  IndicatorOverlayLevel=%s LevelOverlayLevel=%s RingParentLevel=%s\n",
         label,
         tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
         tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
@@ -91,7 +95,28 @@ local function KTDebugDumpFrame(frame, label)
         KTDebugDumpPoints(frame.RightText, "RightTextPoints"),
         KTDebugSafeStr(frame._kuiStatusOverlay ~= nil),
         KTDebugSafeStr(frame._kuiStatusOverlay and frame._kuiStatusOverlay.IsShown and frame._kuiStatusOverlay:IsShown()),
-        KTDebugDumpPoints(frame._kuiStatusOverlay, "StatusOverlayPoints")
+        KTDebugDumpPoints(frame._kuiStatusOverlay, "StatusOverlayPoints"),
+        -- Fourth attempt at the level-circle-vs-elite/rare-ring conflict:
+        -- confirmed live (post-reload, post-Forever-extension-fix) still not
+        -- resolved, with no code bug found by re-reading. Real data instead
+        -- of a fifth guess.
+        KTDebugSafeStr(frame._kuiLevelCircle ~= nil),
+        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.IsShown and frame._kuiLevelCircle:IsShown()),
+        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.GetWidth and frame._kuiLevelCircle:GetWidth()),
+        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.GetHeight and frame._kuiLevelCircle:GetHeight()),
+        KTDebugDumpPoints(frame._kuiLevelCircle, "LevelCirclePoints"),
+        KTDebugSafeStr(frame._kuiLevelText and frame._kuiLevelText.IsShown and frame._kuiLevelText:IsShown()),
+        KTDebugDumpPoints(frame._kuiLevelText, "LevelTextPoints"),
+        KTDebugSafeStr(frame._kuiClassificationPortraitRing ~= nil),
+        KTDebugSafeStr(frame._kuiClassificationPortraitRing and frame._kuiClassificationPortraitRing.IsShown
+            and frame._kuiClassificationPortraitRing:IsShown()),
+        KTDebugSafeStr(frame._kuiIndicatorOverlay and frame._kuiIndicatorOverlay.GetFrameLevel
+            and frame._kuiIndicatorOverlay:GetFrameLevel()),
+        KTDebugSafeStr(frame._kuiLevelOverlay and frame._kuiLevelOverlay.GetFrameLevel
+            and frame._kuiLevelOverlay:GetFrameLevel()),
+        KTDebugSafeStr(frame._kuiClassificationPortraitRing and frame._kuiClassificationPortraitRing.GetParent
+            and frame._kuiClassificationPortraitRing:GetParent() and frame._kuiClassificationPortraitRing:GetParent().GetFrameLevel
+            and frame._kuiClassificationPortraitRing:GetParent():GetFrameLevel())
     )
 end
 
