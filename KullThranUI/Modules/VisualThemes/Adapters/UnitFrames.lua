@@ -27,6 +27,16 @@ local function SetUnitBorderColor(profile, colorR, colorG, colorB)
     end
 end
 
+-- Explicit user request: player/target default 15% bigger under
+-- Retail/Classic/Forever (module's own default frameScale is 100).
+local PLAYER_TARGET_FRAME_SCALE = 115
+local function SetPlayerTargetScale(profile, scale)
+    for _, key in ipairs({ "player", "target" }) do
+        profile[key] = type(profile[key]) == "table" and profile[key] or {}
+        profile[key].frameScale = scale
+    end
+end
+
 KT.VisualThemes:RegisterModule("unitframes", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
@@ -43,6 +53,8 @@ KT.VisualThemes:RegisterModule("unitframes", {
             paths[#paths + 1] = key .. ".borderColor.b"
         end
         paths[#paths + 1] = "player.showPlayerCastbar"
+        paths[#paths + 1] = "player.frameScale"
+        paths[#paths + 1] = "target.frameScale"
         return paths
     end,
     seed = function(profile, themeKey, clientFlavor)
@@ -67,6 +79,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- opts in manually. Real per-client themes should show it.
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
+            SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
         elseif themeKey == "forever" then
             profile.portraitStyle = "circular"
             profile.darkTheme = true
@@ -77,6 +90,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             if profile.target then profile.target.portraitSide = "right" end
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
+            SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
         elseif themeKey == "retail" then
             profile.portraitStyle = "none"
             profile.darkTheme = false
@@ -84,6 +98,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             SetUnitValues(profile, false, "Blizzard Raid Bar")
             SetUnitBorderColor(profile, 0.20, 0.58, 1.00)
             profile.frameArtKit = "default"
+            SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
         else
             profile.portraitStyle = clientFlavor == "forever" and "circular" or "none"
             profile.darkTheme = false

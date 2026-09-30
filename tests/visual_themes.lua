@@ -156,6 +156,8 @@ expect(KT.db.profile.partyFrames.raid.absorbBarColor.r, 0.86, "classic raid abso
 expect(KT.db.profile.skin.stylePreset, "user_palette", "palette unchanged outside KUI")
 expect(KT.db.profile.unitFrames.player.borderColor.r, 0.92, "classic unit border color")
 expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art kit")
+expect(KT.db.profile.unitFrames.player.frameScale, 115, "classic player frame scale +15%")
+expect(KT.db.profile.unitFrames.target.frameScale, 115, "classic target frame scale +15%")
 
 expect(KT.VisualThemes:ApplyAll("retail"), true, "apply retail")
 expect(KT.db.profile.unitFrames.portraitStyle, "none", "retail portraits")
@@ -175,6 +177,8 @@ expect(KT.db.profile.castbar.color.r, 0.12, "retail cast bar color")
 expect(KT.db.profile.castbar.frameArtKit, "default", "retail cast bar frame art kit")
 expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "default", "retail CDM frame art kit")
 expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "default", "retail CDM barDefaults frame art kit")
+expect(KT.db.profile.unitFrames.player.frameScale, 115, "retail player frame scale +15%")
+expect(KT.db.profile.unitFrames.target.frameScale, 115, "retail target frame scale +15%")
 
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore KUI")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style")
