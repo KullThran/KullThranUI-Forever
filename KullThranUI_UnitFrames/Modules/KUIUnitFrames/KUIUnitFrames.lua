@@ -4726,7 +4726,13 @@ local function SetupUnitIndicators(frame, unit)
         -- drawn on the same high-strata overlay above the ring, paints over
         -- whatever the ring draws in that exact spot, guaranteeing a clean
         -- background for the number regardless of the ring's own size.
-        local circle = iOvr:CreateTexture(nil, "OVERLAY", nil, 8)
+        -- REAL CRASH FIXED: sublevels 8/9 used here previously are OUT OF
+        -- RANGE -- WoW's actual valid range is -8 to 7, and the ring
+        -- already sits at 7 (the maximum), so no sublevel value could ever
+        -- go above it anyway. Using the "HIGHLIGHT" draw LAYER instead --
+        -- the topmost of WoW's five layers, unconditionally above every
+        -- "OVERLAY" sublevel -- sidesteps the whole limited range.
+        local circle = iOvr:CreateTexture(nil, "HIGHLIGHT")
         circle:SetTexture("Interface\\Buttons\\WHITE8X8")
         circle:SetVertexColor(0.06, 0.06, 0.06, 0.9)
         local circleMask = iOvr:CreateMaskTexture()
@@ -4738,7 +4744,7 @@ local function SetupUnitIndicators(frame, unit)
         frame._kuiLevelCircleMask = circleMask
     end
     if not frame._kuiLevelText then
-        local levelText = iOvr:CreateFontString(nil, "OVERLAY", nil, 9)
+        local levelText = iOvr:CreateFontString(nil, "HIGHLIGHT")
         SetFSFont(levelText, 11, "OUTLINE")
         levelText:SetJustifyH("LEFT")
         levelText:SetWordWrap(false)
