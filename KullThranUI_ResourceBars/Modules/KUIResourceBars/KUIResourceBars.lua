@@ -1826,9 +1826,14 @@ function KRB:BuildBars()
             -- (centered) instead of spreading them across the full bar
             -- width also matches the explicit request that themed pips sit
             -- close together rather than spread edge-to-edge.
+            local pipH = db.secondary.pipHeight
             local clusterOffsetX = 0
             if roundResourcePips then
-                pipW = db.secondary.pipHeight
+                -- Explicit user request: +15% pip size on top of the
+                -- square/cluster fix. Both dimensions must stay equal, or
+                -- the circular mask goes back to stretching into an oval.
+                pipW = db.secondary.pipHeight * 1.15
+                pipH = pipW
                 local clusterW = pipW * sec.max + db.secondary.pipSpacing * (sec.max - 1)
                 clusterOffsetX = math.max(0, (secW - clusterW) / 2)
             end
@@ -1843,7 +1848,7 @@ function KRB:BuildBars()
                 end
                 ApplyResourcePipShape(pips[i], roundResourcePips, comboResourcePips)
                 local x = clusterOffsetX + (i - 1) * (pipW + db.secondary.pipSpacing)
-                pips[i]:SetSize(pipW, db.secondary.pipHeight)
+                pips[i]:SetSize(pipW, pipH)
                 pips[i]:ClearAllPoints()
                 pips[i]:SetPoint("LEFT", secondaryFrame, "LEFT", x, 0)
                 pips[i]._bg:SetColorTexture(comboResourcePips and 0.22 or 0.07, comboResourcePips and 0.02 or 0.07, comboResourcePips and 0.02 or 0.07, db.general.bgA)

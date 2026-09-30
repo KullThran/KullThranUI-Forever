@@ -12,7 +12,10 @@ KT.VisualThemes:RegisterModule("skin", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
     getOwnedPaths = function()
-        return { "borderTheme", "borderThemeBeforeClass", "customBorderColor", "kullthranUIColorByClass" }
+        return {
+            "borderTheme", "borderThemeBeforeClass", "customBorderColor", "kullthranUIColorByClass",
+            "accentColor.r", "accentColor.g", "accentColor.b", "accentColor.a",
+        }
     end,
     seed = function(profile, themeKey)
         if themeKey == "classic" then
@@ -24,6 +27,14 @@ KT.VisualThemes:RegisterModule("skin", {
             profile.borderTheme = "CUSTOM"
             profile.borderThemeBeforeClass = "CUSTOM"
             profile.customBorderColor = { r = 0.82, g = 0.65, b = 0.23, a = 1 }
+            -- Explicit user request: Forever's accent should default to
+            -- bronze. borderTheme="CUSTOM" already makes GetStylePalette()
+            -- use customBorderColor for the effective accent, but the raw
+            -- accentColor (the base value CUSTOM overrides, and what a
+            -- plain "custom accent color" picker would show) was left at
+            -- whatever it was before -- set it to the same bronze so both
+            -- read consistently.
+            profile.accentColor = { r = 0.82, g = 0.65, b = 0.23, a = 1 }
             profile.kullthranUIColorByClass = false
         elseif themeKey == "retail" then
             profile.borderTheme = "CLASS"
