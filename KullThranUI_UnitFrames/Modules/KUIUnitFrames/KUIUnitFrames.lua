@@ -4715,7 +4715,13 @@ local function SetupUnitIndicators(frame, unit)
     local iOvr = frame._kuiIndicatorOverlay
 
     if not frame._kuiLevelText then
-        local levelText = iOvr:CreateFontString(nil, "OVERLAY")
+        -- Explicit user request: the level circle/text must render above
+        -- the elite/rare classification ring. Both live on the same
+        -- overlay frame/layer ("OVERLAY"), but the ring uses sublevel 7
+        -- (below) while this defaulted to sublevel 0 -- confirmed live via
+        -- screenshot, the ring's own border art was drawn over the level
+        -- number. Sublevel 8 puts it above.
+        local levelText = iOvr:CreateFontString(nil, "OVERLAY", nil, 8)
         SetFSFont(levelText, 11, "OUTLINE")
         levelText:SetJustifyH("LEFT")
         levelText:SetWordWrap(false)
