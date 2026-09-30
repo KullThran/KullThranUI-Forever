@@ -182,6 +182,20 @@ local function HasActiveGroupLootRoll()
         end
     end
 
+    -- BlizzardFrames.lua's own copy of this same check (used to keep
+    -- GroupLootContainer visible against this very same "hide alerts"
+    -- feature) also checks GroupLootFrame1-4 directly -- this copy didn't,
+    -- so a roll only detectable through those (some loot-method/client
+    -- combinations) would pass ShouldHideAlerts and hide AlertFrame mid-roll,
+    -- taking GroupLootContainer down with it (it's anchored through
+    -- AlertFrame). Matching the more complete check here.
+    for index = 1, 4 do
+        local frame = _G["GroupLootFrame" .. index]
+        if frame and frame.IsShown and frame:IsShown() then
+            return true
+        end
+    end
+
     return false
 end
 
