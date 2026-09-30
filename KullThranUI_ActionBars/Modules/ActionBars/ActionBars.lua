@@ -627,7 +627,7 @@ local function CreateKUIPageMacros()
     return "/changeactionbar " .. table.concat(nextParts, "; "), "/changeactionbar " .. table.concat(prevParts, "; ")
 end
 
-local function EnsureKUIActionBarPaging(owner, microMenu)
+local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     if not owner or InCombatLockdown() then return end
     if not _kuiPagingFrame then
         local frame = CreateFrame("Frame", "KUIActionBarPaging", owner)
@@ -674,7 +674,13 @@ local function EnsureKUIActionBarPaging(owner, microMenu)
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
     _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
     _kuiPagingFrame:ClearAllPoints()
-    if microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
+    if leftCapAnchor and leftCapAnchor.GetWidth and leftCapAnchor:GetWidth() > 1 then
+        -- Explicit user request (Classic): the page selector belongs on the
+        -- bar's own left decorative cap, not floating near the micro menu
+        -- on the opposite side -- confirmed live via screenshot, it was
+        -- also overlapping/hiding actual action button icons over there.
+        _kuiPagingFrame:SetPoint("CENTER", leftCapAnchor, "CENTER", 0, 0)
+    elseif microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
         _kuiPagingFrame:SetPoint("RIGHT", microMenu, "LEFT", -4, 0)
     else
         _kuiPagingFrame:SetPoint("LEFT", owner, "RIGHT", 4, 0)
@@ -780,7 +786,7 @@ local function ApplyClassicActionBarCaps(db)
     SetClassicCapTexture(left, false)
     SetClassicCapTexture(right, true)
     host:Show()
-    EnsureKUIActionBarPaging(owner, microMenu)
+    EnsureKUIActionBarPaging(owner, microMenu, left)
 end
 
 function Mod:ApplyProtectedSafeVisualStyle(btn)
