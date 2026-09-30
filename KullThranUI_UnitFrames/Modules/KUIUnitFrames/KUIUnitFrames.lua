@@ -2022,16 +2022,18 @@ local function GetPortraitFacing(unit, settings)
     return facing
 end
 
--- Classification artwork is directional: mirror it for the portrait side,
--- then combine that with the portrait's own facing direction.
+-- Classification artwork is directional. Explicit user request: the
+-- elite/rare border must point to the same side as the portrait -- i.e.
+-- its own flip must match the portrait's facing directly, not an XOR with
+-- which side of the frame the portrait happens to sit on. The previous
+-- side-based XOR was written assuming GetPortraitFacing's return value
+-- meant something it no longer does after the Classic/Forever real-stock
+-- facing override (which hardcodes target to "flipped" and non-shapeshifted
+-- player to "normal" regardless of settings) -- confirmed live, that
+-- combination left the ring's flip mismatched with the portrait's actual
+-- visual orientation.
 local function GetClassificationTextureFlipped(unit, settings)
-    local facingFlipped = GetPortraitFacing(unit, settings) == "flipped"
-    local side = settings and settings.portraitSide
-    if not side then
-        side = (unit == "player" or unit == "pet") and "left" or "right"
-    end
-    local sideFlipped = side == "right"
-    return sideFlipped ~= facingFlipped
+    return GetPortraitFacing(unit, settings) == "flipped"
 end
 
 local function ApplyPortraitFacing(tex, unit, settings, fullTexture)
