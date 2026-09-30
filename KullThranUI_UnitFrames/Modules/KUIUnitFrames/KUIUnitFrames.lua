@@ -6188,23 +6188,37 @@ function ns.KTTargetCombo:_StylePip(pip, r, g, b)
         pip._circleMask:SetTexture(PORTRAIT_MEDIA .. "circle_mask.tga",
             "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         pip._circleMask:SetAllPoints(pip)
+        -- Confirmed live: the ring's pips looked soft/jagged at their small
+        -- size, arranged via trig (non-integer pixel offsets). The same
+        -- unsnap treatment already used for circular portrait art
+        -- (UnsnapTexture in ThemeClientAssets.lua) fixes this class of
+        -- blur -- WoW's default pixel-snapping fights fractional
+        -- positioning on small round masked textures.
+        if pip._circleMask.SetSnapToPixelGrid then pip._circleMask:SetSnapToPixelGrid(false) end
+        if pip._circleMask.SetTexelSnappingBias then pip._circleMask:SetTexelSnappingBias(0) end
     end
     if not pip._bg then
         pip._bg = pip:CreateTexture(nil, "BACKGROUND")
         pip._bg:SetAllPoints(pip)
         pip._bg:SetTexture("Interface\\Buttons\\WHITE8X8")
         pcall(pip._bg.AddMaskTexture, pip._bg, pip._circleMask)
+        if pip._bg.SetSnapToPixelGrid then pip._bg:SetSnapToPixelGrid(false) end
+        if pip._bg.SetTexelSnappingBias then pip._bg:SetTexelSnappingBias(0) end
     end
     if not pip._fill then
         pip._fill = pip:CreateTexture(nil, "ARTWORK")
         pip._fill:SetAllPoints(pip)
         pip._fill:SetTexture("Interface\\Buttons\\WHITE8X8")
         pcall(pip._fill.AddMaskTexture, pip._fill, pip._circleMask)
+        if pip._fill.SetSnapToPixelGrid then pip._fill:SetSnapToPixelGrid(false) end
+        if pip._fill.SetTexelSnappingBias then pip._fill:SetTexelSnappingBias(0) end
     end
     if not pip._border then
         pip._border = pip:CreateTexture(nil, "OVERLAY", nil, 4)
         pip._border:SetAllPoints(pip)
         pip._border:SetTexture(PORTRAIT_MEDIA .. "circle_border.tga")
+        if pip._border.SetSnapToPixelGrid then pip._border:SetSnapToPixelGrid(false) end
+        if pip._border.SetTexelSnappingBias then pip._border:SetTexelSnappingBias(0) end
     end
     pip._bg:SetVertexColor(0.22, 0.02, 0.02, 0.92)
     pip._fill:SetVertexColor(r, g, b, 1)

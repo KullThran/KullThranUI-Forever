@@ -3578,6 +3578,8 @@ local function UpdateClassPowerOnPlate(plate)
     -- Round pips use a square sized to the width (8), a far more visible
     -- circle than the flat height would give.
     if comboPips then
+        -- Explicit user request: +25% pip size on top of the square fix.
+        scaledW = scaledW * 1.25
         scaledH = scaledW
     end
     local scaledGap = GetClassPowerGap() * cpScale
