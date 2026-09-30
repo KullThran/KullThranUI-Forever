@@ -456,15 +456,16 @@ local function ApplyClassicButtonArt(btn, db)
     -- default, which doesn't match the classic art's own proportions --
     -- confirmed live via screenshot, textures bleeding outside the button's
     -- own edges. An exact SetAllPoints match (tried first) made the frame
-    -- read as noticeably smaller than a real classic slot border, which
-    -- always extends a little beyond the icon itself -- a small overhang
-    -- instead of an exact or 66x66-oversized match.
+    -- read as noticeably smaller than a real classic slot border; the -4/+4
+    -- overhang tried next was apparently too much the other way -- confirmed
+    -- live, a visibly square, mismatched edge around the icon. Pulled back
+    -- to a minimal 1px overhang.
     local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
     if normal then
         SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
         normal:ClearAllPoints()
-        normal:SetPoint("TOPLEFT", btn, "TOPLEFT", -4, 4)
-        normal:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 4, -4)
+        normal:SetPoint("TOPLEFT", btn, "TOPLEFT", -1, 1)
+        normal:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, -1)
     end
 
     local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
@@ -472,14 +473,21 @@ local function ApplyClassicButtonArt(btn, db)
         SetClassicActionTexture(pushed, ACTIONBAR_CLASSIC_ART.pushed)
     end
 
+    -- highlight/checked are inherently additive overlays in WoW's own UI
+    -- convention (a glow, not a replacement) -- confirmed live: without an
+    -- explicit ADD blend mode, mousing over a button darkened it completely
+    -- instead of glowing, since the highlight texture's own dark pixels
+    -- rendered as opaque black under the default BLEND mode.
     local highlight = btn.HighlightTexture or (btn.GetHighlightTexture and btn:GetHighlightTexture())
     if highlight then
         SetClassicActionTexture(highlight, ACTIONBAR_CLASSIC_ART.highlight)
+        highlight:SetBlendMode("ADD")
     end
 
     local checked = btn.CheckedTexture or (btn.GetCheckedTexture and btn:GetCheckedTexture())
     if checked then
         SetClassicActionTexture(checked, ACTIONBAR_CLASSIC_ART.checked)
+        checked:SetBlendMode("ADD")
     end
 
     local name = btn:GetName()
