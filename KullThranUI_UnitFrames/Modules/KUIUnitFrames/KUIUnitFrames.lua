@@ -1990,14 +1990,21 @@ end
 local function GetPortraitFacing(unit, settings)
     local facing = (settings and settings.portraitFacing) or GetDefaultPortraitFacing(unit)
 
-    -- The Classic stock box mirrors player/target around the central
-    -- gameplay area. Keep ordinary portraits facing inward toward their
-    -- bars; a live player shapeshift keeps the client's already-correct
-    -- druid-form direction instead of flipping it a second time.
+    -- The Classic/Forever stock boxes mirror player/target around the
+    -- central gameplay area. Keep ordinary portraits facing inward toward
+    -- their bars; a live player shapeshift keeps the client's already-
+    -- correct druid-form direction instead of flipping it a second time.
+    -- Confirmed live via screenshot: this override was gated to Classic
+    -- only, so Forever's 2D portrait (already correctly oriented for the
+    -- current shapeshift by the client itself) got our forced facing
+    -- applied on top -- consistent when not shapeshifted, wrong (and
+    -- inconsistent with the shapeshifted case) otherwise. Same underlying
+    -- reason applies to both real-stock themes, not just Classic.
     local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
         and KT.VisualThemes:GetRenderedTheme()
     local classicKit = db and db.profile and db.profile.frameArtKit == "classic"
-    if (renderedTheme == "classic" or classicKit) and (unit == "player" or unit == "target") then
+    if (renderedTheme == "classic" or renderedTheme == "forever" or classicKit)
+        and (unit == "player" or unit == "target") then
         local shapeshifted = false
         if unit == "player" and type(GetShapeshiftForm) == "function" then
             local ok, form = pcall(GetShapeshiftForm)
