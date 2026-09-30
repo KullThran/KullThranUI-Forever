@@ -6216,6 +6216,14 @@ function ns.KTTargetCombo:Refresh(frame)
     local unit = frame and (frame.unit or (frame.GetAttribute and frame:GetAttribute("unit")))
     if not frame or unit ~= "target" then return end
 
+    -- Explicit user request: only show on neutral/hostile targets, never on
+    -- an ally -- combo points are a player-vs-enemy mechanic, and the ring
+    -- showing on a friendly target read as a display bug.
+    if UnitExists(unit) and UnitIsFriend and UnitIsFriend("player", unit) then
+        self:_Hide(frame)
+        return
+    end
+
     local portrait = frame.Portrait and frame.Portrait.backdrop
     if not portrait or not portrait:IsShown() then
         self:_Hide(frame)
@@ -6253,16 +6261,20 @@ function ns.KTTargetCombo:Refresh(frame)
     local portraitSize = portrait:GetWidth()
     if type(portraitSize) ~= "number" or portraitSize < 1 then portraitSize = 46 end
     local pipSize = math.max(7, math.min(11, portraitSize * 0.16))
-    -- Explicit user request: the pips must sit together, not scattered
-    -- around the portrait's full circumference (the previous 360-degree
-    -- spread put most of them out of sight behind/beside the ring, only
-    -- ever showing one or two near the top). A tight row below the
-    -- portrait keeps all of them visible as one cluster, at a glance.
-    local pipGap = 2
-    local clusterW = pipSize * maxPower + pipGap * (maxPower - 1)
-    ring:SetSize(clusterW, pipSize)
+    local radius = math.max(portraitSize * 0.5 + 7, pipSize + 8)
+    -- Explicit user request: an arc around the portrait's own edge, roughly
+    -- from where the level badge sits (near the top) around to the faction
+    -- icon (bottom-right) -- not a full 360-degree spread (which scattered
+    -- most pips out of sight) and not a flat row below the portrait either
+    -- (which the user also asked to move). Angles in standard math
+    -- convention (0=right/3 o'clock, 90=top/12 o'clock), swept clockwise
+    -- from just past 12 down to just past 3 o'clock. A first-pass arc (no
+    -- client here to align it to the exact level/faction icon positions);
+    -- adjust these two constants if manual QA finds it off.
+    local arcStartDeg, arcEndDeg = 100, -25
+    ring:SetSize((radius + pipSize) * 2, (radius + pipSize) * 2)
     ring:ClearAllPoints()
-    ring:SetPoint("TOP", portrait, "BOTTOM", 0, -4)
+    ring:SetPoint("CENTER", portrait, "CENTER", 0, 0)
 
     local r, g, b = 1.0, 0.05, 0.05
     local okCurrent, current = pcall(UnitPower, "player", comboType)
@@ -6276,8 +6288,11 @@ function ns.KTTargetCombo:Refresh(frame)
             ring.pips[index] = pip
         end
         pip:SetSize(pipSize, pipSize)
+        local t = (maxPower > 1) and ((index - 1) / (maxPower - 1)) or 0
+        local angle = math.rad(arcStartDeg + (arcEndDeg - arcStartDeg) * t)
         pip:ClearAllPoints()
-        pip:SetPoint("LEFT", ring, "LEFT", (index - 1) * (pipSize + pipGap), 0)
+        pip:SetPoint("CENTER", ring, "CENTER",
+            math.cos(angle) * radius, math.sin(angle) * radius)
         self:_StylePip(pip, r, g, b)
         pip._fill:Hide()
         if pip._secretBar then pip._secretBar:Hide() end

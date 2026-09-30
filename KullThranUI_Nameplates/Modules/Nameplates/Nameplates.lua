@@ -3261,6 +3261,8 @@ local classPowerType     -- Enum.PowerType value for the player's class resource
 local classPowerMax = 0  -- max pips for the resource
 local classPowerFormReq  -- required GetShapeshiftFormID() value, or nil if no form check needed
 local CP_PIP_W, CP_PIP_H = 8, 3  -- pip geometry
+local CP_CIRCLE_MASK = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
+local CP_CIRCLE_BORDER = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_border.tga"
 
 -- Per-class filled pip colors (official WoW class colors)
 local CP_CLASS_COLORS = {
@@ -3297,6 +3299,50 @@ local CLASS_POWER_MAP = {
                     [255] = { "TIP_OF_THE_SPEAR", 3 } },   -- Solo Supervivencia
     WARRIOR     = { [72]  = { "WHIRLWIND_STACKS", 4 } },    -- Solo Furia
 }
+
+-- Applies the circular combo-point treatment while keeping other class resources rectangular.
+local function ApplyClassPowerPipShape(pip, round)
+    if not pip then return end
+    local mask = pip._circleMask
+    if round then
+        if not mask then
+            mask = pip:GetParent():CreateMaskTexture()
+            pip._circleMask = mask
+        end
+        mask:SetTexture(CP_CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:ClearAllPoints()
+        mask:SetAllPoints(pip)
+        mask:Show()
+        if pip._bg then
+            if pip._bg.RemoveMaskTexture then pcall(pip._bg.RemoveMaskTexture, pip._bg, mask) end
+            if pip._bg.AddMaskTexture then pcall(pip._bg.AddMaskTexture, pip._bg, mask) end
+        end
+        if pip.RemoveMaskTexture then pcall(pip.RemoveMaskTexture, pip, mask) end
+        if pip.AddMaskTexture then pcall(pip.AddMaskTexture, pip, mask) end
+        if pip._secretBar and pip._secretBar.GetStatusBarTexture then
+            local sbTex = pip._secretBar:GetStatusBarTexture()
+            if sbTex and sbTex.AddMaskTexture then pcall(sbTex.AddMaskTexture, sbTex, mask) end
+        end
+        if not pip._circleBorder then
+            pip._circleBorder = pip:GetParent():CreateTexture(nil, "OVERLAY", nil, 4)
+            pip._circleBorder:SetTexture(CP_CIRCLE_BORDER)
+            pip._circleBorder:SetAllPoints(pip)
+        end
+        pip._circleBorder:SetVertexColor(1, 0.82, 0.08, 1)
+        pip._circleBorder:Show()
+    else
+        if mask then
+            mask:Hide()
+            if pip._bg and pip._bg.RemoveMaskTexture then pcall(pip._bg.RemoveMaskTexture, pip._bg, mask) end
+            if pip.RemoveMaskTexture then pcall(pip.RemoveMaskTexture, pip, mask) end
+            if pip._secretBar and pip._secretBar.GetStatusBarTexture then
+                local sbTex = pip._secretBar:GetStatusBarTexture()
+                if sbTex and sbTex.RemoveMaskTexture then pcall(sbTex.RemoveMaskTexture, sbTex, mask) end
+            end
+        end
+        if pip._circleBorder then pip._circleBorder:Hide() end
+    end
+end
 
 -- Lazy-create pip textures on a plate (done once, then reused via show/hide)
 local function CreateClassPowerPip(plate)
@@ -3422,6 +3468,7 @@ local function UpdateClassPowerOnPlate(plate)
         for i = 1, #plate._cpPips do
             plate._cpPips[i]:Hide()
             if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
+            if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
         end
         if plate._cpBar then plate._cpBar:Hide() end
         return
@@ -3432,6 +3479,7 @@ local function UpdateClassPowerOnPlate(plate)
     local cpXOff  = GetClassPowerXOffset()
     local cpPos   = GetClassPowerPos()
     local bgCol   = GetClassPowerBgColor()
+    local comboPips = classPowerType == Enum.PowerType.ComboPoints
 
     -- Resolver anclaje: encima o debajo de la barra de salud,
     -- evitando solapamiento con la barra de casteo si está activa
@@ -3451,6 +3499,7 @@ local function UpdateClassPowerOnPlate(plate)
         for i = 1, #plate._cpPips do
             plate._cpPips[i]:Hide()
             if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
+            if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
             if plate._cpPips[i]._secretBar then plate._cpPips[i]._secretBar:Hide() end
         end
         EnsureClassPowerBar(plate)
@@ -3500,6 +3549,7 @@ local function UpdateClassPowerOnPlate(plate)
             for i = 1, #plate._cpPips do
                 plate._cpPips[i]:Hide()
                 if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
+                if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
             end
             return
         end
@@ -3521,6 +3571,15 @@ local function UpdateClassPowerOnPlate(plate)
     -- Layout de pips: calcular posiciones una vez y aplicar en un solo bucle
     local scaledW   = CP_PIP_W * cpScale
     local scaledH   = CP_PIP_H * cpScale
+    -- CP_PIP_W/H (8x3) is a thin flat bar-segment shape, meant for the
+    -- rectangular look -- a circular mask on an 8:3 box clips down to the
+    -- smaller dimension (3), producing an almost invisible sliver.
+    -- Confirmed live: combo points on nameplates barely showed at all.
+    -- Round pips use a square sized to the width (8), a far more visible
+    -- circle than the flat height would give.
+    if comboPips then
+        scaledH = scaledW
+    end
     local scaledGap = GetClassPowerGap() * cpScale
 
     -- Precalcular borde izquierdo de cada pip en coordenadas de grupo.
@@ -3550,10 +3609,12 @@ local function UpdateClassPowerOnPlate(plate)
         if i > maxP then
             pip:Hide()
             if pip._bg then pip._bg:Hide() end
+            if pip._circleBorder then pip._circleBorder:Hide() end
             if pip._secretBar then pip._secretBar:Hide() end
         else
             pip:ClearAllPoints()
             PP.Size(pip, scaledW, scaledH)
+            ApplyClassPowerPipShape(pip, comboPips)
             PP.Point(pip, leftAnchor, anchorFrame, anchorRelPoint,
                 pipPositions[i] - halfGroup + cpXOff,
                 yDir * cpYOff)
@@ -3563,7 +3624,7 @@ local function UpdateClassPowerOnPlate(plate)
             if bg then
                 bg:ClearAllPoints()
                 bg:SetAllPoints(pip)
-                bg:SetColorTexture(bgCol.r, bgCol.g, bgCol.b, bgCol.a)
+                bg:SetColorTexture(comboPips and 0.22 or bgCol.r, comboPips and 0.02 or bgCol.g, comboPips and 0.02 or bgCol.b, bgCol.a)
                 bg:Show()
             end
 
@@ -3581,15 +3642,16 @@ local function UpdateClassPowerOnPlate(plate)
                 sb:SetAllPoints(pip)
                 sb:SetMinMaxValues(i - 1, i)
                 sb:SetValue(cur)
-                sb:SetStatusBarColor(cpColor[1], cpColor[2], cpColor[3], 1)
+                sb:SetStatusBarColor(comboPips and 1.0 or cpColor[1], comboPips and 0.05 or cpColor[2], comboPips and 0.05 or cpColor[3], 1)
+                ApplyClassPowerPipShape(pip, comboPips)
                 sb:Show()
-                pip:SetColorTexture(emptyCol.r, emptyCol.g, emptyCol.b, emptyCol.a)
+                pip:SetColorTexture(comboPips and 0.22 or emptyCol.r, comboPips and 0.02 or emptyCol.g, comboPips and 0.02 or emptyCol.b, emptyCol.a)
             else
                 if pip._secretBar then pip._secretBar:Hide() end
                 if i <= cur then
-                    pip:SetColorTexture(cpColor[1], cpColor[2], cpColor[3], 1)
+                    pip:SetColorTexture(comboPips and 1.0 or cpColor[1], comboPips and 0.05 or cpColor[2], comboPips and 0.05 or cpColor[3], 1)
                 else
-                    pip:SetColorTexture(emptyCol.r, emptyCol.g, emptyCol.b, emptyCol.a)
+                    pip:SetColorTexture(comboPips and 0.22 or emptyCol.r, comboPips and 0.02 or emptyCol.g, comboPips and 0.02 or emptyCol.b, emptyCol.a)
                 end
             end
             pip:Show()
@@ -3605,6 +3667,7 @@ local function HideClassPowerOnPlate(plate)
     for _, pip in ipairs(plate._cpPips) do
         pip:Hide()
         if pip._bg then pip._bg:Hide() end
+        if pip._circleBorder then pip._circleBorder:Hide() end
         if pip._secretBar then pip._secretBar:Hide()
         end
     end
@@ -5096,13 +5159,26 @@ function NameplateFrame:UpdateHealthBounds()
     self._healthMax = nil
     self:UpdateHealthValues()
 end
+-- Brightens the final resolved color without changing its semantic state.
+local function BrightenNameplateColor(r, g, b)
+    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    local gain = (theme == "classic" and 1.35) or (theme == "forever" and 1.30)
+        or (theme == "retail" and 1.25) or 1.30
+    local lift = 0.06
+    return math.min(1, (r or 0) * gain + lift),
+        math.min(1, (g or 0) * gain + lift),
+        math.min(1, (b or 0) * gain + lift)
+end
+
 -- Aplica el color de la barra de vida según GetReactionColor (8 niveles
 -- de prioridad) y gestiona el overlay de focus (rayas) si la unidad
 -- es el focus actual del jugador.
 function NameplateFrame:UpdateHealthColor()
     local unit = self.unit
     if not unit then return end
-    self.health:SetStatusBarColor(GetReactionColor(unit))
+    local hr, hg, hb = GetReactionColor(unit)
+    self.health:SetStatusBarColor(BrightenNameplateColor(hr, hg, hb))
     -- Focus overlay: show stripe textures on focus target's health bar
     -- Fill clip frame at full alpha, bg clip frame at half alpha
     local db2 = KullThranUINameplatesDB or defaults
