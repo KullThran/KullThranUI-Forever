@@ -452,9 +452,16 @@ end
 local function ApplyClassicButtonArt(btn, db)
     if not btn or not (db and db.frameArtKit == "classic") then return end
 
+    -- normal/border keep the retail button template's own point/size by
+    -- default, which doesn't match the classic art's own proportions --
+    -- confirmed live via screenshot, textures bleeding outside the button's
+    -- own edges. Matched to the button's own bounds, same as
+    -- pushed/highlight/checked already do below.
     local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
     if normal then
         SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
+        normal:ClearAllPoints()
+        normal:SetAllPoints(btn)
     end
 
     local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
@@ -476,6 +483,8 @@ local function ApplyClassicButtonArt(btn, db)
     local border = (name and _G[name .. "Border"]) or btn.Border
     if border then
         SetClassicActionTexture(border, ACTIONBAR_CLASSIC_ART.equipped)
+        border:ClearAllPoints()
+        border:SetAllPoints(btn)
     end
 
     btn.KT_ClassicArt = true
@@ -639,21 +648,20 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     end
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
     _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
+    -- Reverted the Classic-specific left-cap placement (leftCapAnchor is
+    -- still accepted as a parameter for the call site, but no longer read):
+    -- it was originally motivated by a theory that this widget was
+    -- overlapping and hiding action button icons, but that turned out to be
+    -- a completely separate bug (ApplyClassicButtonArt's oversized border
+    -- texture, fixed elsewhere) -- the two were never related. Two live
+    -- attempts at repositioning this widget near the left cap failed (one a
+    -- real crash anchoring to the cap texture directly, one left the widget
+    -- simply not rendering anywhere visible), so it's back to the
+    -- original, proven-working micro-menu-relative anchor rather than
+    -- guessing a third position blind.
+    local _ = leftCapAnchor
     _kuiPagingFrame:ClearAllPoints()
-    -- Explicit user request (Classic): the page selector belongs near the
-    -- bar's own left decorative cap, not floating near the micro menu on
-    -- the opposite side -- confirmed live via screenshot, it was also
-    -- overlapping/hiding actual action button icons over there.
-    -- IMPORTANT: anchoring this frame to leftCapAnchor (a texture created on
-    -- a frame parented to the real, protected MainActionBar) threw "Cannot
-    -- anchor protected frames to regions" live during EnableAddon -- some
-    -- part of that texture's own parent chain is treated as protected in a
-    -- way owner/microMenu (both already-existing Blizzard system frames)
-    -- are not. Anchoring to `owner` itself instead (already proven safe by
-    -- the pre-existing fallback below) with a left-ward offset avoids that.
-    if leftCapAnchor then
-        _kuiPagingFrame:SetPoint("RIGHT", owner, "LEFT", -36, -3)
-    elseif microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
+    if microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
         _kuiPagingFrame:SetPoint("RIGHT", microMenu, "LEFT", -4, 0)
     else
         _kuiPagingFrame:SetPoint("LEFT", owner, "RIGHT", 4, 0)
