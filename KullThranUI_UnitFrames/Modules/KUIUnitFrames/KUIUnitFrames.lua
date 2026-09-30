@@ -2033,7 +2033,10 @@ end
 -- combination left the ring's flip mismatched with the portrait's actual
 -- visual orientation.
 local function GetClassificationTextureFlipped(unit, settings)
-    return GetPortraitFacing(unit, settings) == "flipped"
+    -- Explicit user request: it must face the opposite of whatever it
+    -- currently does. The direct match to portrait facing (tried previously)
+    -- was confirmed live to be backwards -- inverted.
+    return GetPortraitFacing(unit, settings) ~= "flipped"
 end
 
 local function ApplyPortraitFacing(tex, unit, settings, fullTexture)
