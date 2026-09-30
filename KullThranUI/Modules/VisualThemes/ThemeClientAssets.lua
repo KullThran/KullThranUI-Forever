@@ -503,6 +503,13 @@ local function SeatStockCastbar(frame, geom, scale)
         bg:SetPoint("TOPLEFT", frame.Power, "BOTTOMLEFT", 0, 0)
     end
     bg:SetWidth(geom.power.w * scale)
+    -- Confirmed live via screenshot: the cast bar read as too thick/chunky
+    -- and clipped -- it was still using KUI's generic castbarHeight (14+),
+    -- disproportionate against the real stock box's much slimmer bars.
+    -- Matched to Power's own real height for the same slender proportions.
+    if bg.SetHeight and geom.power.h then
+        bg:SetHeight(geom.power.h * scale)
+    end
 
     local isClassic = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
         and KT.VisualThemes:GetRenderedTheme() == "classic"
