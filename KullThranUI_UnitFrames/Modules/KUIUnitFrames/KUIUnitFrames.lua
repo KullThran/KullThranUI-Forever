@@ -4735,11 +4735,22 @@ local function SetupUnitIndicators(frame, unit)
     if not frame._kuiLevelOverlay then
         local lvlOvr = CreateFrame("Frame", nil, iOvr)
         lvlOvr:SetAllPoints(iOvr)
-        lvlOvr:SetFrameStrata(iOvr:GetFrameStrata())
-        lvlOvr:SetFrameLevel(iOvr:GetFrameLevel() + 1)
         frame._kuiLevelOverlay = lvlOvr
     end
     local lvlOvr = frame._kuiLevelOverlay
+    -- REAL BUG FOUND: strata/level were only ever set once, inside the
+    -- creation guard above -- but iOvr's OWN level (frame:GetFrameLevel() +
+    -- 60, right above) is recomputed on EVERY call, unconditionally. If
+    -- frame's own level ever changes later (a real possibility for unit
+    -- frames), iOvr updates to match but lvlOvr stayed stale at whatever it
+    -- was at creation time, letting the two drift out of order on a later
+    -- refresh -- confirmed live: a debug snapshot showed them correctly
+    -- ordered (63 > 62), yet the ring still rendered on top in practice, at
+    -- a different moment. Keeping this in sync every call, matching iOvr's
+    -- own update pattern, fixes that regardless of when frame's level
+    -- changes.
+    lvlOvr:SetFrameStrata(iOvr:GetFrameStrata())
+    lvlOvr:SetFrameLevel(iOvr:GetFrameLevel() + 1)
 
     if not frame._kuiLevelCircle then
         local circle = lvlOvr:CreateTexture(nil, "OVERLAY")
