@@ -248,11 +248,23 @@ local PORTRAIT_ART_TEXCOORD = {
     PORTRAIT_ART_CROP_H / PORTRAIT_ART_SHEET_HEIGHT,
 }
 
+-- Classic's aura row belongs above the opaque stock frame. Keeping this as
+-- a separate gap from the Forever name-tab gap makes the intent explicit:
+-- the row must clear the top edge of the Classic texture, not sit on top of
+-- its name panel.
+local CLASSIC_BUFFS_ABOVE_FRAME_GAP = 4
+
 local CLASSIC_FRAME_GEOMETRY = {
     player = {
         w = 232, h = 100,
         art = { l = 1, r = 0.1015625, t = 0.0078125, b = 0.78125, w = 230, h = 99, x = -18.5, y = -4 },
-        portrait = { point = "TOPLEFT", x = 24, y = -16, size = 64 },
+        -- size bumped 64 -> 72 (center kept fixed, x/y adjusted to match):
+        -- confirmed live via screenshot, the round portrait left a visible
+        -- gap of background between the face and the ring, uniform all
+        -- around -- a plain undersized estimate, not a masking/centering
+        -- bug. First-pass correction (no client here to measure the real
+        -- hole exactly); adjust further if manual QA finds it still off.
+        portrait = { point = "TOPLEFT", x = 20, y = -12, size = 72 },
         health = { x = 90, y = 45, w = 119, h = 12 },
         power = { x = 90, y = 56, w = 119, h = 12 },
         name = { point = "CENTER", x = 34, y = 15, w = 100, justify = "CENTER" },
@@ -260,7 +272,7 @@ local CLASSIC_FRAME_GEOMETRY = {
     target = {
         w = 232, h = 100,
         art = { l = 0.1015625, r = 1, t = 0.0078125, b = 0.78125, w = 230, h = 99, x = 18.5, y = -4 },
-        portrait = { point = "TOPRIGHT", x = -24, y = -16, size = 64 },
+        portrait = { point = "TOPRIGHT", x = -20, y = -12, size = 72 },
         health = { x = 23, y = 45, w = 119, h = 12 },
         power = { x = 23, y = 56, w = 119, h = 12 },
         name = { point = "CENTER", x = -34, y = 15, w = 100, justify = "CENTER" },
@@ -326,6 +338,7 @@ end
 -- first-pass estimate (no client here to fine-tune it pixel-perfectly);
 -- adjust this single constant if manual QA finds it too much or too little.
 local STOCK_BAR_TEXT_HEIGHT_RATIO = 0.8
+local CLASSIC_BAR_TEXT_HEIGHT_RATIO = 0.65
 
 --- Scales a health/power text FontString's font size by `scale`, from its
 --- OWN unscaled base size (cached on the FontString the first time this
@@ -336,7 +349,7 @@ local STOCK_BAR_TEXT_HEIGHT_RATIO = 0.8
 --- pixel height (`maxHeightPx`), when given, so a font sized for the outer
 --- box's uniform scale never renders taller than the bar it actually sits
 --- on. Nil-safe; does nothing if `fs` has no font set yet.
-local function ScaleStockBarText(fs, scale, maxHeightPx)
+local function ScaleStockBarText(fs, scale, maxHeightPx, heightRatio)
     if type(fs) ~= "table" or type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
     local path, currentSize, flags = fs:GetFont()
     if not path or not currentSize then return end
@@ -347,7 +360,7 @@ local function ScaleStockBarText(fs, scale, maxHeightPx)
     end
     local size = base * scale
     if maxHeightPx and maxHeightPx > 0 then
-        size = math.min(size, maxHeightPx * STOCK_BAR_TEXT_HEIGHT_RATIO)
+        size = math.min(size, maxHeightPx * (heightRatio or STOCK_BAR_TEXT_HEIGHT_RATIO))
     end
     fs:SetFont(path, size, flags)
 end
@@ -434,9 +447,9 @@ local function SeatSquareArt(art, unitRegion)
     end
 end
 
-local function SeatStockPortrait(unitRegion, frame, portrait, scale)
+local function SeatStockPortrait(unitRegion, frame, portrait, scale, maskExpand)
     unitRegion._ktStockPortraitAnchor = true
-    unitRegion._ktStockPortraitMaskExpand = 5 * scale
+    unitRegion._ktStockPortraitMaskExpand = (maskExpand == nil and 5 or maskExpand) * scale
     if unitRegion._shapeBorderTex then unitRegion._shapeBorderTex:Hide() end
     unitRegion:ClearAllPoints()
     unitRegion:SetPoint(portrait.point, frame, portrait.point,
@@ -453,6 +466,25 @@ end
 local function ReleaseStockPortrait(frame)
     local backdrop = frame and frame.Portrait and frame.Portrait.backdrop
     if backdrop then backdrop._ktStockPortraitAnchor = nil end
+end
+
+--- Widens/narrows the player/target cast bar's own background frame
+--- (CreateCastBar in KUIUnitFrames.lua returns the StatusBar; its parent is
+--- the actual sized/anchored background) to match the real stock Power
+--- bar's width, without touching its own anchor -- CreateCastBar already
+--- anchors it TOPLEFT to Power's BOTTOMLEFT via an explicit SetSize (not a
+--- dual TOPLEFT+TOPRIGHT anchor), so changing only the width is safe and
+--- keeps the left edges aligned. Confirmed live: without this, the cast bar
+--- used KUI's generic (much wider) frameWidth setting, extending well past
+--- the real narrow stock Power bar it sits under.
+--- @param frame Frame the unit frame's outer frame
+--- @param geom table this unit's FOREVER_FRAME_GEOMETRY/CLASSIC_FRAME_GEOMETRY entry
+--- @param scale number the resolved stock box scale
+local function SeatStockCastbar(frame, geom, scale)
+    local castbar = frame.Castbar
+    local bg = castbar and castbar.GetParent and castbar:GetParent()
+    if not (bg and bg.SetWidth and geom.power) then return end
+    bg:SetWidth(geom.power.w * scale)
 end
 --- Creates (once, cached on `host[cacheKey]`) a circular mask matching
 --- PORTRAIT_MASK_TEXTURE and applies it to `art`, then keeps the mask
@@ -473,6 +505,43 @@ local function ApplyCircleMask(art, host, cacheKey)
     mask:SetAllPoints(art)
 end
 
+local function ApplyClassicRoundPortraitMask(backdrop)
+    if not (backdrop and backdrop.CreateMaskTexture) then return end
+
+    local mask = backdrop._ktClassicRoundMask
+    if not mask then
+        mask = backdrop:CreateMaskTexture()
+        backdrop._ktClassicRoundMask = mask
+    end
+    mask:SetTexture(PORTRAIT_MASK_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:ClearAllPoints()
+    mask:SetAllPoints(backdrop)
+    mask:Show()
+
+    for _, tex in ipairs({ backdrop._2d, backdrop._class, backdrop._bg }) do
+        if tex and tex.AddMaskTexture then
+            if tex.RemoveMaskTexture then
+                pcall(tex.RemoveMaskTexture, tex, mask)
+            end
+            pcall(tex.AddMaskTexture, tex, mask)
+        end
+    end
+    if backdrop.SetClipsChildren then
+        backdrop:SetClipsChildren(true)
+    end
+end
+
+local function ClearClassicRoundPortraitMask(frame)
+    local backdrop = frame and frame.Portrait and frame.Portrait.backdrop
+    local mask = backdrop and backdrop._ktClassicRoundMask
+    if not mask then return end
+    for _, tex in ipairs({ backdrop._2d, backdrop._class, backdrop._bg }) do
+        if tex and tex.RemoveMaskTexture then
+            pcall(tex.RemoveMaskTexture, tex, mask)
+        end
+    end
+    mask:Hide()
+end
 --- Applies the Classic theme's verified player/target stock box from the
 --- real UI-TargetingFrame sheet. The outer box, portrait, health, power and
 --- name all share one uniform scale; KUI keeps ownership of bar fills and
@@ -501,12 +570,16 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
             frame._ktClassicPortraitArt = art
         end
         SeatSquareArt(art, unitRegion)
+        ApplyClassicRoundPortraitMask(unitRegion)
         ApplyCircleMask(art, host, "_ktClassicPortraitMask")
         art:Show()
         return
     end
 
-    local scale = ResolveStockScale(frame, geom)
+    -- Classic uses the native 232x100 sheet coordinates. Keep the art,
+    -- portrait and empty level ornament on that exact coordinate system;
+    -- global frame scaling is applied by UnitFrames separately.
+    local scale = 1
 
     frame:SetSize(geom.w * scale, geom.h * scale)
     SyncArtLayers(frame, host, true)
@@ -525,7 +598,13 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     art:Show()
 
     local portrait = geom.portrait
-    SeatStockPortrait(unitRegion, frame, portrait, scale)
+    SeatStockPortrait(unitRegion, frame, portrait, scale, 0)
+    -- The stock portrait is already circularly masked by KUI. Classic's
+    -- frame art is opaque around that opening, so keep the portrait region
+    -- clipped even after a unit changes model/shape (notably druid forms).
+    -- Classification rings are re-enabled deliberately by the metadata pass
+    -- when they need to extend outside this region.
+    ApplyClassicRoundPortraitMask(unitRegion)
 
     local health = frame.Health
     if health then
@@ -549,6 +628,8 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
             geom.power.x * scale, -geom.power.y * scale)
         power:SetSize(geom.power.w * scale, geom.power.h * scale)
     end
+
+    SeatStockCastbar(frame, geom, scale)
 
     -- Whichever FontString actually holds "name" content is a per-profile
     -- choice resolved by KUIUnitFrames.lua (which has access to `settings`)
@@ -577,9 +658,31 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     end
 
     local barTextMaxHeight = geom.health.h * scale
-    ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight)
-    ScaleStockBarText(frame.RightText, scale, barTextMaxHeight)
-    ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight)
+    ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
+    ScaleStockBarText(frame.RightText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
+    ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
+
+    -- Classic's name tab is part of the opaque texture. Its buffs therefore
+    -- need their own row above the whole stock frame; the normal aura refresh
+    -- (which is relative to Health/frame) would otherwise put them over the
+    -- name tab. Align the row with the real name tab and mirror the x origin
+    -- for the target frame.
+    local buffs = frame.Buffs
+    if type(buffs) == "table" and buffs.ClearAllPoints and geom.name then
+        local tabWidth = geom.name.w * scale
+        local iconSize = buffs.size or (buffs.GetHeight and buffs:GetHeight()) or (geom.health.h * scale)
+        iconSize = math.max(8, iconSize)
+        local gap = buffs.spacing or 1
+        local tabLeft = geom.name.x - (geom.name.w * 0.5)
+        buffs:ClearAllPoints()
+        buffs:SetPoint("BOTTOMLEFT", frame, "TOPLEFT",
+            tabLeft * scale, CLASSIC_BUFFS_ABOVE_FRAME_GAP * scale)
+        buffs:SetSize(tabWidth, iconSize)
+        buffs.size = iconSize
+        buffs.spacing = gap
+        buffs["size-x"] = math.max(1, math.floor((tabWidth + gap) / (iconSize + gap)))
+        if buffs.ForceUpdate then buffs:ForceUpdate() end
+    end
     frame._ktClassicLayoutActive = true
     return true
 end
@@ -592,6 +695,7 @@ function KT.VisualThemes:ClearClassicUnitFrameArt(frame)
     if art then
         art:Hide()
     end
+    ClearClassicRoundPortraitMask(frame)
     ReleaseStockPortrait(frame)
     frame._ktClassicLayoutActive = nil
 end
@@ -671,6 +775,8 @@ local function SeatMaskOnTexture(texture, mask)
     end
     texture:AddMaskTexture(mask)
 end
+
+
 
 local function ApplyForeverBarMask(bar, geom, scale)
     if not (bar and geom and geom.mask and C_Texture and C_Texture.GetAtlasInfo) then return end
@@ -805,6 +911,8 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         power:SetSize(geom.power.w * scale, geom.power.h * scale)
         ApplyForeverBarMask(power, geom.power, scale)
     end
+
+    SeatStockCastbar(frame, geom, scale)
 
     -- Whichever FontString actually holds "name" content is a per-profile
     -- choice resolved by KUIUnitFrames.lua (which has access to `settings`)
