@@ -4714,28 +4714,35 @@ local function SetupUnitIndicators(frame, unit)
     end
     local iOvr = frame._kuiIndicatorOverlay
 
+    -- Explicit user request: the level circle/text must render above the
+    -- elite/rare classification ring. Two earlier attempts failed: a
+    -- sublevel fix (text above the ring's own sublevel 7) did nothing,
+    -- since the ring's own art still showed through; then out-of-range
+    -- sublevels (8/9) threw a real crash ("Sublevel must be between -8 and
+    -- 7"), since 7 is the maximum -- no sublevel could ever go higher
+    -- anyway. Switching those to the "HIGHLIGHT" draw layer avoided the
+    -- crash but made them invisible entirely -- confirmed live via
+    -- screenshot -- HIGHLIGHT appears to be a Button-specific render
+    -- layer, not a general 5th layer usable on a plain Frame like iOvr.
+    -- A genuinely separate, higher-FrameLevel frame sidesteps sublevel
+    -- limits entirely: FrameLevel ordering is a wholly different
+    -- mechanism from draw-layer sublevels and always wins across frames
+    -- within the same strata, regardless of either frame's own internal
+    -- sublevel usage.
+    if not frame._kuiLevelOverlay then
+        local lvlOvr = CreateFrame("Frame", nil, iOvr)
+        lvlOvr:SetAllPoints(iOvr)
+        lvlOvr:SetFrameStrata(iOvr:GetFrameStrata())
+        lvlOvr:SetFrameLevel(iOvr:GetFrameLevel() + 1)
+        frame._kuiLevelOverlay = lvlOvr
+    end
+    local lvlOvr = frame._kuiLevelOverlay
+
     if not frame._kuiLevelCircle then
-        -- Explicit user request: the level circle/text must render above
-        -- the elite/rare classification ring. A sublevel fix alone (text
-        -- above the ring's own sublevel 7) did not resolve it -- confirmed
-        -- live via screenshot, twice -- because the ring's own art still
-        -- shows through underneath the number, and the ring can't be shrunk
-        -- enough to physically clear that position without looking broken
-        -- (the level sits closer to the portrait's center than any
-        -- reasonably-sized ring's edge). A small opaque circular backdrop,
-        -- drawn on the same high-strata overlay above the ring, paints over
-        -- whatever the ring draws in that exact spot, guaranteeing a clean
-        -- background for the number regardless of the ring's own size.
-        -- REAL CRASH FIXED: sublevels 8/9 used here previously are OUT OF
-        -- RANGE -- WoW's actual valid range is -8 to 7, and the ring
-        -- already sits at 7 (the maximum), so no sublevel value could ever
-        -- go above it anyway. Using the "HIGHLIGHT" draw LAYER instead --
-        -- the topmost of WoW's five layers, unconditionally above every
-        -- "OVERLAY" sublevel -- sidesteps the whole limited range.
-        local circle = iOvr:CreateTexture(nil, "HIGHLIGHT")
+        local circle = lvlOvr:CreateTexture(nil, "OVERLAY")
         circle:SetTexture("Interface\\Buttons\\WHITE8X8")
         circle:SetVertexColor(0.06, 0.06, 0.06, 0.9)
-        local circleMask = iOvr:CreateMaskTexture()
+        local circleMask = lvlOvr:CreateMaskTexture()
         circleMask:SetTexture(PORTRAIT_MEDIA .. "circle_mask.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         circleMask:SetAllPoints(circle)
         circle:AddMaskTexture(circleMask)
@@ -4744,7 +4751,7 @@ local function SetupUnitIndicators(frame, unit)
         frame._kuiLevelCircleMask = circleMask
     end
     if not frame._kuiLevelText then
-        local levelText = iOvr:CreateFontString(nil, "HIGHLIGHT")
+        local levelText = lvlOvr:CreateFontString(nil, "OVERLAY")
         SetFSFont(levelText, 11, "OUTLINE")
         levelText:SetJustifyH("LEFT")
         levelText:SetWordWrap(false)
