@@ -4872,7 +4872,18 @@ local function SetupUnitIndicators(frame, unit)
                 portraitRing:SetTexCoord(isFlipped and 1 or 0, isFlipped and 0 or 1, 0, 1)
                 local portraitSize = portraitBackdrop:GetWidth()
                 if portraitSize < 1 then portraitSize = 46 end
-                local ringWidth = math.max(24, portraitSize * CLASSIFICATION_PORTRAIT_SCALE)
+                -- Confirmed live via screenshot (twice: a sublevel z-order
+                -- fix alone did not resolve it): the ring's normal 18%
+                -- overhang reaches into the corner where Classic/Forever's
+                -- own level circle ornament sits, so the two spatially
+                -- overlap regardless of draw order. Pull the ring in
+                -- tighter only under the real stock layouts, where that
+                -- ornament exists; other contexts keep the normal overhang.
+                local ringScale = CLASSIFICATION_PORTRAIT_SCALE
+                if frame._ktForeverLayoutActive or frame._ktClassicLayoutActive then
+                    ringScale = 1.02
+                end
+                local ringWidth = math.max(24, portraitSize * ringScale)
                 local ringHeight = ringWidth * CLASSIFICATION_TEXTURE_ASPECT
                 portraitRing:SetSize(ringWidth, ringHeight)
                 portraitRing:ClearAllPoints()
