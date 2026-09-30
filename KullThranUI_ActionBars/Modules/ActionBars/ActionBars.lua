@@ -137,6 +137,7 @@ function Mod:OnInitialize()
             KT.db.profile.actionbars = {
                 enable = true,
                 buttonStyle = "BLIZZARD",
+                frameArtKit = "default",
                 buttonShape = "NONE",
 
                 -- Per Bar shapes defaults
@@ -195,6 +196,10 @@ function Mod:OnEnable()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
     self:RegisterEvent("UPDATE_BINDINGS", "StyleAllBars")
+    self:RegisterEvent("ACTIONBAR_PAGE_CHANGED", "StyleAllBars")
+    self:RegisterEvent("UPDATE_BONUS_ACTIONBAR", "StyleAllBars")
+    self:RegisterEvent("UPDATE_SHAPESHIFT_FORM", "StyleAllBars")
+    self:RegisterEvent("ACTIONBAR_SLOT_CHANGED", "OnActionBarSlotChanged")
 
     if _G.ActionButton_UpdateHotkeys then
         self:SecureHook("ActionButton_UpdateHotkeys", "UpdateHotkeys")
@@ -400,6 +405,382 @@ local function ResetButtonStyle(btn)
     if btn.KT_SMP_Gloss then btn.KT_SMP_Gloss:Hide() end
     if btn.KT_SMP_Disabled then btn.KT_SMP_Disabled:Hide() end
     if btn.KT_ShapeBorder then btn.KT_ShapeBorder:Hide() end
+
+end
+
+local ACTIONBAR_CLASSIC_ART = {
+    slot = "Interface\\Buttons\\UI-Quickslot2",
+    empty = "Interface\\Buttons\\UI-Quickslot",
+    pushed = "Interface\\Buttons\\UI-Quickslot-Depress",
+    highlight = "Interface\\Buttons\\ButtonHilight-Square",
+    checked = "Interface\\Buttons\\CheckButtonHilight",
+    equipped = "Interface\\Buttons\\UI-ActionButton-Border",
+}
+
+local function SetClassicActionTexture(texture, path)
+    if not texture then return end
+    if texture.SetAtlas then texture:SetAtlas(nil) end
+    texture:SetTexture(path)
+    texture:SetTexCoord(0, 1, 0, 1)
+end
+
+local function ClassicButtonHasAction(btn)
+    if not btn then return false end
+
+    local action = btn.action
+    if not action and btn.GetAttribute then
+        local ok, value = pcall(btn.GetAttribute, btn, "action")
+        if ok then action = value end
+    end
+    if action and HasAction then
+        local ok, filled = pcall(HasAction, action)
+        if ok then return filled and true or false end
+    end
+    return false
+end
+
+local function ApplyClassicButtonArt(btn, db)
+    if not btn or not (db and db.frameArtKit == "classic") then return end
+
+    local width, height = btn:GetSize()
+    if not width or width <= 0 then width = 36 end
+    if not height or height <= 0 then height = width end
+
+    local scaleW, scaleH = width / 36, height / 36
+    local name = btn:GetName()
+    local icon = (name and _G[name .. "Icon"]) or btn.icon or btn.Icon
+    if icon then
+        if btn.IconMask and icon.RemoveMaskTexture then
+            pcall(icon.RemoveMaskTexture, icon, btn.IconMask)
+            btn.IconMask:Hide()
+            btn.IconMask:SetTexture(nil)
+        end
+        icon:SetTexCoord(0, 1, 0, 1)
+    end
+
+    local slotBackground = (name and _G[name .. "SlotBackground"]) or btn.SlotBackground
+    if slotBackground then slotBackground:SetAlpha(0) end
+
+    if CanMutateActionButtonCooldown(btn) then
+        local cooldown = btn.cooldown or (name and _G[name .. "Cooldown"])
+        if cooldown and cooldown.ClearAllPoints and cooldown.SetAllPoints then
+            cooldown:ClearAllPoints()
+            cooldown:SetAllPoints(btn)
+        end
+    end
+
+    local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
+    if normal then
+        SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
+        normal:ClearAllPoints()
+        normal:SetPoint("CENTER", btn, "CENTER", 0, -scaleH)
+        normal:SetSize(66 * scaleW, 66 * scaleH)
+    end
+
+    local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
+    if pushed then
+        SetClassicActionTexture(pushed, ACTIONBAR_CLASSIC_ART.pushed)
+        pushed:SetDrawLayer("OVERLAY", 7)
+        pushed:ClearAllPoints()
+        pushed:SetAllPoints(btn)
+        pushed:SetVertexColor(1, 1, 1, 1)
+        pushed:SetAlpha(1)
+    end
+
+    local highlight = btn.HighlightTexture or (btn.GetHighlightTexture and btn:GetHighlightTexture())
+    if highlight then
+        SetClassicActionTexture(highlight, ACTIONBAR_CLASSIC_ART.highlight)
+        highlight:SetBlendMode("ADD")
+        highlight:ClearAllPoints()
+        highlight:SetAllPoints(btn)
+    end
+
+    local checked = btn.CheckedTexture or (btn.GetCheckedTexture and btn:GetCheckedTexture())
+    if checked then
+        SetClassicActionTexture(checked, ACTIONBAR_CLASSIC_ART.checked)
+        checked:SetBlendMode("ADD")
+        checked:ClearAllPoints()
+        checked:SetAllPoints(btn)
+    end
+
+    local border = (name and _G[name .. "Border"]) or btn.Border
+    if border then
+        SetClassicActionTexture(border, ACTIONBAR_CLASSIC_ART.equipped)
+        border:SetBlendMode("ADD")
+        border:ClearAllPoints()
+        border:SetPoint("CENTER", btn, "CENTER", 0, scaleH)
+        border:SetSize(62 * scaleW, 62 * scaleH)
+    end
+
+    btn.KT_ClassicArt = true
+end
+
+local CLASSIC_ACTIONBAR_CAP = "Interface\\MainMenuBar\\UI-MainMenuBar-EndCap-Dwarf"
+
+local function SetClassicCapTexture(texture, mirrored)
+    if not texture then return end
+    if texture.SetAtlas then texture:SetAtlas(nil) end
+    texture:SetTexture(CLASSIC_ACTIONBAR_CAP)
+    if mirrored then
+        texture:SetTexCoord(1, 0, 0, 1)
+    else
+        texture:SetTexCoord(0, 1, 0, 1)
+    end
+end
+
+local function RestoreNativeActionBarChrome(frame)
+    if not frame then return end
+
+    local caps = frame.EndCaps
+    if caps and caps.KT_ClassicOriginalShown then
+        caps:Show()
+    end
+
+    local border = frame.BorderArt
+    if border and border.KT_ClassicOriginalShown then
+        border:Show()
+    end
+end
+
+local function HideNativeActionBarChrome(frame)
+    if not frame then return end
+
+    local caps = frame.EndCaps
+    if caps then
+        if caps.KT_ClassicOriginalShown == nil then
+            caps.KT_ClassicOriginalShown = caps:IsShown()
+        end
+        caps:Hide()
+    end
+
+    local border = frame.BorderArt
+    if border then
+        if border.KT_ClassicOriginalShown == nil then
+            border.KT_ClassicOriginalShown = border:IsShown()
+        end
+        border:Hide()
+    end
+end
+
+local function SetNativeActionBarCapTexture(texture, atlas)
+    if not texture or not texture.SetAtlas or not atlas then return end
+    texture:SetAtlas(atlas)
+    texture:SetTexCoord(0, 1, 0, 1)
+end
+
+local function ApplyRetailActionBarCaps(frame)
+    local caps = frame and frame.EndCaps
+    if not caps then return end
+
+    local faction = UnitFactionGroup and UnitFactionGroup("player")
+    local leftAtlas, rightAtlas
+    if faction == "Horde" then
+        leftAtlas = "ui-hud-actionbar-wyvern-left"
+        rightAtlas = "ui-hud-actionbar-wyvern-right"
+    else
+        leftAtlas = "ui-hud-actionbar-gryphon-left"
+        rightAtlas = "ui-hud-actionbar-gryphon-right"
+    end
+
+    local left = caps.LeftEndCap and caps.LeftEndCap.Texture
+    local right = caps.RightEndCap and caps.RightEndCap.Texture
+    SetNativeActionBarCapTexture(left, leftAtlas)
+    SetNativeActionBarCapTexture(right, rightAtlas)
+    caps:Show()
+end
+
+local _kuiPagingFrame
+local function GetKUIActionBarPage()
+    local page = GetActionBarPage and GetActionBarPage()
+    return type(page) == "number" and page or 1
+end
+
+local function SetKUIPageButtonArt(button, direction)
+    if not button then return end
+    local atlas = direction == "up"
+        and "UI-HUD-ActionBar-PageUpArrow"
+        or "UI-HUD-ActionBar-PageDownArrow"
+    if button.SetNormalAtlas then
+        button:SetNormalAtlas(atlas .. "-Up")
+        button:SetPushedAtlas(atlas .. "-Down")
+        button:SetDisabledAtlas(atlas .. "-Disabled")
+        button:SetHighlightAtlas(atlas .. "-Mouseover")
+    else
+        local normal = button:GetNormalTexture()
+        if normal then
+            normal:SetTexture(direction == "up"
+                and "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up"
+                or "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+            normal:SetAllPoints(button)
+        end
+    end
+end
+
+local function CreateKUIPageMacros()
+    local nextParts, prevParts = {}, {}
+    for page = 1, 6 do
+        local nextPage = page == 6 and 1 or page + 1
+        local prevPage = page == 1 and 6 or page - 1
+        nextParts[#nextParts + 1] = string.format("[bar:%d] %d", page, nextPage)
+        prevParts[#prevParts + 1] = string.format("[bar:%d] %d", page, prevPage)
+    end
+    return "/changeactionbar " .. table.concat(nextParts, "; "), "/changeactionbar " .. table.concat(prevParts, "; ")
+end
+
+local function EnsureKUIActionBarPaging(owner, microMenu)
+    if not owner or InCombatLockdown() then return end
+    if not _kuiPagingFrame then
+        local frame = CreateFrame("Frame", "KUIActionBarPaging", owner)
+        frame:SetSize(22, 58)
+        frame:SetFrameStrata(owner:GetFrameStrata())
+        frame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
+
+        local pageText = frame:CreateFontString(nil, "OVERLAY")
+        pageText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+        pageText:SetTextColor(1, 0.82, 0.20, 1)
+        pageText:SetPoint("CENTER")
+        frame.pageText = pageText
+
+        local up = CreateFrame("Button", nil, frame, "SecureActionButtonTemplate")
+        up:SetSize(18, 18)
+        up:RegisterForClicks("AnyUp", "AnyDown")
+        SetKUIPageButtonArt(up, "up")
+        frame.up = up
+
+        local down = CreateFrame("Button", nil, frame, "SecureActionButtonTemplate")
+        down:SetSize(18, 18)
+        down:RegisterForClicks("AnyUp", "AnyDown")
+        SetKUIPageButtonArt(down, "down")
+        frame.down = down
+
+        local nextMacro, prevMacro = CreateKUIPageMacros()
+        up:SetAttribute("type", "macro")
+        up:SetAttribute("macrotext", nextMacro)
+        down:SetAttribute("type", "macro")
+        down:SetAttribute("macrotext", prevMacro)
+
+        frame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+        frame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+        frame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+        frame:SetScript("OnEvent", function(self)
+            self.pageText:SetText(tostring(GetKUIActionBarPage()))
+        end)
+        _kuiPagingFrame = frame
+    end
+
+    if _kuiPagingFrame:GetParent() ~= owner then
+        _kuiPagingFrame:SetParent(owner)
+    end
+    _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
+    _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
+    _kuiPagingFrame:ClearAllPoints()
+    if microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1 then
+        _kuiPagingFrame:SetPoint("RIGHT", microMenu, "LEFT", -4, 0)
+    else
+        _kuiPagingFrame:SetPoint("LEFT", owner, "RIGHT", 4, 0)
+    end
+    _kuiPagingFrame.up:ClearAllPoints()
+    _kuiPagingFrame.down:ClearAllPoints()
+    _kuiPagingFrame.up:SetPoint("TOP", _kuiPagingFrame, "TOP", 0, 0)
+    _kuiPagingFrame.down:SetPoint("BOTTOM", _kuiPagingFrame, "BOTTOM", 0, 0)
+    _kuiPagingFrame.pageText:SetText(tostring(GetKUIActionBarPage()))
+    _kuiPagingFrame:Show()
+end
+
+local function ApplyClassicActionBarCaps(db)
+    local mainActionBar = _G.MainActionBar
+    local mainMenuBar = _G.MainMenuBar
+    local frameArtKit = db and db.frameArtKit or "default"
+    local classic = frameArtKit == "classic"
+    local retail = frameArtKit == "retail"
+
+    if classic then
+        HideNativeActionBarChrome(mainActionBar)
+        if mainMenuBar ~= mainActionBar then
+            HideNativeActionBarChrome(mainMenuBar)
+        end
+    else
+        RestoreNativeActionBarChrome(mainActionBar)
+        if mainMenuBar ~= mainActionBar then
+            RestoreNativeActionBarChrome(mainMenuBar)
+        end
+        if Mod._classicActionBarCaps then
+            Mod._classicActionBarCaps:Hide()
+        end
+        if retail then
+            ApplyRetailActionBarCaps(mainActionBar)
+            if mainMenuBar ~= mainActionBar then
+                ApplyRetailActionBarCaps(mainMenuBar)
+            end
+        end
+        EnsureKUIActionBarPaging(mainActionBar or mainMenuBar, _G.MicroMenuContainer)
+        return
+    end
+
+    local owner = mainActionBar or mainMenuBar
+    local first = _G.ActionButton1
+    local last = _G.ActionButton12
+    if not owner or not first or not last then return end
+
+    local buttonWidth = first:GetWidth()
+    if not buttonWidth or buttonWidth <= 0 then buttonWidth = 36 end
+    local scale = math.min(buttonWidth / 36, 1)
+
+    local host = Mod._classicActionBarCaps
+    if not host then
+        host = CreateFrame("Frame", nil, owner)
+        host:SetIgnoreParentAlpha(false)
+        host.left = host:CreateTexture(nil, "OVERLAY", nil, 5)
+        host.right = host:CreateTexture(nil, "OVERLAY", nil, 5)
+        Mod._classicActionBarCaps = host
+    end
+
+    local microMenu = _G.MicroMenuContainer
+    if not (microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1) then
+        microMenu = nil
+    end
+    -- Confirmed live via screenshot: with bags positioned to the right of
+    -- the micro menu (a common default layout), stopping the cap at the
+    -- micro menu left the bags outside the decorative frame entirely,
+    -- looking disconnected from the bar. Reach the bags first when they
+    -- exist, falling back to the micro menu, then the last button.
+    local bags = _G.MainMenuBarBackpackButton
+    if not (bags and bags.GetWidth and bags:GetWidth() > 1) then
+        bags = nil
+    end
+
+    host:ClearAllPoints()
+    host:SetPoint("TOPLEFT", first, "TOPLEFT", 0, 0)
+    if bags then
+        -- Classic's right end cap belongs after the bags (and, by
+        -- extension, the micro menu) as well as after ActionButton12;
+        -- otherwise either is left outside the decorative MainMenuBar frame.
+        host:SetPoint("BOTTOMRIGHT", bags, "BOTTOMRIGHT", 0, 0)
+    elseif microMenu then
+        host:SetPoint("BOTTOMRIGHT", microMenu, "BOTTOMRIGHT", 0, 0)
+    else
+        host:SetPoint("BOTTOMRIGHT", last, "BOTTOMRIGHT", 0, 0)
+    end
+    host:SetFrameStrata(owner:GetFrameStrata())
+    local baseLevel = owner.GetEndCapsFrameLevel and owner:GetEndCapsFrameLevel()
+        or owner:GetFrameLevel()
+    host:SetFrameLevel((baseLevel or 0) + 1)
+
+    local left = host.left
+    local right = host.right
+    left:ClearAllPoints()
+    right:ClearAllPoints()
+    left:SetSize(128 * scale, 128 * scale)
+    right:SetSize(128 * scale, 128 * scale)
+
+    -- EllesmereUI Classic geometry: compact caps outside the two ends of
+    -- the button grid, with the right cap mirrored.
+    left:SetPoint("BOTTOMRIGHT", host, "BOTTOMLEFT", 28 * scale, -3 * scale)
+    right:SetPoint("BOTTOMLEFT", host, "BOTTOMRIGHT", -29 * scale, -3 * scale)
+    SetClassicCapTexture(left, false)
+    SetClassicCapTexture(right, true)
+    host:Show()
+    EnsureKUIActionBarPaging(owner, microMenu)
 end
 
 function Mod:ApplyProtectedSafeVisualStyle(btn)
@@ -872,12 +1253,42 @@ function Mod:StyleAllBars()
     if InCombatLockdown() then return end
     local db = KT.db.profile.actionbars
     if not db then return end
+    -- Repair profiles/slots created before the Classic cap kit existed. The
+    -- active visual theme is authoritative when the stored module field is
+    -- stale, so the visible bar cannot silently remain on the old artwork.
+    local activeTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    if activeTheme == "classic" then
+        db.frameArtKit = "classic"
+    elseif activeTheme == "retail" then
+        db.frameArtKit = "retail"
+    elseif activeTheme == "forever" or activeTheme == "kui" then
+        db.frameArtKit = "default"
+    end
+    ApplyClassicActionBarCaps(db)
+    if not _kuiPagingFrame then
+        EnsureKUIActionBarPaging(_G.MainActionBar or _G.MainMenuBar, _G.MicroMenuContainer)
+    end
     local buttons = self:GetAllBlizzardButtons()
     for _, btn in ipairs(buttons) do
         self:StyleButton(btn)
     end
 end
 
+function Mod:OnActionBarSlotChanged(_, actionSlot)
+    local db = KT.db and KT.db.profile and KT.db.profile.actionbars
+    if not (db and db.frameArtKit == "classic") then return end
+    if InCombatLockdown() then return end
+
+    actionSlot = tonumber(actionSlot)
+    if not actionSlot then return end
+
+    for _, btn in ipairs(self:GetAllBlizzardButtons()) do
+        if btn.action == actionSlot then
+            self:StyleButton(btn)
+        end
+    end
+end
 function Mod:StyleButton(btn)
     if not btn then return end
     local name = btn:GetName()
@@ -887,6 +1298,7 @@ function Mod:StyleButton(btn)
 
     HookButtonCooldownEdge(btn)
     ResetButtonStyle(btn)
+    ApplyClassicButtonArt(btn, db)
 
     if db.buttonStyle == "KUI" then
         self:ApplyModernKUIStyle(btn)
