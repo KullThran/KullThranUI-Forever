@@ -4714,14 +4714,31 @@ local function SetupUnitIndicators(frame, unit)
     end
     local iOvr = frame._kuiIndicatorOverlay
 
-    if not frame._kuiLevelText then
+    if not frame._kuiLevelCircle then
         -- Explicit user request: the level circle/text must render above
-        -- the elite/rare classification ring. Both live on the same
-        -- overlay frame/layer ("OVERLAY"), but the ring uses sublevel 7
-        -- (below) while this defaulted to sublevel 0 -- confirmed live via
-        -- screenshot, the ring's own border art was drawn over the level
-        -- number. Sublevel 8 puts it above.
-        local levelText = iOvr:CreateFontString(nil, "OVERLAY", nil, 8)
+        -- the elite/rare classification ring. A sublevel fix alone (text
+        -- above the ring's own sublevel 7) did not resolve it -- confirmed
+        -- live via screenshot, twice -- because the ring's own art still
+        -- shows through underneath the number, and the ring can't be shrunk
+        -- enough to physically clear that position without looking broken
+        -- (the level sits closer to the portrait's center than any
+        -- reasonably-sized ring's edge). A small opaque circular backdrop,
+        -- drawn on the same high-strata overlay above the ring, paints over
+        -- whatever the ring draws in that exact spot, guaranteeing a clean
+        -- background for the number regardless of the ring's own size.
+        local circle = iOvr:CreateTexture(nil, "OVERLAY", nil, 8)
+        circle:SetTexture("Interface\\Buttons\\WHITE8X8")
+        circle:SetVertexColor(0.06, 0.06, 0.06, 0.9)
+        local circleMask = iOvr:CreateMaskTexture()
+        circleMask:SetTexture(PORTRAIT_MEDIA .. "circle_mask.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        circleMask:SetAllPoints(circle)
+        circle:AddMaskTexture(circleMask)
+        circle:Hide()
+        frame._kuiLevelCircle = circle
+        frame._kuiLevelCircleMask = circleMask
+    end
+    if not frame._kuiLevelText then
+        local levelText = iOvr:CreateFontString(nil, "OVERLAY", nil, 9)
         SetFSFont(levelText, 11, "OUTLINE")
         levelText:SetJustifyH("LEFT")
         levelText:SetWordWrap(false)
@@ -4787,7 +4804,8 @@ local function SetupUnitIndicators(frame, unit)
         local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
             and KT.VisualThemes:GetRenderedTheme()
         local classicKit = profile and profile.frameArtKit == "classic"
-        if (renderedTheme == "classic" or classicKit) and portraitVisible then
+        local usingClassicLevelOrnament = (renderedTheme == "classic" or classicKit) and portraitVisible
+        if usingClassicLevelOrnament then
             -- These are the native Classic TargetingFrame anchors: the
             -- small black level ornament is centered 36/30.5 from the frame edges
             -- 232x100 frame center. Anchor to the frame itself, not to the
@@ -4804,12 +4822,27 @@ local function SetupUnitIndicators(frame, unit)
                     36 * classicScale, 30.5 * classicScale)
             end
             frame._kuiLevelText:SetJustifyH("CENTER")
+
+            -- Backdrop circle: sized a bit larger than the number itself
+            -- and centered on the exact same point, so it paints over
+            -- whatever the elite/rare ring draws in that spot.
+            local circleSize = 20 * classicScale
+            frame._kuiLevelCircle:ClearAllPoints()
+            frame._kuiLevelCircle:SetSize(circleSize, circleSize)
+            if u == "target" then
+                frame._kuiLevelCircle:SetPoint("CENTER", frame, "BOTTOMRIGHT",
+                    -36 * classicScale, 30.5 * classicScale)
+            else
+                frame._kuiLevelCircle:SetPoint("CENTER", frame, "BOTTOMLEFT",
+                    36 * classicScale, 30.5 * classicScale)
+            end
         else
             -- Restore the normal metadata box when leaving Classic, so a
             -- later theme switch does not retain the small stock ornament
             -- dimensions or the mirrored justification.
             frame._kuiLevelText:SetSize(38, 14)
             frame._kuiLevelText:SetJustifyH("LEFT")
+            frame._kuiLevelCircle:Hide()
         end
 
         frame._kuiClassificationIndicator:ClearAllPoints()
@@ -4842,8 +4875,14 @@ local function SetupUnitIndicators(frame, unit)
         if levelText then
             frame._kuiLevelText:SetText(levelText)
             frame._kuiLevelText:Show()
+            if usingClassicLevelOrnament then
+                frame._kuiLevelCircle:Show()
+            else
+                frame._kuiLevelCircle:Hide()
+            end
         else
             frame._kuiLevelText:Hide()
+            frame._kuiLevelCircle:Hide()
         end
         local classificationTexture
         if showClassification then
@@ -4872,18 +4911,14 @@ local function SetupUnitIndicators(frame, unit)
                 portraitRing:SetTexCoord(isFlipped and 1 or 0, isFlipped and 0 or 1, 0, 1)
                 local portraitSize = portraitBackdrop:GetWidth()
                 if portraitSize < 1 then portraitSize = 46 end
-                -- Confirmed live via screenshot (twice: a sublevel z-order
-                -- fix alone did not resolve it): the ring's normal 18%
-                -- overhang reaches into the corner where Classic/Forever's
-                -- own level circle ornament sits, so the two spatially
-                -- overlap regardless of draw order. Pull the ring in
-                -- tighter only under the real stock layouts, where that
-                -- ornament exists; other contexts keep the normal overhang.
-                local ringScale = CLASSIFICATION_PORTRAIT_SCALE
-                if frame._ktForeverLayoutActive or frame._ktClassicLayoutActive then
-                    ringScale = 1.02
-                end
-                local ringWidth = math.max(24, portraitSize * ringScale)
+                -- Shrinking the ring itself (tried previously) couldn't
+                -- actually clear the level position without looking broken
+                -- -- the level sits closer to the portrait's center than
+                -- any reasonably-sized ring's edge, so an opaque backdrop
+                -- circle drawn above the ring (frame._kuiLevelCircle) now
+                -- solves the real conflict directly. Ring keeps its normal
+                -- overhang.
+                local ringWidth = math.max(24, portraitSize * CLASSIFICATION_PORTRAIT_SCALE)
                 local ringHeight = ringWidth * CLASSIFICATION_TEXTURE_ASPECT
                 portraitRing:SetSize(ringWidth, ringHeight)
                 portraitRing:ClearAllPoints()
