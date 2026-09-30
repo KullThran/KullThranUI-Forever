@@ -189,15 +189,17 @@ expect(#renamed.LeftText.points, 0, "renamed-slot LeftText left untouched by the
 local target = MakeUnitFrame()
 expect(KT.VisualThemes:ApplyForeverUnitFrameArt(target, target.Portrait.backdrop, "target"), true, "target apply")
 local targetScale = 230 / 232
-near(target.Health:GetWidth(), 126 * targetScale, "target health width")
-near(target.Power:GetWidth(), 134 * targetScale, "target power width")
-near(target.Portrait.backdrop.points[1][4], -26 * targetScale, "target portrait x")
-near(target.LeftText.points[1][5], -26 * targetScale, "target name y sign")
--- The mirror experiment (see FOREVER_FRAME_GEOMETRY.target's own comment)
--- was confirmed live to move the ring to the wrong side and was reverted --
--- target uses plain SetAtlas, unmirrored, same as player.
-expect(target._ktForeverPortraitArt.atlas, "UI-HUD-UnitFrame-Target-PortraitOn", "target art uses SetAtlas, unmirrored")
-expect(target._ktForeverPortraitArt.texture, nil, "target art never resolves to a raw file")
+near(target.Health:GetWidth(), 124 * targetScale, "target health width (mirrored player values)")
+near(target.Power:GetWidth(), 124 * targetScale, "target power width (mirrored player values)")
+near(target.Portrait.backdrop.points[1][4], -24 * targetScale, "target portrait x (mirrored player values)")
+near(target.LeftText.points[1][5], -27 * targetScale, "target name y (matches player, box only flips horizontally)")
+-- Explicit user request: target reuses player's own atlas (which has the
+-- decorative corner point target's own atlas lacks), mirrored via
+-- SetTexture+SetTexCoord -- SetAtlas can't flip on its own.
+expect(target._ktForeverPortraitArt.atlas, nil, "target art no longer uses plain SetAtlas")
+expect(target._ktForeverPortraitArt.texture, "Interface\\Fake\\StockArt", "target art resolves to player's real sheet file")
+expect(target._ktForeverPortraitArt.texCoord[1], 0.9, "target art texcoord left/right swapped (mirrored)")
+expect(target._ktForeverPortraitArt.texCoord[2], 0.1, "target art texcoord left/right swapped (mirrored)")
 
 local classic = MakeUnitFrame()
 classic:SetSize(282, 52) -- attached KUI width includes its portrait
