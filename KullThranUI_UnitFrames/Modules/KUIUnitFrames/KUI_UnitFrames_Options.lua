@@ -862,6 +862,17 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
     _, h = W:Slider(sc, "Health Height", -y,
         function() return s.healthHeight or 20 end,
         function(v) SetAndRefresh(function() s.healthHeight = v end) end, 12, 80, 1); y = y + h
+    if opts.showFrameScale then
+        -- Explicit user request: a way to increase this specific frame's
+        -- own size. frameScale is already a real, working setting (an
+        -- overall percentage multiplier on top of Frame Width/Health
+        -- Height, clamped 25-300 elsewhere) -- it just had no options
+        -- control before this. Scoped to player/target only (opts flag),
+        -- per the request.
+        _, h = W:Slider(sc, "Frame Size", -y,
+            function() return s.frameScale or 100 end,
+            function(v) SetAndRefresh(function() s.frameScale = v end) end, 25, 300, 1); y = y + h
+    end
     _, h = W:Toggle(sc, "Class Colored Health", -y,
         function() return s.healthClassColored ~= false end,
         function(v) SetAndRefresh(function() s.healthClassColored = v end) end); y = y + h
@@ -1284,6 +1295,7 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 showDispelOverlayKey = 'dispelOverlay',
                 hasVisibility = true,
                 showHeader = false,
+                showFrameScale = true,
             })
 
             _, h = W:Toggle(container, 'Show Absorb Bar', -by,
@@ -1341,6 +1353,7 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 showDispelOverlayKey = 'dispelOverlay',
                 hasVisibility = true,
                 showHeader = false,
+                showFrameScale = true,
             })
             return by
         end, 'target')
