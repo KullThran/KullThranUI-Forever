@@ -733,25 +733,37 @@ local FOREVER_FRAME_GEOMETRY = {
     },
     target = {
         w = 232, h = 100,
-        art = "UI-HUD-UnitFrame-Target-PortraitOn",
-        -- The experimental mirror = true (tried after live QA reported the
-        -- box art not filling the portrait ring) was confirmed live to make
-        -- it WORSE: the ring moved to the opposite side, no longer aligned
-        -- with the real portrait at all -- i.e. this atlas was already
-        -- correctly oriented, matching how EllesmereUI itself uses it
-        -- (unflipped). Reverted to the default: no manual flip.
-        portrait = { point = "TOPRIGHT", x = -26, y = -19, size = 58 },
+        -- Explicit user request (with acknowledged risk): target's own real
+        -- atlas (UI-HUD-UnitFrame-Target-PortraitOn, 192x67) genuinely lacks
+        -- a decorative corner point that player's (198x71) has -- confirmed
+        -- live via a close-up screenshot, not a code bug; both atlases are
+        -- drawn full/unmodified. Reusing player's own atlas, mirrored,
+        -- guarantees the identical ring art. NOTE: an earlier experimental
+        -- mirror = true on TARGET's OWN atlas (see prior git history) made
+        -- things worse -- that mirrored an asset that was already correctly
+        -- oriented for its own use. This is different: player's atlas was
+        -- never designed to be mirrored either, so this is still a genuine
+        -- experiment, just a different one, pending live QA.
+        art = "UI-HUD-UnitFrame-Player-PortraitOn",
+        mirror = true,
+        -- Every offset below is the exact horizontal mirror of player's own
+        -- (x -> w - x - elementWidth, TOPLEFT anchor kept throughout so the
+        -- anchor math stays identical between units); y/w/h are unchanged
+        -- from player since the box is only flipped horizontally. Bar masks
+        -- reuse player's own mask names too, on the assumption a bar-track
+        -- mask is left-right symmetric -- unverified without a client.
+        portrait = { point = "TOPRIGHT", x = -24, y = -19, size = 60 },
         health = {
-            x = 23, y = 40, w = 126, h = 20,
-            mask = "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Mask",
-            mx = -1, my = 6,
+            x = 23, y = 40, w = 124, h = 20,
+            mask = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Mask",
+            mx = -2, my = 6,
         },
         power = {
-            x = 23, y = 61, w = 134, h = 10,
-            mask = "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana-Mask",
-            mx = -61, my = 3,
+            x = 23, y = 61, w = 124, h = 10,
+            mask = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana-Mask",
+            mx = -2, my = 2,
         },
-        name = { x = 30, y = -26, w = 120, h = 14 },
+        name = { x = 48, y = -27, w = 96, h = 14 },
     },
 }
 
