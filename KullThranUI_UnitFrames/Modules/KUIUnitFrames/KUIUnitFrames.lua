@@ -3524,6 +3524,11 @@ local function CreateCastBar(frame, unit, settings)
     PP.Point(bgTex, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
     PP.Point(bgTex, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
     bgTex:SetColorTexture(0, 0, 0, 0.5)
+    -- Exposed so ThemeClientAssets.lua's SeatStockCastbar can recolor it for
+    -- Classic's own bronze accent on every real-stock apply pass (this
+    -- creation-time code only runs once, before the theme's own flags are
+    -- set, so it can't reliably theme-check itself here).
+    castbarBg._bgTex = bgTex
 
     -- Castbar borders (3 edges: left, right, bottom ? top is shared with the frame above)
     PP.CreateBorder(castbarBg, 0, 0, 0, 1, 1, "OVERLAY", 0)
@@ -6222,7 +6227,11 @@ function ns.KTTargetCombo:_StylePip(pip, r, g, b)
     end
     pip._bg:SetVertexColor(0.22, 0.02, 0.02, 0.92)
     pip._fill:SetVertexColor(r, g, b, 1)
-    pip._border:SetVertexColor(1, 0.82, 0.08, 1)
+    -- Confirmed live via close-up screenshot: the gold border (1, 0.82,
+    -- 0.08) blends into the bronze ring the pips sit against, low contrast
+    -- against a similarly-colored background. White stands out regardless
+    -- of what's behind it.
+    pip._border:SetVertexColor(1, 1, 1, 1)
 
     if pip._secretBar then
         local secretFill = pip._secretBar:GetStatusBarTexture()
@@ -6288,10 +6297,13 @@ function ns.KTTargetCombo:Refresh(frame)
     -- portrait. Pulled the pips in closer to the ring itself (smaller
     -- radius) and narrowed the arc so they cluster together lower on the
     -- right side, clear of both badges. Angles in standard math convention
-    -- (0=right/3 o'clock, 90=top/12 o'clock). Still a first-pass estimate
-    -- (no client here to align it exactly); adjust these constants if
-    -- manual QA finds it still overlapping.
-    local radius = math.max(portraitSize * 0.5 + 2, pipSize + 4)
+    -- (0=right/3 o'clock, 90=top/12 o'clock). Confirmed live via a second
+    -- close-up screenshot: radius+2 still landed the pips on top of the
+    -- bronze ring art itself (which extends well past the portrait's own
+    -- edge), not on the darker background past it -- pushed further out.
+    -- Still a first-pass estimate (no client here to align it exactly);
+    -- adjust these constants if manual QA finds it still overlapping.
+    local radius = math.max(portraitSize * 0.5 + 14, pipSize + 4)
     local arcStartDeg, arcEndDeg = 55, 5
     ring:SetSize((radius + pipSize) * 2, (radius + pipSize) * 2)
     ring:ClearAllPoints()
