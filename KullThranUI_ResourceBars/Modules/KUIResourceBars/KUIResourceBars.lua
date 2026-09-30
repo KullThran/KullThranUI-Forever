@@ -1315,6 +1315,70 @@ local function HideMarkers(bar)
     end
 end
 
+local RESOURCE_CIRCLE_MASK = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
+local RESOURCE_CIRCLE_BORDER = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_border.tga"
+
+local function ResourcePipsAreRound(db)
+    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    return theme == "classic" or theme == "forever"
+        or (db and db.general and db.general.frameArtKit == "classic")
+end
+
+local function IsComboSecondaryResource(resource)
+    return resource and resource.power == PT.COMBO
+end
+
+local function ApplyResourcePipShape(pip, round, combo)
+    if not pip then return end
+    if round then
+        local mask = pip._circleMask
+        if not mask then
+            mask = pip:CreateMaskTexture()
+            pip._circleMask = mask
+        end
+        mask:SetTexture(RESOURCE_CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:ClearAllPoints()
+        mask:SetAllPoints(pip)
+        mask:Show()
+        for _, tex in ipairs({ pip._bg, pip._fill }) do
+            if tex and tex.AddMaskTexture then
+                if tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, mask) end
+                pcall(tex.AddMaskTexture, tex, mask)
+            end
+        end
+        if pip._secretBar and pip._secretBar.GetStatusBarTexture then
+            local fill = pip._secretBar:GetStatusBarTexture()
+            if fill and fill.AddMaskTexture then
+                if fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, mask) end
+                pcall(fill.AddMaskTexture, fill, mask)
+            end
+        end
+        if not pip._circleBorder then
+            pip._circleBorder = pip:CreateTexture(nil, "OVERLAY", nil, 4)
+            pip._circleBorder:SetTexture(RESOURCE_CIRCLE_BORDER)
+            pip._circleBorder:SetAllPoints(pip)
+        end
+        pip._circleBorder:SetVertexColor(combo and 1 or 1, combo and 0.82 or 1, combo and 0.08 or 1, 1)
+        pip._circleBorder:Show()
+        if pip._border then pip._border:SetShown(false) end
+    else
+        local mask = pip._circleMask
+        if mask then
+            mask:Hide()
+            for _, tex in ipairs({ pip._bg, pip._fill }) do
+                if tex and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, mask) end
+            end
+        end
+        if pip._secretBar and pip._secretBar.GetStatusBarTexture then
+            local fill = pip._secretBar:GetStatusBarTexture()
+            if fill and fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, mask) end
+        end
+        if pip._circleBorder then pip._circleBorder:Hide() end
+        if pip._border then pip._border:Show() end
+    end
+end
+
 local function UpdateMarkers(bar, markerCfg, maxValue)
     if not bar then
         return
@@ -1657,6 +1721,7 @@ end
 -------------------------------------------------------------------------------
 function KRB:BuildBars()
     local db         = GetSafeDB()
+    local roundResourcePips = ResourcePipsAreRound(db)
     if db.enabled == false then
         if healthBar then healthBar:Hide() end
         if primaryBar then primaryBar:Hide() end
@@ -1693,6 +1758,7 @@ function KRB:BuildBars()
 
     -- ── 1. Recurso Secundario ─────────────────────────────────────────────
     local sec = GetSecondaryResource()
+    local comboResourcePips = IsComboSecondaryResource(sec)
     if db.secondary.enabled and sec then
         if not secondaryFrame then
             secondaryFrame = CreateFrame("Frame", "KUI_SecondaryFrame", UIParent)
@@ -1751,6 +1817,21 @@ function KRB:BuildBars()
             end
             
             local pipW = (secW - (db.secondary.pipSpacing * (sec.max - 1))) / sec.max
+            -- Round pips (Classic/Forever) must be square, or the circular
+            -- mask stretches into an oval -- confirmed live via screenshot,
+            -- pips visibly squashed sideways. pipW above divides the WHOLE
+            -- bar width across every pip regardless of pipHeight, which is
+            -- correct for the normal rectangular pip look but wrong for
+            -- round ones. Clustering the now-smaller square pips together
+            -- (centered) instead of spreading them across the full bar
+            -- width also matches the explicit request that themed pips sit
+            -- close together rather than spread edge-to-edge.
+            local clusterOffsetX = 0
+            if roundResourcePips then
+                pipW = db.secondary.pipHeight
+                local clusterW = pipW * sec.max + db.secondary.pipSpacing * (sec.max - 1)
+                clusterOffsetX = math.max(0, (secW - clusterW) / 2)
+            end
             for i = 1, sec.max do
                 if not pips[i] then
                     pips[i] = CreateFrame("Frame", nil, secondaryFrame)
@@ -1760,14 +1841,16 @@ function KRB:BuildBars()
                     pips[i]._fill:SetAllPoints()
                     pips[i]._border = MakePixelBorder(pips[i], 0, 0, 0, 1, 1)
                 end
-                local x = (i - 1) * (pipW + db.secondary.pipSpacing)
+                ApplyResourcePipShape(pips[i], roundResourcePips, comboResourcePips)
+                local x = clusterOffsetX + (i - 1) * (pipW + db.secondary.pipSpacing)
                 pips[i]:SetSize(pipW, db.secondary.pipHeight)
                 pips[i]:ClearAllPoints()
                 pips[i]:SetPoint("LEFT", secondaryFrame, "LEFT", x, 0)
-                pips[i]._bg:SetColorTexture(0.07, 0.07, 0.07, db.general.bgA)
+                pips[i]._bg:SetColorTexture(comboResourcePips and 0.22 or 0.07, comboResourcePips and 0.02 or 0.07, comboResourcePips and 0.02 or 0.07, db.general.bgA)
                 pips[i]._fill:SetTexture(texSec)
                 
                 local r, g, b, a = ResolveSecondaryPipColor(db, sec, i, db.secondary.fillA or 1)
+                if comboResourcePips then r, g, b, a = 1.0, 0.05, 0.05, db.secondary.fillA or 1 end
                 pips[i]._fill:SetVertexColor(r, g, b, a)
                 
                 pips[i]:SetAlpha(db.secondary.barAlpha or 1)
@@ -1877,6 +1960,8 @@ function KRB:UpdateBars(event, unit)
     local hidePrimaryMana = updatePrimary
         and (IsManaHiddenForCurrentSpec(db) and ppTypeNow == PT.MANA)
     local sec = (updatePrimary or updateSecondary) and GetSecondaryResource() or nil
+    local roundResourcePips = ResourcePipsAreRound(db)
+    local comboResourcePips = IsComboSecondaryResource(sec)
     local profiler = _G.KT and _G.KT.CombatProfiler
     local profileName = updateHealth and not updatePrimary and "resources.health.paint"
         or updatePrimary and not updateHealth and not updateSecondary and "resources.power.paint"
@@ -2099,7 +2184,9 @@ function KRB:UpdateBars(event, unit)
                 end
                 for i = 1, sec.max do
                     if pips[i] then
+                        ApplyResourcePipShape(pips[i], roundResourcePips, comboResourcePips)
                         local r, g, b, a = ResolveSecondaryPipColor(db, sec, i, db.secondary.fillA or 1)
+                        if comboResourcePips then r, g, b, a = 1.0, 0.05, 0.05, db.secondary.fillA or 1 end
                         if fullUpdate or pips[i]._ktColorR ~= r or pips[i]._ktColorG ~= g
                             or pips[i]._ktColorB ~= b or pips[i]._ktColorA ~= a then
                             pips[i]._fill:SetVertexColor(r, g, b, a)
@@ -2119,6 +2206,7 @@ function KRB:UpdateBars(event, unit)
                                 secretBar:SetFrameLevel(pips[i]:GetFrameLevel() + 1)
                                 pips[i]._secretBar = secretBar
                             end
+                            ApplyResourcePipShape(pips[i], roundResourcePips, comboResourcePips)
                             secretBar:SetMinMaxValues(i - 1, i)
                             SetStatusBarValueSafe(secretBar, ppRaw)
                             secretBar:SetStatusBarColor(r, g, b, 1)

@@ -135,6 +135,7 @@ expect(KT.VisualThemes:ApplyAll("classic"), true, "apply classic")
 expect(KT.db.profile.unitFrames.portraitStyle, "circular", "classic portraits")
 expect(KT.db.profile.unitFrames.target.portraitSide, "right", "classic target portrait side")
 expect(KT.db.profile.actionbars.buttonStyle, "BLIZZARD", "classic action style")
+expect(KT.db.profile.actionbars.frameArtKit, "classic", "classic action frame art kit")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard", "classic resource texture")
 expect(KT.db.profile.resourceBars.general.frameArtKit, "classic", "classic resource frame art kit")
 expect(KT.db.profile.resourceBars.health.fillR, 0.86, "classic resource health color")
@@ -158,6 +159,7 @@ expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art 
 
 expect(KT.VisualThemes:ApplyAll("retail"), true, "apply retail")
 expect(KT.db.profile.unitFrames.portraitStyle, "none", "retail portraits")
+expect(KT.db.profile.actionbars.frameArtKit, "retail", "retail action frame art kit")
 expect(KT.db.profile.resourceBars.primary.texture, "Blizzard Raid Bar", "retail resource texture")
 expect(KT.db.profile.resourceBars.general.frameArtKit, "default", "retail resource frame art kit")
 expect(KT.db.profile.resourceBars.health.fillR, 0.12, "retail resource health color")
@@ -177,6 +179,7 @@ expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "default",
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore KUI")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style")
 expect(KT.db.profile.actionbars.buttonShape, "HEXAGON", "restore action shape")
+expect(KT.db.profile.actionbars.frameArtKit, "default", "restore action frame art kit")
 expect(KT.db.profile.unitFrames.healthBarTexture, "User Texture", "restore unit texture")
 expect(KT.db.profile.resourceBars.primary.texture, "User Texture", "restore resource texture")
 expect(KT.db.profile.resourceBars.general.frameArtKit, "user_kit", "restore resource frame art kit")
@@ -242,9 +245,10 @@ for _, validShape in ipairs({"NONE", "CIRCLE", "CSQUARE", "HEXAGON", "DIAMOND", 
     expect(testProfile.buttonShape, validShape, "actionbars shape " .. validShape .. " passes validation")
 end
 -- Test that invalid shape gets reset to NONE
-local testProfile = { buttonStyle = "KUI", buttonShape = "INVALID" }
+local testProfile = { buttonStyle = "KUI", buttonShape = "INVALID", frameArtKit = "invalid" }
 abAdapter.validate(testProfile)
 expect(testProfile.buttonShape, "NONE", "actionbars invalid shape resets to NONE")
+expect(testProfile.frameArtKit, "default", "actionbars invalid frame art resets to default")
 
 -- kui must reset the classic-border field even when no kui slot exists
 -- (e.g. a module whose profile did not exist yet when the user left kui and

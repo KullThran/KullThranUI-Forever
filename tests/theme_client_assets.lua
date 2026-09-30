@@ -128,6 +128,9 @@ local function MakeUnitFrame()
     frame.HealthPrediction = { damageAbsorb = absorb }
     frame.Buffs = NewRegion(frame)
     frame.Buffs.spacing = 1
+    local castbarBg = NewRegion(frame)
+    castbarBg:SetSize(230, 14)
+    frame.Castbar = NewRegion(castbarBg)
     return frame
 end
 
@@ -148,6 +151,7 @@ expect(player.Portrait.backdrop:GetFrameLevel(), 0, "portrait below art")
 expect(player.Portrait.backdrop._ktStockPortraitAnchor, true, "stock portrait owns its anchor")
 near(player.Health:GetWidth(), 124 * playerScale, "player health width")
 near(player.Power:GetWidth(), 124 * playerScale, "player power width")
+near(player.Castbar:GetParent():GetWidth(), 124 * playerScale, "player castbar matches real power width")
 near(player.Health.points[1][4], 85 * playerScale, "player health x")
 near(player.Health.points[1][5], -40 * playerScale, "player health y")
 near(player.LeftText.points[1][4], 88 * playerScale, "player name x")
@@ -199,20 +203,26 @@ local classic = MakeUnitFrame()
 classic:SetSize(282, 52) -- attached KUI width includes its portrait
 classic.Health:SetSize(230, 46)
 expect(KT.VisualThemes:ApplyClassicUnitFrameArt(classic, classic.Portrait.backdrop, "player"), true, "classic apply")
-local classicScale = 230 / 232
+local classicScale = 1
 expect(classic._ktClassicArtHost:GetFrameStrata(), "LOW", "classic art follows bar strata")
 expect(classic._ktClassicArtHost:GetFrameLevel(), 4, "classic art above bars")
 expect(classic.Portrait.backdrop:GetFrameLevel(), 1, "classic portrait below bars")
 expect(classic.Portrait.backdrop._ktStockPortraitAnchor, true, "classic portrait owns its anchor")
-near(classic:GetWidth(), 230, "classic attached width normalization")
+near(classic:GetWidth(), 232, "classic native width normalization")
 near(classic:GetHeight(), 100 * classicScale, "classic box height")
 near(classic._ktClassicPortraitArt:GetWidth(), 230 * classicScale, "classic art width")
 near(classic._ktClassicPortraitArt:GetHeight(), 99 * classicScale, "classic art height")
 near(classic.Health:GetWidth(), 119 * classicScale, "classic health width")
 near(classic.Power:GetWidth(), 119 * classicScale, "classic power width")
+near(classic.Castbar:GetParent():GetWidth(), 119 * classicScale, "classic castbar matches real power width")
 near(classic.LeftText.points[1][5], 15 * classicScale, "classic name y")
+near(classic.Portrait.backdrop.points[1][4], 20 * classicScale, "classic player portrait x")
+near(classic.Portrait.backdrop.points[1][5], -12 * classicScale, "classic player portrait y")
+near(classic.Portrait.backdrop:GetWidth(), 72 * classicScale, "classic player portrait size (uniform gap fix)")
+near(classic.Health.points[1][4], 90 * classicScale, "classic health x")
+near(classic.Health.points[1][5], -45 * classicScale, "classic health y")
 local _, classicLeftFontSize = classic.LeftText:GetFont()
-near(classicLeftFontSize, 12 * classicScale * 0.8, "classic LeftText font capped to its real 12px-tall bar")
+near(classicLeftFontSize, 12 * classicScale * 0.65, "classic LeftText font capped to its real 12px-tall bar")
 expect(classic.LeftText:GetParent(), classic._ktClassicArtHost, "classic name reparented off Health's clipped hierarchy")
 
 KT.VisualThemes:ClearForeverUnitFrameArt(player)

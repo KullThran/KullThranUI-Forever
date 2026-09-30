@@ -42,6 +42,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             paths[#paths + 1] = key .. ".borderColor.g"
             paths[#paths + 1] = key .. ".borderColor.b"
         end
+        paths[#paths + 1] = "player.showPlayerCastbar"
         return paths
     end,
     seed = function(profile, themeKey, clientFlavor)
@@ -59,6 +60,13 @@ KT.VisualThemes:RegisterModule("unitframes", {
             SetUnitBorderColor(profile, 0.92, 0.72, 0.22)
             profile.frameArtKit = "classic"
             if profile.target then profile.target.portraitSide = "right" end
+            -- showPlayerCastbar defaults to false module-wide -- explicit
+            -- user report: cast bars "don't appear" under Classic/Forever.
+            -- Real stock geometry anchors the cast bar below Power already
+            -- (CreateCastBar); it just never turns on unless the user
+            -- opts in manually. Real per-client themes should show it.
+            profile.player = profile.player or {}
+            profile.player.showPlayerCastbar = true
         elseif themeKey == "forever" then
             profile.portraitStyle = "circular"
             profile.darkTheme = true
@@ -67,6 +75,8 @@ KT.VisualThemes:RegisterModule("unitframes", {
             SetUnitBorderColor(profile, 0.82, 0.65, 0.23)
             profile.frameArtKit = "default"
             if profile.target then profile.target.portraitSide = "right" end
+            profile.player = profile.player or {}
+            profile.player.showPlayerCastbar = true
         elseif themeKey == "retail" then
             profile.portraitStyle = "none"
             profile.darkTheme = false
@@ -85,8 +95,11 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.frameArtKit = "default"
         end
     end,
-    validate = function(profile)
+    validate = function(profile, themeKey)
         local valid = { attached = true, detached = true, circular = true, none = true }
         if not valid[profile.portraitStyle] then profile.portraitStyle = "circular" end
+        -- The frame kit is part of the visual theme. Repair old slots that
+        -- were captured before Classic's real stock frame was added.
+        profile.frameArtKit = themeKey == "classic" and "classic" or "default"
     end,
 })
