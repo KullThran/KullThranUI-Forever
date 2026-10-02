@@ -219,6 +219,106 @@ local function GetHeaderChromeColor()
     return GetAccentColor()
 end
 
+-- ============================================================================
+-- VISUAL STYLE SKINS
+-- Each Visual Style re-skins the meter's chrome (panel, header, rows, icon
+-- frames) to match a reference look; the data, layout metrics and class
+-- colors are untouched. kui has no entry and keeps its own flat look.
+--   classic: Recount-style red title bar on a dark brown panel.
+--   retail:  Blizzard's own Damage Meter: rounded dark panel, gold title,
+--            black-outlined bars and gold-framed class icons.
+--   forever: retail's structure recolored to bronze, with a bronze inner
+--            frame around the rows.
+-- ============================================================================
+local METER_SKINS = {
+    classic = {
+        panelBg = { 0.060, 0.040, 0.030, 0.96 },
+        panelEdge = { 0, 0, 0, 1 }, -- Classic: black border
+        headerTop = { 0.72, 0.08, 0.06 }, headerBottom = { 0.34, 0.02, 0.02 },
+        headerEdge = { 0.10, 0.01, 0.01, 1 },
+        title = { 1.00, 0.90, 0.45 },
+        rowBg = { 0.05, 0.03, 0.02, 0.70 },
+    },
+    retail = {
+        panelBg = { 0.030, 0.035, 0.045, 0.94 },
+        rounded = { 0.30, 0.26, 0.16, 1 },
+        headerLine = { 1.00, 0.82, 0.10, 0.40 },
+        title = { 1.00, 0.82, 0.10 },
+        rowBg = { 0.02, 0.02, 0.03, 0.90 },
+        rowBorder = { 0, 0, 0, 1 },
+        iconBorder = { 0.70, 0.56, 0.14, 1 },
+    },
+    forever = {
+        -- Lighter, warmer panel (the old near-black read as a hole), and the
+        -- bronze border now runs around the WHOLE frame instead of an inner
+        -- box around the rows only.
+        panelBg = { 0.150, 0.110, 0.075, 0.90 },
+        flat = true,
+        panelEdge = { 0.72, 0.55, 0.30, 1 }, panelEdgeSize = 2,
+        headerLine = { 0.82, 0.65, 0.23, 0.45 },
+        title = { 0.862745, 0.521569, 0.376471 }, -- Forever #DC8560 (header labels / arrows)
+        rowBg = { 0.075, 0.055, 0.040, 0.90 },
+        rowBorder = { 0, 0, 0, 1 },
+        iconBorder = { 0.55, 0.42, 0.24, 1 },
+    },
+}
+
+local function GetMeterSkin()
+    local vt = KT.VisualThemes
+    local key = vt and vt.GetRenderedTheme and vt:GetRenderedTheme()
+    return key and METER_SKINS[key] or nil, key
+end
+
+-- Four 1px (or `thickness`) edge textures around `target`, created once on
+-- `owner[key]` and re-laid out on every call. `parent` decides the draw order
+-- (a frame above the bars for row borders, the meter frame itself for panel
+-- chrome). outset > 0 draws outside target's bounds.
+local function LayoutSkinEdges(owner, key, parent, target, thickness, color, outset)
+    local edges = owner[key]
+    if not edges then
+        edges = {}
+        for index = 1, 4 do
+            edges[index] = parent:CreateTexture(nil, "OVERLAY", nil, 6)
+        end
+        owner[key] = edges
+    end
+    if not color then
+        for index = 1, 4 do edges[index]:Hide() end
+        return
+    end
+    outset = outset or 0
+    local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", target, "TOPLEFT", -outset, outset)
+    top:SetPoint("TOPRIGHT", target, "TOPRIGHT", outset, outset)
+    top:SetHeight(thickness)
+    bottom:ClearAllPoints()
+    bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -outset, -outset)
+    bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", outset, -outset)
+    bottom:SetHeight(thickness)
+    left:ClearAllPoints()
+    left:SetPoint("TOPLEFT", target, "TOPLEFT", -outset, outset - thickness)
+    left:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -outset, -outset + thickness)
+    left:SetWidth(thickness)
+    right:ClearAllPoints()
+    right:SetPoint("TOPRIGHT", target, "TOPRIGHT", outset, outset - thickness)
+    right:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", outset, -outset + thickness)
+    right:SetWidth(thickness)
+    for index = 1, 4 do
+        edges[index]:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+        edges[index]:Show()
+    end
+end
+
+local function SetVerticalGradient(texture, top, bottom)
+    texture:SetColorTexture(top[1], top[2], top[3], 1)
+    if texture.SetGradient and _G.CreateColor then
+        pcall(texture.SetGradient, texture, "VERTICAL",
+            _G.CreateColor(bottom[1], bottom[2], bottom[3], 1),
+            _G.CreateColor(top[1], top[2], top[3], 1))
+    end
+end
+
 local function IsUnlockModeOpen()
     local unlockMode = KT.GetModule and KT:GetModule("UnlockMode", true)
     return unlockMode and unlockMode.isOpen == true
@@ -245,7 +345,7 @@ local function GetConfig()
         if db.damageMeter.headerFontSize == nil then
             db.damageMeter.headerFontSize = 12
         end
-        db.damageMeter.width = math.max(MIN_METER_WIDTH, tonumber(db.damageMeter.width) or 320)
+        db.damageMeter.width = math.max(MIN_METER_WIDTH, tonumber(db.damageMeter.width) or 338)
 
         -- The old default/persisted behaviour forced the local player into the
         -- last visible row. That rewrote damageMeterScrollOffset on every live
@@ -700,8 +800,12 @@ local function StyleHeaderButton(button)
     if KT.VisualThemes and KT.VisualThemes.GetDamageMeterAccentColor then
         themedR, themedG, themedB = KT.VisualThemes:GetDamageMeterAccentColor()
     end
+    local skin = GetMeterSkin()
     if KT.AddBackdrop then
-        if themedR then
+        if skin then
+            -- The skinned header band is drawn behind the buttons.
+            KT:AddBackdrop(button, 0, 0, 0, 0)
+        elseif themedR then
             KT:AddBackdrop(button, themedR, themedG, themedB, 0.30)
         else
             KT:AddBackdrop(button, 0, 0, 0, 0)
@@ -711,11 +815,17 @@ local function StyleHeaderButton(button)
         button.borderKT:Hide()
     end
     if button.text then
-        button.text:SetTextColor(1, 1, 1, 1)
+        if skin then
+            button.text:SetTextColor(skin.title[1], skin.title[2], skin.title[3], 1)
+        else
+            button.text:SetTextColor(1, 1, 1, 1)
+        end
         ApplyFontReadability(button.text)
     end
     if button.arrow then
-        if themedR then
+        if skin then
+            button.arrow:SetVertexColor(skin.title[1], skin.title[2], skin.title[3], 1)
+        elseif themedR then
             button.arrow:SetVertexColor(themedR, themedG, themedB, 1)
         else
             button.arrow:SetVertexColor(0.82, 0.82, 0.86, 1)
@@ -2661,6 +2771,103 @@ local function RefreshDamageMeterLockControl(frame)
     frame.lockButton:SetAlpha(locked and not isMouseOver and 0 or 1)
 end
 
+--- Paints (or clears) the Visual Style skin on one meter window. Runs at the
+--- end of every style refresh, after the generic layout, and only recolors /
+--- adds chrome: it never moves rows or changes any data.
+local function ApplyDamageMeterSkin(frame, cfg, iconGap)
+    local skin, themeKey = GetMeterSkin()
+    local showPanel = cfg.showBackground ~= false
+
+    -- Panel -------------------------------------------------------------
+    if skin and (skin.rounded or skin.flat) and frame.SetBackdrop then
+        pcall(frame.SetBackdrop, frame, skin.rounded and {
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 14,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        } or { bgFile = "Interface\\Buttons\\WHITE8X8" })
+        if showPanel then
+            frame:SetBackdropColor(skin.panelBg[1], skin.panelBg[2], skin.panelBg[3], skin.panelBg[4])
+            if skin.rounded then
+                frame:SetBackdropBorderColor(skin.rounded[1], skin.rounded[2], skin.rounded[3], skin.rounded[4])
+            end
+        else
+            frame:SetBackdropColor(0, 0, 0, 0)
+            frame:SetBackdropBorderColor(0, 0, 0, 0)
+        end
+    elseif skin and showPanel then
+        if KT.AddBackdrop then
+            KT:AddBackdrop(frame, skin.panelBg[1], skin.panelBg[2], skin.panelBg[3], skin.panelBg[4])
+        end
+    end
+    LayoutSkinEdges(frame, "_skinPanelEdges", frame, frame, (skin and skin.panelEdgeSize) or 1,
+        (skin and showPanel and skin.panelEdge) or nil, 0)
+
+    -- Header band -------------------------------------------------------
+    if not frame._skinHeader then
+        frame._skinHeader = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+    end
+    local header = frame._skinHeader
+    if skin and skin.headerTop then
+        header:ClearAllPoints()
+        header:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -3)
+        header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -3, -3)
+        header:SetHeight(HEADER_HEIGHT - 4)
+        SetVerticalGradient(header, skin.headerTop, skin.headerBottom)
+        header:Show()
+        LayoutSkinEdges(frame, "_skinHeaderEdges", frame, header, 1, skin.headerEdge, 0)
+    else
+        header:Hide()
+        LayoutSkinEdges(frame, "_skinHeaderEdges", frame, header, 1, nil)
+    end
+
+    -- Thin gold/bronze rule under the header (retail / forever) ----------
+    if not frame._skinHeaderLine then
+        frame._skinHeaderLine = frame:CreateTexture(nil, "ARTWORK")
+    end
+    local line = frame._skinHeaderLine
+    if skin and skin.headerLine then
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -(HEADER_HEIGHT + 1))
+        line:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -(HEADER_HEIGHT + 1))
+        line:SetHeight(1)
+        line:SetColorTexture(skin.headerLine[1], skin.headerLine[2], skin.headerLine[3], skin.headerLine[4])
+        line:Show()
+    else
+        line:Hide()
+    end
+
+    -- Forever: bronze inner frame around the rows ------------------------
+    if not frame._skinInner then
+        frame._skinInner = frame:CreateTexture(nil, "BACKGROUND", nil, 3)
+        frame._skinInner:SetColorTexture(0, 0, 0, 0)
+    end
+    local inner = frame._skinInner
+    inner:ClearAllPoints()
+    inner:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -(HEADER_HEIGHT + 3))
+    inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
+    LayoutSkinEdges(frame, "_skinInnerEdges", frame, inner, 2,
+        (skin and skin.innerFrame) or nil, 0)
+
+    -- The old forever-only bronze top rule is superseded by the skin.
+    if skin and frame.accentLine then frame.accentLine:Hide() end
+
+    -- Rows --------------------------------------------------------------
+    for _, row in ipairs(frame.rows or {}) do
+        if skin then
+            row.background:SetColorTexture(skin.rowBg[1], skin.rowBg[2], skin.rowBg[3], skin.rowBg[4])
+            if row.shade then row.shade:SetColorTexture(0, 0, 0, 0) end
+        else
+            row.background:SetColorTexture(0.025, 0.028, 0.038, 0.86)
+            if row.shade then row.shade:SetColorTexture(0, 0, 0, 0.14) end
+        end
+        LayoutSkinEdges(row, "_skinBarEdges", row.textLayer, row.bar, 1,
+            (skin and skin.rowBorder) or nil, 0)
+        LayoutSkinEdges(row, "_skinIconEdges", row.textLayer, row.icon, 1,
+            (skin and skin.iconBorder and iconGap > 0) and skin.iconBorder or nil, 0)
+    end
+end
+
 function Mod:RefreshDamageMeterStyle(useCurrentSize, targetFrame)
     local frame = targetFrame or self.damageMeterFrame
     if not frame then
@@ -2679,8 +2886,8 @@ function Mod:RefreshDamageMeterStyle(useCurrentSize, targetFrame)
     if not IsModeSupported(cfg.mode) then
         cfg.mode = "damageDone"
     end
-    local width = math.max(MIN_METER_WIDTH, useCurrentSize and frame:GetWidth() or (tonumber(cfg.width) or 320))
-    local height = math.max(MIN_METER_HEIGHT, useCurrentSize and frame:GetHeight() or (tonumber(cfg.height) or 220))
+    local width = math.max(MIN_METER_WIDTH, useCurrentSize and frame:GetWidth() or (tonumber(cfg.width) or 338))
+    local height = math.max(MIN_METER_HEIGHT, useCurrentSize and frame:GetHeight() or (tonumber(cfg.height) or 201))
     if not useCurrentSize then
         frame:SetSize(width, height)
     end
@@ -2800,7 +3007,8 @@ function Mod:RefreshDamageMeterStyle(useCurrentSize, targetFrame)
     end
     frame.emptyText:SetTextColor(0.62, 0.62, 0.68, 1)
     RefreshDamageMeterLockControl(frame)
-    
+    ApplyDamageMeterSkin(frame, cfg, iconGap)
+
     frame._styleRefreshInProgress = false
 end
 
@@ -2887,7 +3095,7 @@ function Mod:UpdateDamageMeterData(targetFrame)
         local contentRows = math.min(sourceCount, rowLimit, MAX_ROW_POOL)
         local targetHeight
         if sourceCount > rowLimit then
-            targetHeight = math.max(MIN_METER_HEIGHT, tonumber(cfg.height) or 220)
+            targetHeight = math.max(MIN_METER_HEIGHT, tonumber(cfg.height) or 201)
         else
             targetHeight = HEADER_HEIGHT + 4
                 + (contentRows * rowHeight)
@@ -3897,8 +4105,8 @@ local function CreateAdditionalConfig(sourceFrame, index)
         showPercentages = source.showPercentages == true,
         mode = mode,
         session = source.session or "current",
-        width = tonumber(source.width) or 320,
-        height = tonumber(source.height) or 220,
+        width = tonumber(source.width) or 338,
+        height = tonumber(source.height) or 201,
         rowHeight = tonumber(source.rowHeight) or 19,
         maxRows = tonumber(source.maxRows) or 10,
         fontSize = tonumber(source.fontSize) or 12,
@@ -3995,8 +4203,8 @@ function Mod:CreateAdditionalDamageMeterWindow(sourceFrame, existingIndex, exist
         x = 24 * index,
         y = -24 * index,
     }
-    cfg.width = math.max(MIN_METER_WIDTH, tonumber(cfg.width) or 320)
-    cfg.height = math.max(MIN_METER_HEIGHT, tonumber(cfg.height) or 220)
+    cfg.width = math.max(MIN_METER_WIDTH, tonumber(cfg.width) or 338)
+    cfg.height = math.max(MIN_METER_HEIGHT, tonumber(cfg.height) or 201)
     cfg.mode = IsModeSupported(cfg.mode) and cfg.mode or "damageDone"
     cfg.session = cfg.session == "overall" and "overall" or "current"
 

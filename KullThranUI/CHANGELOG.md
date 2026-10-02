@@ -5,6 +5,19 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.0.9 (2026-10-02)
+
+This beta delivers a major visual-style refresh, deeper frame customization, and clearer combat information.
+
+- Reworked the Forever, Classic and Retail visual styles with authentic frame art and more consistent colors across unit frames, action bars, cast bars, resource bars, nameplates, the minimap, the damage meter and the objective tracker.
+- Redesigned player, target and pet frames with improved portrait masking, correct portrait facing, better level and rare/elite indicator placement, cleaner name and buff alignment, and a new frame-size option.
+- Added an Action Bar Art selector with live previews. The selected art also follows the existing Hide Bar Art setting.
+- Added Circles and Pips choices for combo points, with improved sizing, contrast and placement on unit frames, resource bars and nameplates.
+- Added per-ability cooldown display rules, including always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge-specific display controls.
+- Enabled party-frame portraits by default for every visual style and made dispel-overlay changes apply immediately, including during combat.
+- Improved profile imports by identifying the game version they were created for and warning before importing a profile from a different version.
+- Improved chat readability for Chinese, Korean, Japanese and Russian text, and fixed alert hiding so active loot rolls remain visible.
+
 ## 0.0.8 (2026-09-27)
 
 Forever beta maintenance release carrying the latest tested addon state and refreshed package metadata.

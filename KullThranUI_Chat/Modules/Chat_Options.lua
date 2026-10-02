@@ -472,7 +472,7 @@ KT:RegisterPage("chat", "Chat", 72, function(sc, W)
     end
 
     local function UpdatePreview()
-        local fontPath = FetchPreviewFont(db.font or "AAA_ITC_Avant_Garde")
+        local fontPath = FetchPreviewFont("AAA_ITC_Avant_Garde")
         local fontSize = db.fontSize or 12
         local fontOutline = db.fontOutline or "OUTLINE"
         local panelColor = db.panelColor or { r = 0.04, g = 0.06, b = 0.08, a = 0.18 }
@@ -655,9 +655,6 @@ KT:RegisterPage("chat", "Chat", 72, function(sc, W)
 
     AddOptionBlock(cols, "left", "Typography", function(container)
         local by = 0
-        _, h = W:Dropdown(container, "Font", -by, GetFontValues,
-            function() return db.font or "AAA_ITC_Avant_Garde" end,
-            function(v) db.font = v; RefreshChat() end); by = by + h
         _, h = W:Slider(container, "Font Size", -by,
             function() return db.fontSize or 12 end,
             function(v) db.fontSize = v; RefreshChat() end, 8, 24, 1); by = by + h

@@ -71,7 +71,8 @@ local InCombatLockdown              = InCombatLockdown
 local GetSpecialization             = GetSpecialization
 
 ns.KUI_INTERFACE = tonumber(GetBuildInfo and select(4, GetBuildInfo())) or 0
-ns.KUI_IS_FOREVER = ns.KUI_INTERFACE == 16001
+-- Forever reports a 1.60+ toc (16xxx); Classic Era is 115xx and retail 12xxxx.
+ns.KUI_IS_FOREVER = (ns.KUI_INTERFACE >= 16000 and ns.KUI_INTERFACE < 20000)
     or (KT and KT.IS_FOREVER == true)
 
 -- Forever puede exponer la API clasica de hechizos aunque no exista la
@@ -918,6 +919,10 @@ end
 --  Consolidated cooldown/desat/charge-text helper
 -------------------------------------------------------------------------------
 local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha, skipCD, insufficientPower, hideGCDSwipe, blizzChild, isBuffBar)
+    if ns.CDMShouldKeepCooldownColored
+        and ns.CDMShouldKeepCooldownColored(icon._barKey, icon._baseSpellID or spellID) then
+        desatOnCD = false
+    end
     CacheMultiChargeSpell(spellID)
 
     local isChargeSpell = _multiChargeSpells[spellID] == true
@@ -958,7 +963,7 @@ local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha
                 ok = pcall(icon._cooldown.SetCooldownFromDurationObject, icon._cooldown, durObj)
             end
             if ok then
-                icon._cooldown:SetDrawSwipe(true)
+                icon._cooldown:SetDrawSwipe(not icon._kuiStateHideSwipe)
                 icon._cooldown:SetDrawEdge(false)
                 return true
             end
@@ -969,7 +974,7 @@ local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha
         if rawStart and rawDur and not (issecretvalue and (issecretvalue(rawStart) or issecretvalue(rawDur))) then
             local ok = pcall(icon._cooldown.SetCooldown, icon._cooldown, rawStart, rawDur)
             if ok then
-                icon._cooldown:SetDrawSwipe(true)
+                icon._cooldown:SetDrawSwipe(not icon._kuiStateHideSwipe)
                 icon._cooldown:SetDrawEdge(false)
                 return true
             end
@@ -1028,10 +1033,10 @@ local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha
         if isChargeSpell then
             if ccd then
                 icon._cooldown:SetCooldownFromDurationObject(ccd, true)
-                icon._cooldown:SetDrawSwipe(true)
+                icon._cooldown:SetDrawSwipe(not icon._kuiStateHideSwipe)
             elseif scd and not hideGCD then
                 icon._cooldown:SetCooldownFromDurationObject(scd, true)
-                icon._cooldown:SetDrawSwipe(true)
+                icon._cooldown:SetDrawSwipe(not icon._kuiStateHideSwipe)
             elseif TryApplyHookedBlizzCooldown() then
                 -- Blizzard's viewer started the cooldown before C_Spell reflected it.
             else
@@ -1041,7 +1046,7 @@ local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha
         else
             if scd and not hideGCD then
                 icon._cooldown:SetCooldownFromDurationObject(scd, true)
-                icon._cooldown:SetDrawSwipe(true)
+                icon._cooldown:SetDrawSwipe(not icon._kuiStateHideSwipe)
             elseif TryApplyHookedBlizzCooldown() then
                 -- Use the live Blizzard CDM cooldown as an immediate fallback to avoid swipe delay.
             else
@@ -1169,6 +1174,7 @@ local function ApplySpellCooldown(icon, spellID, desatOnCD, showCharges, swAlpha
     else
         icon._chargeText:Hide()
     end
+    if icon._kuiStateHideChargeText then icon._chargeText:Hide() end
 
     return scd
 end
@@ -1978,6 +1984,8 @@ function ns.SetCDMIconShown(icon, shouldShow)
     -- Potion tracker icons are SecureActionButtonTemplate buttons. Never call
     -- Show/Hide on them from addon code: a stale combat flag can still taint
     -- the call during the combat transition and produce ADDON_ACTION_BLOCKED.
+    local shownAlpha = icon._kuiUsableVisibilityAlpha
+    if shownAlpha == nil then shownAlpha = 1 end
     local isPotionTrackerIcon = icon._barKey == "kui_potion"
     local combatLocked = InCombatLockdown and InCombatLockdown() or false
     local inCombat = _G.KUI_CDM_inCombat
@@ -1987,7 +1995,7 @@ function ns.SetCDMIconShown(icon, shouldShow)
 
     if isPotionTrackerIcon then
         icon._ktCDMShouldShow = shouldShow == true
-        icon:SetAlpha(shouldShow and 1 or 0)
+        icon:SetAlpha(shouldShow and shownAlpha or 0)
         if inCombat or combatLocked then
             _pendingPotionTrackerSecureRefresh = true
         end
@@ -2003,7 +2011,7 @@ function ns.SetCDMIconShown(icon, shouldShow)
         isProtected = ok and result == true
     end
     if (inCombat or combatLocked) and isProtected then
-        icon:SetAlpha(shouldShow and 1 or 0)
+        icon:SetAlpha(shouldShow and shownAlpha or 0)
         if ns.SyncProcGlowIndexForIcon then
             ns.SyncProcGlowIndexForIcon(icon)
         end
@@ -2012,6 +2020,7 @@ function ns.SetCDMIconShown(icon, shouldShow)
 
     if shouldShow then
         icon:Show()
+        icon:SetAlpha(shownAlpha)
     else
         icon:Hide()
     end
@@ -2497,7 +2506,8 @@ local function RegisterCDMUnlockElements()
     for barKey, frame in pairs(ns.cdmBarFrames) do
         local barData = ns.barDataByKey[barKey]
         if barData and barData.enabled then
-            table.insert(elements, {
+            local trackerType = type(barKey) == "string" and barKey:match("^kui_(.+)$") or nil
+            local el = {
                 key = "CDM_" .. barKey,
                 label = (barData.name or barKey) .. " (CDM)",
                 getFrame = function() return frame end,
@@ -2505,6 +2515,12 @@ local function RegisterCDMUnlockElements()
                 loadPosition = function()
                     local p = KUI_CDM.db and KUI_CDM.db.profile
                     local pos = p and p.cdmBarPositions and p.cdmBarPositions[barKey] or nil
+                    -- A KUI Tracker only owns a manual position once it has been
+                    -- moved (free mode); otherwise it follows the player frame.
+                    if trackerType then
+                        local ctd = p and p.customTracker and p.customTracker[trackerType]
+                        if not (ctd and ctd.positionMode == "free") then return nil end
+                    end
                     if pos and pos.point then
                         return {
                             point = pos.point,
@@ -2527,6 +2543,14 @@ local function RegisterCDMUnlockElements()
                     }
                     barData.anchorTo = "none"
                     frame._kuiUnlockManualPosition = nil
+                    -- KUI Trackers: mark the move as "free" so SyncKUITrackerBars
+                    -- stops re-docking the bar to the player frame (the reason
+                    -- Unlock Mode appeared to ignore the drag).
+                    if trackerType then
+                        local ctd = p.customTracker and p.customTracker[trackerType]
+                        if ctd then ctd.positionMode = "free" end
+                        barData._kuiTrackerFreePosition = true
+                    end
                 end,
                 applyPendingPosition = function(_, pos)
                     frame._kuiUnlockManualPosition = true
@@ -2549,7 +2573,20 @@ local function RegisterCDMUnlockElements()
                     if w and h and w > 5 and h > 5 then return w, h end
                     return barData.iconSize or 40, barData.iconSize or 40
                 end
-            })
+            }
+            if trackerType then
+                -- Reset: forget the manual spot and dock back to the player frame.
+                el.clearPosition = function()
+                    local p = KUI_CDM.db and KUI_CDM.db.profile
+                    if p and p.cdmBarPositions then p.cdmBarPositions[barKey] = nil end
+                    local ctd = p and p.customTracker and p.customTracker[trackerType]
+                    if ctd then ctd.positionMode = nil end
+                    barData.anchorTo = nil
+                    barData._kuiTrackerFreePosition = nil
+                    frame._kuiUnlockManualPosition = nil
+                end
+            end
+            table.insert(elements, el)
         end
     end
 
@@ -4584,7 +4621,10 @@ function ns.SyncNativeCDMBarAlpha(barKey)
     end
     container._kuiNativeAlpha = alpha
     for _, icon in ipairs(icons) do
-        if ns._nativeCDMFrameData[icon] then icon:SetAlpha(alpha) end
+        if ns._nativeCDMFrameData[icon] then
+            local usableAlpha = icon._kuiUsableVisibilityAlpha
+            icon:SetAlpha(usableAlpha ~= nil and usableAlpha or alpha)
+        end
     end
 end
 
@@ -5824,7 +5864,7 @@ ns.RACE_RACIALS = {
     Mechagnome         = { 312924 },
     Dracthyr           = { 357214, { 368970, class = "EVOKER" } },
     EarthenDwarf       = { 436344 },
-    Haranir            = { 1287685, 12594416 },
+    Haranir            = { 1259416 }, -- new elf racial (id given by the project owner)
 }
 
 HEALTH_ITEMS = {
@@ -5852,6 +5892,26 @@ HEALTH_ITEMS = {
     { itemID = 224464, spellID = 452930, class = "WARLOCK", cooldown = 60, name = "Demonic Healthstone" },
     { itemID = 5512,   spellID = 6262, cooldown = 60, name = "Healthstone" },
 }
+-- Forever: only the vanilla consumables exist. Same model EllesmereUI uses
+-- (Forever catalogue replaces the retail presets): vanilla healing potions and
+-- the five healthstone tiers (base + the two improved-talent stones each).
+-- `cooldown` is only the group marker the tracker uses (60 = stone, 300 = potion);
+-- the real swipe comes from the item's own cooldown.
+if ns.KUI_IS_FOREVER then
+    HEALTH_ITEMS = {}
+    -- {unverified}: vanilla healing potion item IDs, written from memory.
+    for _, id in ipairs({ 13446, 3928, 1710, 929, 858, 118 }) do
+        HEALTH_ITEMS[#HEALTH_ITEMS + 1] = { itemID = id, cooldown = 300 }
+    end
+    -- Stone families (Ellesmere's Forever healthstone preset): Major, Greater,
+    -- Healthstone, Lesser, Minor.
+    for _, id in ipairs({
+        19013, 19012, 9421, 19011, 19010, 5510, 19009, 19008, 5509,
+        19007, 19006, 5511, 19005, 19004, 5512,
+    }) do
+        HEALTH_ITEMS[#HEALTH_ITEMS + 1] = { itemID = id, cooldown = 60, name = "Healthstone" }
+    end
+end
 ns.CDMHealthItemsByID = ns.CDMHealthItemsByID or {}
 for _, item in ipairs(HEALTH_ITEMS) do
     ns.CDMHealthItemsByID[item.itemID] = item
@@ -5873,6 +5933,10 @@ PREPOT_ITEM_IDS = {
     -- Potion of Unwavering Focus
     [212257] = true, [212258] = true, [212259] = true,
 }
+if ns.KUI_IS_FOREVER then
+    -- {unverified}: vanilla combat potion item IDs, written from memory.
+    PREPOT_ITEM_IDS = { [13442] = true, [5634] = true, [3387] = true, [13455] = true }
+end
 ns.CDMPrepotItemIDs = PREPOT_ITEM_IDS
 local POTION_TRACKER_HEALTH_PRIORITY = {
     241304, 241305, 241306, 241307, -- Midnight (Q2/Q1 pairs)
@@ -5880,6 +5944,9 @@ local POTION_TRACKER_HEALTH_PRIORITY = {
     212302, 212301, 212300,
     211880, 211879, 211878, -- TWW launch
 }
+if ns.KUI_IS_FOREVER then
+    POTION_TRACKER_HEALTH_PRIORITY = { 13446, 3928, 1710, 929, 858, 118 } -- {unverified} IDs
+end
 do
 local POTION_TRACKER_PREPOT_PRIORITY = {
     241308, 241309, -- Midnight (Quality 2, Quality 1)
@@ -5893,6 +5960,14 @@ local POTION_TRACKER_HEALTHSTONE_PRIORITY_BY_CLASS = {
     WARLOCK = { 224464, 5512 },
     DEFAULT = { 5512, 224464 },
 }
+if ns.KUI_IS_FOREVER then
+    POTION_TRACKER_PREPOT_PRIORITY = { 13442, 5634, 3387, 13455 } -- {unverified} IDs
+    local stones = {
+        19013, 19012, 9421, 19011, 19010, 5510, 19009, 19008, 5509,
+        19007, 19006, 5511, 19005, 19004, 5512,
+    }
+    POTION_TRACKER_HEALTHSTONE_PRIORITY_BY_CLASS = { WARLOCK = stones, DEFAULT = stones }
+end
 
 local POTION_TRACKER_QUALITY_BY_ITEM_ID = {
     [241304] = 2, [241305] = 1, -- Silvermoon Health Potion
@@ -6614,7 +6689,7 @@ local function BuildAutoTrackerSpells(trackerKey)
                 end
             end
         end
-        if #defList == 0 then
+        if #defList == 0 and not ns.KUI_IS_FOREVER then
             local party = KT and KT.db and KT.db.profile and KT.db.profile.partyTracker
             local spellMap = party and party.spells
             if spellMap then
@@ -6690,6 +6765,7 @@ local function BuildAutoTrackerSpells(trackerKey)
     return FilterTrackerAutoSpells(trackerKey, out)
 end
 ns.BuildAutoTrackerSpells = BuildAutoTrackerSpells
+ns.IsSpellKnownSafe = IsSpellKnownSafe
 
 local function EnsureCustomTrackerDefaults(p)
     if not p.customTracker then
@@ -7585,6 +7661,14 @@ BuildCDMBar = function(barIndex)
             local side = barData.playerFrameSide or "LEFT"
             local oX = barData.playerFrameOffsetX or 0
             local oY = barData.playerFrameOffsetY or 0
+            -- Classic/Forever/Retail stock layouts put the player's buff row
+            -- above (or on) the frame's top edge; a tracker docked above the
+            -- frame stacks over that row instead of covering the auras.
+            if barData.isKUITracker and (side == "TOPRIGHT_OUT" or side == "TOPLEFT_OUT")
+                and playerFrame._ktAuraRowLift
+                and playerFrame.Buffs and playerFrame.Buffs.IsShown and playerFrame.Buffs:IsShown() then
+                oY = oY + playerFrame._ktAuraRowLift
+            end
             local grow = barData.growDirection or "RIGHT"
             local centered = barData.growCentered ~= false
             local fp = CDMFrameAnchorPoint(side, grow, centered)
@@ -7846,7 +7930,7 @@ LayoutCDMBar = function(barKey)
         else
             includeInLayout = icon:IsShown()
         end
-        if includeInLayout then
+        if includeInLayout and not icon._kuiUsableShiftHidden then
             if #visibleIcons < maxIcons then
                 visibleIcons[#visibleIcons + 1] = icon
             else
@@ -8072,7 +8156,10 @@ local function CreateCDMIcon(barKey, index)
     local barScale = barData.barScale or 1.0
     if barScale < 0.1 then barScale = 1.0 end
     local iconSize = barData.iconSize or 36
-    local borderSize = SnapForScale(barData.borderSize or 1, barScale)
+    local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    local themedBlackBorder = renderedTheme == "classic" or renderedTheme == "forever" or renderedTheme == "retail" or renderedTheme == "kui"
+    local borderSize = SnapForScale(themedBlackBorder and 1 or (barData.borderSize or 1), barScale)
     local zoom = barData.iconZoom or 0.08
 
     local iconParent = frame._content or frame
@@ -8252,7 +8339,9 @@ local function CreateCDMIcon(barKey, index)
     local edges = {}
     for i = 1, 4 do
         local e = icon:CreateTexture(nil, "OVERLAY", nil, 7)
-        e:SetColorTexture(barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1)
+        e:SetColorTexture(themedBlackBorder and 0 or (barData.borderR or 0),
+            themedBlackBorder and 0 or (barData.borderG or 0),
+            themedBlackBorder and 0 or (barData.borderB or 0), barData.borderA or 1)
         e:SetSnapToPixelGrid(false)
         e:SetTexelSnappingBias(0)
         edges[i] = e
@@ -8301,12 +8390,15 @@ end
 ApplyShapeToCDMIcon = function(icon, shape, barData)
     if not icon then return end
     local zoom = barData.iconZoom or 0.08
-    local borderSz = barData.borderSize or 1
-    local brdR = barData.borderR or 0
-    local brdG = barData.borderG or 0
-    local brdB = barData.borderB or 0
+    local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    local themedBlackBorder = renderedTheme == "classic" or renderedTheme == "forever" or renderedTheme == "retail" or renderedTheme == "kui"
+    local borderSz = themedBlackBorder and 1 or (barData.borderSize or 1)
+    local brdR = themedBlackBorder and 0 or (barData.borderR or 0)
+    local brdG = themedBlackBorder and 0 or (barData.borderG or 0)
+    local brdB = themedBlackBorder and 0 or (barData.borderB or 0)
     local brdA = barData.borderA or 1
-    if barData.borderClassColor then
+    if barData.borderClassColor and not themedBlackBorder then
         local _, ct = UnitClass("player")
         if ct then
             local cc = RAID_CLASS_COLORS[ct]
@@ -9358,13 +9450,13 @@ function ns.ApplyNativeCDMVisualState(frame)
         end
         swipeR, swipeG, swipeB = GetActiveSwipeColor(barData, glowR, glowG, glowB, frame)
     end
-    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(not frame._kuiStateHideSwipe) end
     if cooldown.SetSwipeColor then
         fd.desiredSwipeR, fd.desiredSwipeG, fd.desiredSwipeB = swipeR, swipeG, swipeB
         fd.desiredSwipeA = barData.swipeAlpha or 0.7
         cooldown:SetSwipeColor(swipeR, swipeG, swipeB, barData.swipeAlpha or 0.7)
     end
-    fd.desiredHideCountdown = not barData.showCooldownText
+    fd.desiredHideCountdown = frame._kuiStateHideDuration or not barData.showCooldownText
     cooldown:SetHideCountdownNumbers(fd.desiredHideCountdown)
     fd.applyingVisual = nil
 end
@@ -9557,14 +9649,14 @@ function ns.EnsureNativeCDMFrame(frame, barKey, barData)
             hooksecurefunc(nativeCooldown, "SetDrawSwipe", function()
                 if fd.applyingVisual then return end
                 fd.applyingVisual = true
-                nativeCooldown:SetDrawSwipe(true)
+                nativeCooldown:SetDrawSwipe(not frame._kuiStateHideSwipe)
                 fd.applyingVisual = nil
             end)
 
             hooksecurefunc(nativeCooldown, "SetHideCountdownNumbers", function()
                 if fd.applyingVisual or fd.desiredHideCountdown == nil then return end
                 fd.applyingVisual = true
-                nativeCooldown:SetHideCountdownNumbers(fd.desiredHideCountdown)
+                nativeCooldown:SetHideCountdownNumbers(frame._kuiStateHideDuration or fd.desiredHideCountdown)
                 fd.applyingVisual = nil
             end)
         end
@@ -9597,8 +9689,8 @@ function ns.EnsureNativeCDMFrame(frame, barKey, barData)
     if frame.ChargeCount then pcall(frame.ChargeCount.SetFrameLevel, frame.ChargeCount, baseLevel + 23) end
 
     if frame.Cooldown then
-        if frame.Cooldown.SetDrawSwipe then frame.Cooldown:SetDrawSwipe(true) end
-        frame.Cooldown:SetHideCountdownNumbers(not barData.showCooldownText)
+        if frame.Cooldown.SetDrawSwipe then frame.Cooldown:SetDrawSwipe(not frame._kuiStateHideSwipe) end
+        frame.Cooldown:SetHideCountdownNumbers(frame._kuiStateHideDuration or not barData.showCooldownText)
         local countdown = frame.Cooldown.GetCountdownFontString and frame.Cooldown:GetCountdownFontString()
         if countdown then SetCDMFont(countdown, GetCDMFont(), barData.cooldownFontSize or 12) end
     end
@@ -10309,7 +10401,10 @@ local function RefreshCDMIconAppearance(barKey)
 
     local barScale = barData.barScale or 1.0
     if barScale < 0.1 then barScale = 1.0 end
-    local borderSize = SnapForScale(barData.borderSize or 1, barScale)
+    local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    local themedBlackBorder = renderedTheme == "classic" or renderedTheme == "forever" or renderedTheme == "retail" or renderedTheme == "kui"
+    local borderSize = SnapForScale(themedBlackBorder and 1 or (barData.borderSize or 1), barScale)
     local zoom = barData.iconZoom or 0.08
 
     for _, icon in ipairs(icons) do
@@ -10329,7 +10424,7 @@ local function RefreshCDMIconAppearance(barKey)
                 local swipeR, swipeG, swipeB = GetConfiguredSwipeColor(barData, icon)
                 icon._cooldown:SetSwipeColor(swipeR, swipeG, swipeB, barData.swipeAlpha or 0.7)
             end
-            icon._cooldown:SetHideCountdownNumbers(not barData.showCooldownText)
+            icon._cooldown:SetHideCountdownNumbers(icon._kuiStateHideDuration or not barData.showCooldownText)
             -- Mark pending font update
             if barData.showCooldownText then
                 icon._pendingFontPath = GetCDMFont(); icon._pendingFontSize = barData.cooldownFontSize or 12
@@ -10338,7 +10433,9 @@ local function RefreshCDMIconAppearance(barKey)
         -- Update border edges
         if icon._edges then
             for _, e in ipairs(icon._edges) do
-                e:SetColorTexture(barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1)
+                e:SetColorTexture(themedBlackBorder and 0 or (barData.borderR or 0),
+                    themedBlackBorder and 0 or (barData.borderG or 0),
+                    themedBlackBorder and 0 or (barData.borderB or 0), barData.borderA or 1)
                 e:SetSnapToPixelGrid(false)
                 e:SetTexelSnappingBias(0)
             end
@@ -11111,6 +11208,21 @@ ns.AnchorPlayerFrameToCDM = function()
         local ux, uy = UIParent:GetCenter()
         if type(fx) ~= "number" or type(fy) ~= "number" or type(ux) ~= "number" or type(uy) ~= "number" then
             return
+        end
+        -- GetCenter() is in each frame's own scaled coordinates, and the saved
+        -- offset is later applied with SetPoint on the (scaled) unit frame.
+        -- Without converting, a frame at 132% scale was stored ~32% off, so any
+        -- later re-apply (ReloadFrames, option toggles) displaced the Target.
+        local fs = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+        local us = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+        if type(fs) == "number" and fs > 0 and type(us) == "number" and us > 0 then
+            fx, fy = fx * fs / us, fy * fs / us
+            local sc = fs / us
+            if sc > 0 then
+                -- offset in the frame's own scale units
+                local ox, oy = (fx - ux) / sc, (fy - uy) / sc
+                fx, fy = ux + ox, uy + oy
+            end
         end
 
         KT.db.profile.unitFrames = KT.db.profile.unitFrames or {}
@@ -12446,40 +12558,43 @@ ns.initFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 ns.initFrame:RegisterEvent("UPDATE_MACROS")
 ns.initFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
--- KullThranUI/Modules/VisualThemes/Adapters/CooldownManager.lua already
--- seeds bronze border color (0.82, 0.65, 0.23) for Forever's bars, but only
--- when the user actually SWITCHES themes (ApplyAll/seed()) -- a profile
--- that was already on Forever before that adapter code existed (or before
--- CDM's own bars array grew past its original count) never got that seed,
--- and AceDB defaults never overwrite an already-saved value. Explicit user
--- report: the circular icon shape is already correct, only the border
--- color is still stuck at the module's own hardcoded black default (see
--- barDefaults.borderR/G/B above). One-time fix, mirroring the same
--- "_xxxMigrated<date>" pattern KUIUnitFrames.lua uses for identical
--- AceDB-default migrations -- only touches bars still at the literal old
--- default, never a deliberately chosen border color.
-local function MigrateForeverBronzeCDMBorders()
+-- Classic and Forever previously forced borderSize=0 and could also retain
+-- Classic's coloured decorative frame art. The visual-theme adapter now owns
+-- these as plain one-pixel black borders; migrate already-saved profiles too
+-- so the correction is visible without reapplying the whole theme.
+local function MigrateThemedBlackCDMBorders()
     local p = KUI_CDM.db and KUI_CDM.db.profile
-    if not p or p._cdmForeverBronzeMigrated20260930 then return end
-    p._cdmForeverBronzeMigrated20260930 = true
+    if not p or p._cdmThemedBlackBorders20261001 then return end
+    p._cdmThemedBlackBorders20261001 = true
 
-    if not (KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-        and KT.VisualThemes:GetRenderedTheme() == "forever") then
-        return
+    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    if theme ~= "forever" and theme ~= "classic" and theme ~= "retail" and theme ~= "kui" then return end
+
+    p.cdmBars = p.cdmBars or {}
+    p.cdmBars.barDefaults = p.cdmBars.barDefaults or {}
+    local defaults = p.cdmBars.barDefaults
+    defaults.borderSize = 1
+    defaults.borderR, defaults.borderG, defaults.borderB = 0, 0, 0
+    local plainThemedFrame = theme == "classic" or theme == "forever"
+    if plainThemedFrame then
+        defaults.frameArtKit = "default"
     end
 
-    local bars = p.cdmBars and p.cdmBars.bars
-    if type(bars) ~= "table" then return end
-
-    for _, barData in ipairs(bars) do
-        if (barData.borderR or 0) == 0 and (barData.borderG or 0) == 0 and (barData.borderB or 0) == 0 then
-            barData.borderR, barData.borderG, barData.borderB = 0.82, 0.65, 0.23
+    for _, barData in ipairs(p.cdmBars.bars or {}) do
+        barData.borderSize = 1
+        barData.borderR, barData.borderG, barData.borderB = 0, 0, 0
+        if plainThemedFrame then
+            barData.frameArtKit = "default"
         end
+    end
+    if plainThemedFrame then
+        p.reskinBorders = false
     end
 end
 
 function KUI_CDM:CDMFinishSetup()
-    MigrateForeverBronzeCDMBorders()
+    MigrateThemedBlackCDMBorders()
     ns.RebuildCdIDToCorrectSID()
     if ns.SetupNativeCDMViewerHooks then ns.SetupNativeCDMViewerHooks() end
     BuildAllCDMBars()

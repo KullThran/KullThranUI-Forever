@@ -192,6 +192,7 @@ function KT:GenerateDefaults()
             actionbars = {
                 enable = true,
                 buttonStyle = "BLIZZARD",
+                frameArtKit = "default",
                 buttonBackdropColor = { r = 0.1019607931375504, g = 0.1019607931375504, b = 0.1019607931375504, a = 0.7343736886978149 },
                 buttonSpacing = 0,
                 buttonPadding = 0,
@@ -230,8 +231,10 @@ function KT:GenerateDefaults()
             
             castbar = {
                 enable = true,
-                width = 250,
-                height = 20,
+                width = 135,
+                height = 25,
+                autoPosition = true,
+                autoWidth = false,
                 scale = 1.0,
                 frameStrata = "BACKGROUND",
                 frameLevel = 10,

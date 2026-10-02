@@ -135,6 +135,7 @@ end
 -- e.g. nameplates already owned its own borderColor before schema 3.
 local SCHEMA3_ADDED_PATH_PATTERNS = {
     unitframes = { "^frameArtKit$", "%.borderColor%.[rgb]$" },
+    actionbars = { "^frameArtKit$" },
     castbar = { "^frameArtKit$" },
     resourcebars = { "^general%.frameArtKit$", "^health%.fill[RGB]$" },
     cooldownmanager = { "frameArtKit$" },
@@ -234,6 +235,74 @@ function KT.VisualThemes:RunPendingThemeMigrations(state)
     if next(pending) == nil then state.pendingPathMigration = nil end
 end
 
+-- One-time: Retail and Forever default their Unit Frames bar texture to
+-- "Blizzard Raid Bar". Slots/live profiles saved before the texture became
+-- user-editable per style may still hold an older default, so reset them once.
+local RAID_BAR_TEXTURE = "Blizzard Raid Bar"
+local RAID_BAR_UNITS = { "player", "target", "focus", "pet", "boss", "totPet" }
+
+function KT.VisualThemes:MigrateRaidBarDefault(state)
+    if state.raidBarDefault20261002 then return end
+    local adapter = self:GetModuleAdapter("unitframes")
+    local moduleProfile = adapter and AdapterProfile(adapter)
+    if not moduleProfile then return end -- retried once the module exists
+    local slots = state.slots and state.slots.unitframes
+    if type(slots) == "table" then
+        for _, themeKey in ipairs({ "forever", "retail" }) do
+            local slot = slots[themeKey]
+            if type(slot) == "table" then
+                for _, unit in ipairs(RAID_BAR_UNITS) do
+                    local path = unit .. ".healthBarTexture"
+                    if slot[path] ~= nil then slot[path] = RAID_BAR_TEXTURE end
+                end
+            end
+        end
+    end
+    if state.active == "forever" or state.active == "retail" then
+        for _, unit in ipairs(RAID_BAR_UNITS) do
+            if type(moduleProfile[unit]) == "table" then
+                moduleProfile[unit].healthBarTexture = RAID_BAR_TEXTURE
+            end
+        end
+    end
+    state.raidBarDefault20261002 = true
+end
+
+-- Forever's accent is #DC8560. Stored values (theme slots and, while Forever is the active
+-- theme, the live module profiles) still hold the older gold/bronze, and seeds only run on
+-- an explicit theme switch -- so push the new color once, for every Forever-owned path.
+local FOREVER_ACCENT = { r = 0.862745, g = 0.521569, b = 0.376471, a = 1 }
+local FOREVER_ACCENT_PATHS = {
+    minimap = { borderColor = FOREVER_ACCENT },
+    skin = {
+        customBorderColor = FOREVER_ACCENT,
+        ["accentColor.r"] = FOREVER_ACCENT.r, ["accentColor.g"] = FOREVER_ACCENT.g,
+        ["accentColor.b"] = FOREVER_ACCENT.b, ["accentColor.a"] = 1,
+    },
+}
+
+function KT.VisualThemes:MigrateForeverAccent(state)
+    if state.foreverAccentDC8560 then return end
+    for moduleKey, paths in pairs(FOREVER_ACCENT_PATHS) do
+        local slot = type(state.slots) == "table" and type(state.slots[moduleKey]) == "table"
+            and state.slots[moduleKey].forever or nil
+        if type(slot) == "table" then
+            for path, value in pairs(paths) do
+                slot[path] = DeepCopy(value)
+            end
+        end
+        if state.active == "forever" then
+            local adapter = self:GetModuleAdapter(moduleKey)
+            local moduleProfile = adapter and AdapterProfile(adapter)
+            if not moduleProfile then return end -- retried once the module exists
+            for path, value in pairs(paths) do
+                SetPath(moduleProfile, path, value)
+            end
+        end
+    end
+    state.foreverAccentDC8560 = true
+end
+
 function KT.VisualThemes:EnsureInitialized()
     local profile = KT.db and KT.db.profile
     if not profile then return nil end
@@ -251,6 +320,8 @@ function KT.VisualThemes:EnsureInitialized()
     if state.pendingPathMigration ~= nil then
         self:RunPendingThemeMigrations(state)
     end
+    self:MigrateRaidBarDefault(state)
+    self:MigrateForeverAccent(state)
     return profile, state
 end
 
@@ -272,7 +343,7 @@ end
 local DAMAGE_METER_CHROME_COLORS = {
     classic = { 1.00, 0.82, 0.10 },
     retail = { 1.00, 0.82, 0.10 },
-    forever = { 0.82, 0.65, 0.23 },
+    forever = { 0.862745, 0.521569, 0.376471 }, -- #DC8560
 }
 
 function KT.VisualThemes:GetDamageMeterAccentColor()
@@ -302,7 +373,15 @@ function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
     if not moduleProfile then return false end
 
     local activeTheme = state.active
-    if state.applied[moduleKey] == activeTheme then return true end
+    if state.applied[moduleKey] == activeTheme then
+        -- Validate theme-owned fields even when the persisted applied marker
+        -- says this module was already initialized. This repairs slots from
+        -- older builds without requiring the user to switch away and back.
+        if type(adapter.validate) == "function" then
+            pcall(adapter.validate, moduleProfile, activeTheme, clientFlavor)
+        end
+        return true
+    end
 
     local ok, err = pcall(function()
         local destination = self:LoadSlot(profile, moduleKey, activeTheme)

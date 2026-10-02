@@ -55,6 +55,15 @@ KT.VisualThemes:RegisterModule("unitframes", {
         paths[#paths + 1] = "player.showPlayerCastbar"
         paths[#paths + 1] = "player.frameScale"
         paths[#paths + 1] = "target.frameScale"
+        paths[#paths + 1] = "player.customFillColor.r"
+        paths[#paths + 1] = "player.customFillColor.g"
+        paths[#paths + 1] = "player.customFillColor.b"
+        paths[#paths + 1] = "player.healthClassColored"
+        paths[#paths + 1] = "target.customFillColor.r"
+        paths[#paths + 1] = "target.customFillColor.g"
+        paths[#paths + 1] = "target.customFillColor.b"
+        paths[#paths + 1] = "target.healthClassColored"
+        paths[#paths + 1] = "showPvPCircle"
         return paths
     end,
     seed = function(profile, themeKey, clientFlavor)
@@ -67,9 +76,14 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- fully unmasked and bled outside the ring.
             profile.portraitStyle = "circular"
             profile.darkTheme = false
+            -- Explicit user request: the PvP icon's backdrop circle
+            -- defaults ON for the 3 real-stock-art themes, OFF for kui
+            -- (which has its own toggle to opt back in).
+            profile.showPvPCircle = true
             profile.healthBarTexture = "Blizzard"
             SetUnitValues(profile, true, "Blizzard")
-            SetUnitBorderColor(profile, 0.92, 0.72, 0.22)
+            -- Explicit user request: Classic's default accent is #DCA300.
+            SetUnitBorderColor(profile, 0.862745, 0.639216, 0)
             profile.frameArtKit = "classic"
             if profile.target then profile.target.portraitSide = "right" end
             -- showPlayerCastbar defaults to false module-wide -- explicit
@@ -80,41 +94,136 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
+            -- Explicit user request: Classic's health bar defaults to green
+            -- too, same mechanism as Retail below.
+            for _, key in ipairs({ "player", "target" }) do
+                profile[key] = type(profile[key]) == "table" and profile[key] or {}
+                profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+                profile[key].healthClassColored = false
+            end
         elseif themeKey == "forever" then
             profile.portraitStyle = "circular"
-            profile.darkTheme = true
-            profile.healthBarTexture = "Melli Dark"
-            SetUnitValues(profile, true, "Melli Dark")
-            SetUnitBorderColor(profile, 0.82, 0.65, 0.23)
+            -- The stock-theme health selector owns the fill color. Leaving
+            -- darkTheme enabled here forced #111111 after every class/custom
+            -- color update, so Forever always rendered black.
+            profile.darkTheme = false
+            profile.showPvPCircle = true
+            -- Explicit user request: Forever's bar texture should match
+            -- Retail's rather than keep its own separate LSM choice.
+            profile.healthBarTexture = "Blizzard Raid Bar"
+            SetUnitValues(profile, true, "Blizzard Raid Bar")
+            -- Explicit user request: Forever's default accent is #694836.
+            SetUnitBorderColor(profile, 0.411765, 0.282353, 0.211765)
             profile.frameArtKit = "default"
             if profile.target then profile.target.portraitSide = "right" end
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
+            -- Explicit user request: Forever's health bar defaults to green
+            -- too, same mechanism as Retail below.
+            for _, key in ipairs({ "player", "target" }) do
+                profile[key] = type(profile[key]) == "table" and profile[key] or {}
+                profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+                profile[key].healthClassColored = false
+            end
         elseif themeKey == "retail" then
-            profile.portraitStyle = "none"
+            -- Explicit user request: Retail is the same real per-client
+            -- stock geometry as Forever (same atlas name, ApplyForeverUnitFrameArt
+            -- in ThemeClientAssets.lua is reused for both), NOT the bare
+            -- fixed-accent-color ceiling kui already covers. The only real
+            -- difference is the ring's own color -- gold, not bronze -- and
+            -- that comes for free from the atlas itself: this same atlas
+            -- name only renders bronze on the Forever CLIENT specifically
+            -- (which remaps it), so a genuine Retail client renders the
+            -- genuine gold Retail art natively with no recoloring needed.
+            profile.portraitStyle = "circular"
             profile.darkTheme = false
+            profile.showPvPCircle = true
             profile.healthBarTexture = "Blizzard Raid Bar"
-            SetUnitValues(profile, false, "Blizzard Raid Bar")
-            SetUnitBorderColor(profile, 0.20, 0.58, 1.00)
+            SetUnitValues(profile, true, "Blizzard Raid Bar")
+            -- Explicit user request: Retail's default accent is the
+            -- player's own class color -- a snapshot taken when the theme
+            -- is applied (seed only runs on an explicit theme switch, same
+            -- as every other seeded field in this module), not a live
+            -- per-unit tracker -- it will not follow whichever unit is
+            -- currently targeted.
+            do
+                local playerClass = type(UnitClass) == "function" and select(2, UnitClass("player")) or nil
+                local cc = (playerClass and C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(playerClass))
+                    or (playerClass and RAID_CLASS_COLORS and RAID_CLASS_COLORS[playerClass])
+                    or { r = 1.00, g = 0.82, b = 0.10 }
+                SetUnitBorderColor(profile, cc.r, cc.g, cc.b)
+            end
             profile.frameArtKit = "default"
+            if profile.target then profile.target.portraitSide = "right" end
+            profile.player = profile.player or {}
+            profile.player.showPlayerCastbar = true
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
+            -- Explicit user request: Retail's health bar defaults to green
+            -- (KUIUnitFrames.lua's existing customFillColor/healthClassColored
+            -- mechanism -- healthClassColored=false makes the custom fill win
+            -- over class/reaction coloring).
+            for _, key in ipairs({ "player", "target" }) do
+                profile[key] = type(profile[key]) == "table" and profile[key] or {}
+                profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+                profile[key].healthClassColored = false
+            end
         else
             profile.portraitStyle = clientFlavor == "forever" and "circular" or "none"
             profile.darkTheme = false
+            profile.showPvPCircle = false
             profile.healthBarTexture = "Melli Reforged"
             SetUnitValues(profile, clientFlavor == "forever", "Melli Reforged")
             if profile.target and clientFlavor == "forever" then profile.target.portraitSide = "right" end
             -- kui: reset the classic-border field to UnitFrames' own default
             -- (KUIUnitFrames.lua defaults: frameArtKit = "default").
             profile.frameArtKit = "default"
+            -- Explicit user request: kui must NOT get Retail/Forever/Classic's
+            -- bigger 132% default -- confirmed live, switching TO kui left a
+            -- stale 132 behind from whichever real-stock theme was active
+            -- before, since this branch never touched frameScale at all.
+            -- Reset explicitly to the module's own baseline (100). A later
+            -- request to shrink this to 75 was reverted: a frameScale below
+            -- 100 exposed a real bug elsewhere (buffs rendering huge --
+            -- see KUIUnitFrames.lua), and the user's final, explicit call
+            -- was to keep kui at 100 regardless.
+            SetPlayerTargetScale(profile, 100)
+            -- Explicit user report: kui's health bar wasn't "just the class
+            -- color" -- root cause: this branch never reset
+            -- healthClassColored/customFillColor, so switching to kui from
+            -- Classic/Forever/Retail (all three force healthClassColored
+            -- = false + a green customFillColor) left that green stuck in
+            -- place. kui's own default is class-colored health, in no
+            -- case the green the other three force -- applies to every
+            -- unit this module seeds (UNIT_KEYS), not just player/target.
+            for _, key in ipairs(UNIT_KEYS) do
+                profile[key] = type(profile[key]) == "table" and profile[key] or {}
+                profile[key].healthClassColored = true
+            end
         end
     end,
     validate = function(profile, themeKey)
         local valid = { attached = true, detached = true, circular = true, none = true }
         if not valid[profile.portraitStyle] then profile.portraitStyle = "circular" end
+        -- Repair existing Forever slots seeded with the obsolete dark-health
+        -- default. A black bar remains available through the custom picker.
+        if themeKey == "forever" then profile.darkTheme = false end
         -- The frame kit is part of the visual theme. Repair old slots that
         -- were captured before Classic's real stock frame was added.
         profile.frameArtKit = themeKey == "classic" and "classic" or "default"
+        -- Re-apply this theme's own HEALTH/CLASS choice from its card
+        -- (profile.visualThemeHealth, written by ThemePreview.lua), so each
+        -- theme keeps its own color mode instead of the seed's default.
+        local root = KT.db and KT.db.profile
+        local saved = root and type(root.visualThemeHealth) == "table" and root.visualThemeHealth[themeKey]
+        if type(saved) == "table" then
+            local c = saved.color or {}
+            for _, key in ipairs({ "player", "target" }) do
+                profile[key] = type(profile[key]) == "table" and profile[key] or {}
+                profile[key].healthClassColored = saved.classColored ~= false
+                profile[key].customFillColor = { r = c.r or 0.10, g = c.g or 0.90, b = c.b or 0.10 }
+            end
+            if saved.classColored == false then profile.darkTheme = false end
+        end
     end,
 })

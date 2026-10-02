@@ -1394,6 +1394,16 @@ local function GetClassPowerClassColors()
     return defaults.classPowerClassColors
 end
 ns.GetClassPowerClassColors = GetClassPowerClassColors
+-- "circle" (default) or "pip" (rectangular), applies to combo points.
+local function GetClassPowerShape()
+    if db and db.classPowerShape then return db.classPowerShape end
+    -- Unset: KUI Style defaults to pips, every other style to circles.
+    local VT = KT and KT.VisualThemes
+    local theme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+    if theme == "kui" then return "pip" end
+    return "circle"
+end
+ns.GetClassPowerShape = GetClassPowerShape
 local function GetClassPowerCustomColor()
     local c = (db and db.classPowerCustomColor) or defaults.classPowerCustomColor
     return c
@@ -2842,6 +2852,14 @@ local function InitDB()
         end
         KullThranUINameplatesDB._auraIconScaleMigrated_v2 = true
     end
+    if not KullThranUINameplatesDB._classPowerShapeMigrated_v2 then
+        -- v1 of the option auto-filled "circle" from the defaults table, which
+        -- blocked the per-style default (KUI Style = pips). Unset it once.
+        if KullThranUINameplatesDB.classPowerShape == "circle" then
+            KullThranUINameplatesDB.classPowerShape = nil
+        end
+        KullThranUINameplatesDB._classPowerShapeMigrated_v2 = true
+    end
     if not KullThranUINameplatesDB._classPowerDefaultMigrated_v1 then
         -- Older Forever profiles stored the old false default explicitly,
         -- which prevented the combo-point watcher from ever starting.
@@ -3273,6 +3291,7 @@ local CP_CLASS_COLORS = {
     WARLOCK     = { 0.58, 0.51, 0.79 },
     MAGE        = { 0.25, 0.78, 0.92 },
     EVOKER      = { 0.20, 0.58, 0.50 },
+    DEATHKNIGHT = { 0.77, 0.12, 0.23 },
     DEMONHUNTER = { 0.34, 0.06, 0.46 },
     SHAMAN      = { 0.00, 0.44, 0.87 },
     HUNTER      = { 0.67, 0.83, 0.45 },
@@ -3290,7 +3309,6 @@ local CLASS_POWER_MAP = {
                     [269] = { Enum.PowerType.Chi, 5 } },
     WARLOCK     = { Enum.PowerType.SoulShards,   5 },
     MAGE        = { Enum.PowerType.ArcaneCharges, 4 },
-    EVOKER      = { Enum.PowerType.Essence,      5 },
     DEMONHUNTER = { [581] = { "SOUL_FRAGMENTS_VENGEANCE", 6 } },  -- Solo Venganza (valor secreto)
     SHAMAN      = { [263] = { "MAELSTROM_WEAPON", 10 } },  -- Solo Mejora
     PRIEST      = { [258] = { "INSANITY_BAR", 100 } },     -- Solo Sombra
@@ -3299,6 +3317,36 @@ local CLASS_POWER_MAP = {
                     [255] = { "TIP_OF_THE_SPEAR", 3 } },   -- Solo Supervivencia
     WARRIOR     = { [72]  = { "WHIRLWIND_STACKS", 4 } },    -- Solo Furia
 }
+
+-- Future Retail compatibility: Evoker Essence and Death Knight Runes. They only exist
+-- on clients whose Enum.PowerType defines them (nil on Classic-based clients), so
+-- the entries are added conditionally and everything downstream treats them like any
+-- other pip resource (same circle/pip shape option, border, shadow and spacing).
+if Enum.PowerType.Essence then
+    CLASS_POWER_MAP.EVOKER = { Enum.PowerType.Essence, 5 }
+end
+if Enum.PowerType.Runes then
+    CLASS_POWER_MAP.DEATHKNIGHT = { Enum.PowerType.Runes, 6 }
+end
+
+-- Rectangular pips: 1px black border + soft drop shadow (textures behind the pip).
+local function SetPipDecor(pip, show)
+    if not pip then return end
+    if show and not pip._border then
+        pip._border = pip._bg and pip._bg:GetParent():CreateTexture(nil, "OVERLAY", nil, 1)
+        if pip._border then
+            pip._border:SetColorTexture(0, 0, 0, 1)
+            pip._border:SetPoint("TOPLEFT", pip, "TOPLEFT", -1, 1)
+            pip._border:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", 1, -1)
+        end
+        pip._shadow = pip._bg:GetParent():CreateTexture(nil, "OVERLAY", nil, 0)
+        pip._shadow:SetColorTexture(0, 0, 0, 0.5)
+        pip._shadow:SetPoint("TOPLEFT", pip, "TOPLEFT", -2, 1)
+        pip._shadow:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", 2, -3)
+    end
+    if pip._border then pip._border:SetShown(show and true or false) end
+    if pip._shadow then pip._shadow:SetShown(show and true or false) end
+end
 
 -- Applies the circular combo-point treatment while keeping other class resources rectangular.
 local function ApplyClassPowerPipShape(pip, round)
@@ -3330,6 +3378,7 @@ local function ApplyClassPowerPipShape(pip, round)
         end
         pip._circleBorder:SetVertexColor(1, 0.82, 0.08, 1)
         pip._circleBorder:Show()
+        SetPipDecor(pip, false)
     else
         if mask then
             mask:Hide()
@@ -3341,6 +3390,7 @@ local function ApplyClassPowerPipShape(pip, round)
             end
         end
         if pip._circleBorder then pip._circleBorder:Hide() end
+        SetPipDecor(pip, true)
     end
 end
 
@@ -3455,6 +3505,22 @@ ns._PipResourceResolvers = {
     end,
 }
 
+-- Runes: a rune counts as filled when it is off cooldown (UnitPower does not track them).
+if Enum.PowerType.Runes then
+    ns._PipResourceResolvers[Enum.PowerType.Runes] = function()
+        local maxR = UnitPowerMax("player", Enum.PowerType.Runes) or 6
+        if not maxR or maxR <= 0 then maxR = 6 end
+        local ready = 0
+        if GetRuneCooldown then
+            for i = 1, maxR do
+                local _, _, isReady = GetRuneCooldown(i)
+                if isReady then ready = ready + 1 end
+            end
+        end
+        return ready, maxR, false
+    end
+end
+
 -- Actualiza la visualización de recurso de clase en una placa de nameplate.
 -- Separa la ruta de renderizado en dos fases: recursos de tipo barra
 -- (StatusBar uniforme) y recursos de tipo pip (texturas individuales).
@@ -3469,6 +3535,7 @@ local function UpdateClassPowerOnPlate(plate)
             plate._cpPips[i]:Hide()
             if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
             if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
+            SetPipDecor(plate._cpPips[i], false)
         end
         if plate._cpBar then plate._cpBar:Hide() end
         return
@@ -3480,6 +3547,7 @@ local function UpdateClassPowerOnPlate(plate)
     local cpPos   = GetClassPowerPos()
     local bgCol   = GetClassPowerBgColor()
     local comboPips = classPowerType == Enum.PowerType.ComboPoints
+    local comboRound = comboPips and GetClassPowerShape() ~= "pip"
 
     -- Resolver anclaje: encima o debajo de la barra de salud,
     -- evitando solapamiento con la barra de casteo si está activa
@@ -3500,6 +3568,7 @@ local function UpdateClassPowerOnPlate(plate)
             plate._cpPips[i]:Hide()
             if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
             if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
+            SetPipDecor(plate._cpPips[i], false)
             if plate._cpPips[i]._secretBar then plate._cpPips[i]._secretBar:Hide() end
         end
         EnsureClassPowerBar(plate)
@@ -3550,6 +3619,7 @@ local function UpdateClassPowerOnPlate(plate)
                 plate._cpPips[i]:Hide()
                 if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
                 if plate._cpPips[i]._circleBorder then plate._cpPips[i]._circleBorder:Hide() end
+                SetPipDecor(plate._cpPips[i], false)
             end
             return
         end
@@ -3569,7 +3639,7 @@ local function UpdateClassPowerOnPlate(plate)
     end
 
     -- Layout de pips: calcular posiciones una vez y aplicar en un solo bucle
-    local scaledW   = CP_PIP_W * cpScale
+    local scaledW   = CP_PIP_W * cpScale * 1.4  -- wider pips
     local scaledH   = CP_PIP_H * cpScale
     -- CP_PIP_W/H (8x3) is a thin flat bar-segment shape, meant for the
     -- rectangular look -- a circular mask on an 8:3 box clips down to the
@@ -3577,13 +3647,13 @@ local function UpdateClassPowerOnPlate(plate)
     -- Confirmed live: combo points on nameplates barely showed at all.
     -- Round pips use a square sized to the width (8), a far more visible
     -- circle than the flat height would give.
-    if comboPips then
+    if comboRound then
         -- Explicit user request: the initial +25% still looked too small on
         -- a real nameplate (confirmed via screenshot) -- bumped further.
         scaledW = scaledW * 2.5
         scaledH = scaledW
     end
-    local scaledGap = GetClassPowerGap() * cpScale
+    local scaledGap = (GetClassPowerGap() + (comboRound and 0 or 2)) * cpScale
 
     -- Precalcular borde izquierdo de cada pip en coordenadas de grupo.
     -- PP.Point/PP.Size aplican el snap usando la escala efectiva de la
@@ -3613,11 +3683,12 @@ local function UpdateClassPowerOnPlate(plate)
             pip:Hide()
             if pip._bg then pip._bg:Hide() end
             if pip._circleBorder then pip._circleBorder:Hide() end
+            SetPipDecor(pip, false)
             if pip._secretBar then pip._secretBar:Hide() end
         else
             pip:ClearAllPoints()
             PP.Size(pip, scaledW, scaledH)
-            ApplyClassPowerPipShape(pip, comboPips)
+            ApplyClassPowerPipShape(pip, comboRound)
             PP.Point(pip, leftAnchor, anchorFrame, anchorRelPoint,
                 pipPositions[i] - halfGroup + cpXOff,
                 yDir * cpYOff)
@@ -3646,7 +3717,7 @@ local function UpdateClassPowerOnPlate(plate)
                 sb:SetMinMaxValues(i - 1, i)
                 sb:SetValue(cur)
                 sb:SetStatusBarColor(comboPips and 1.0 or cpColor[1], comboPips and 0.05 or cpColor[2], comboPips and 0.05 or cpColor[3], 1)
-                ApplyClassPowerPipShape(pip, comboPips)
+                ApplyClassPowerPipShape(pip, comboRound)
                 sb:Show()
                 pip:SetColorTexture(comboPips and 0.22 or emptyCol.r, comboPips and 0.02 or emptyCol.g, comboPips and 0.02 or emptyCol.b, emptyCol.a)
             else
@@ -3671,6 +3742,7 @@ local function HideClassPowerOnPlate(plate)
         pip:Hide()
         if pip._bg then pip._bg:Hide() end
         if pip._circleBorder then pip._circleBorder:Hide() end
+        SetPipDecor(pip, false)
         if pip._secretBar then pip._secretBar:Hide()
         end
     end
@@ -3852,6 +3924,9 @@ local function EnableClassPowerWatcher()
         classPowerWatcher:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         if classPowerFormReq then
             classPowerWatcher:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+        end
+        if Enum.PowerType.Runes and classPowerType == Enum.PowerType.Runes then
+            classPowerWatcher:RegisterEvent("RUNE_POWER_UPDATE")
         end
         classPowerWatcher:SetScript("OnEvent", function(_, event)
             if event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" then

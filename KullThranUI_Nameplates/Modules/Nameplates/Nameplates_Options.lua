@@ -7882,6 +7882,74 @@ initFrame:SetScript("OnEvent", function(self)
                 end
             }); y = y - h
 
+        -- Row 4: Combo point shape -- two preview cards (circles / pips)
+        do
+            local lbl, lh = W:Label(parent, "Combo Point Shape", y, 12)
+            y = y - lh
+            local holder = CreateFrame("Frame", nil, parent)
+            holder:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, y)
+            holder:SetSize(300, 70)
+            local MASK = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
+            local BORDER = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_border.tga"
+            local cards = {}
+            local function Paint()
+                local cur = ns.GetClassPowerShape()
+                local ar, ag, ab = NPPreviewAccentRGB()
+                for key, btn in pairs(cards) do
+                    local on = cur == key
+                    btn:SetBackdropColor(on and ar * 0.25 or 0.06, on and ag * 0.25 or 0.06, on and ab * 0.25 or 0.08, 1)
+                    btn:SetBackdropBorderColor(on and ar or 0.22, on and ag or 0.22, on and ab or 0.26, 1)
+                end
+            end
+            local defs = { { key = "circle", label = "Circles" }, { key = "pip", label = "Pips" } }
+            for index, def in ipairs(defs) do
+                local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
+                btn:SetSize(140, 70)
+                btn:SetPoint("TOPLEFT", (index - 1) * 148, 0)
+                btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+                local w, hgt, gap = def.key == "circle" and 16 or 18, def.key == "circle" and 16 or 7, 6
+                local total = 5 * w + 4 * gap
+                for i = 1, 5 do
+                    local filled = i <= 3
+                    local fr, fg, fb = 1, 0.05, 0.05
+                    if not filled then fr, fg, fb = 0.22, 0.02, 0.02 end
+                    local t = btn:CreateTexture(nil, "ARTWORK")
+                    t:SetSize(w, hgt)
+                    t:SetPoint("TOPLEFT", btn, "TOPLEFT", (140 - total) / 2 + (i - 1) * (w + gap), -14 - (16 - hgt) / 2)
+                    t:SetColorTexture(fr, fg, fb, 1)
+                    if def.key == "circle" then
+                        local m = btn:CreateMaskTexture()
+                        m:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+                        m:SetAllPoints(t)
+                        t:AddMaskTexture(m)
+                        local bd = btn:CreateTexture(nil, "OVERLAY")
+                        bd:SetTexture(BORDER)
+                        bd:SetAllPoints(t)
+                        bd:SetVertexColor(1, 0.82, 0.08, 1)
+                    end
+                end
+                local fs = btn:CreateFontString(nil, "OVERLAY")
+                fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+                fs:SetPoint("BOTTOM", 0, 8)
+                fs:SetText(LText(def.label))
+                btn:SetScript("OnClick", function()
+                    if classPowerDisabled() then return end
+                    DB().classPowerShape = def.key
+                    ns.RefreshClassPower(); UpdatePreview()
+                    Paint()
+                end)
+                cards[def.key] = btn
+            end
+            local function Refresh()
+                holder:SetAlpha(classPowerDisabled() and 0.35 or 1)
+                Paint()
+            end
+            Refresh()
+            KT_RegisterWidgetRefresh(Refresh)
+            y = y - 78
+        end
+
         -- Invisible frame spanning the entire CLASS RESOURCE section for glow targeting
         local classResourceSection = CreateFrame("Frame", nil, parent)
         local crPad = KT.CONTENT_PAD or 20

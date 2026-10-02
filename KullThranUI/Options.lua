@@ -2260,7 +2260,13 @@ local function UpdateMenuThemeVisuals(menu)
 	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.4")))
     end
     if menu._foreverLogo then
-        menu._foreverLogo:SetVertexColor(accent.r or 1, accent.g or 0, accent.b or 0.333, 1)
+        local VT = KT.VisualThemes
+        if VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+            -- Forever style: the logo keeps its original texture colors (no accent tint).
+            menu._foreverLogo:SetVertexColor(1, 1, 1, 1)
+        else
+            menu._foreverLogo:SetVertexColor(accent.r or 1, accent.g or 0, accent.b or 0.333, 1)
+        end
     end
 
     for _, btn in ipairs(menu._sizePresetButtons or {}) do
@@ -3930,7 +3936,11 @@ local function CreateMenuFrame()
     foreverLogo:SetPoint("TOPLEFT", f, "TOPLEFT", 134, -65)
     foreverLogo:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\Forever.png")
     foreverLogo:SetTexCoord(0, 1, 0, 1)
-    foreverLogo:SetVertexColor(accentR, accentG, accentB, 1)
+    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme and KT.VisualThemes:GetRenderedTheme() == "forever" then
+        foreverLogo:SetVertexColor(1, 1, 1, 1)
+    else
+        foreverLogo:SetVertexColor(accentR, accentG, accentB, 1)
+    end
     f._foreverLogo = foreverLogo
 
     -- Corrupted generated comment removed.
@@ -4776,7 +4786,17 @@ function KT:OpenMenu(pageId)
             end
 
         end
-    end, geterrorhandler() or debugstack)
+    -- NOTE: do NOT use geterrorhandler() here. It logs the error but returns
+    -- nil, so `error(err)` below re-raises nil and the real message is lost --
+    -- all the user ever sees is "UNKNOWN ERROR". Return a real string instead
+    -- and append the original stack, so the failure is actually diagnosable.
+    end, function(menuErr)
+        local message = (type(menuErr) == "string") and menuErr or tostring(menuErr)
+        if type(debugstack) == "function" then
+            message = message .. "\n" .. debugstack(2, 3, 3)
+        end
+        return message
+    end)
 
     self._openingMenu = nil
     if not ok then
@@ -5979,9 +5999,44 @@ local function BuildGeneralCore(sc, W, y)
     y = y + FinalizeOptionBlock(updateBlock, updateContent, updateY) + 14
     _, h = W:SectionHeader(sc, "Advanced Style System", -y); y = y + h
     _, h = W:Label(sc, "Build a complete visual preset for KUI or fine tune the palette manually. These settings affect the entire addon.", -y, 11); y = y + h
-    local styleCols = BeginOptionBlocks(sc, y, { gap = 14, columnGap = 14 })
+    -- Visual Theme sits on top, full width: it decides the geometry and assets.
+    local themeFrame, themeContent = CreateOptionBlock(sc, "Visual Theme", 10, -y, sc:GetWidth() - 22)
+    local themeY = 0
+    -- Explicit user request: the addon's own general accent color (this
+    -- tab's "Accent Color" swatch, used for Unlock Mode/Friend List/
+    -- Armory/Objective Tracker/Bags) no longer gets silently overridden by
+    -- whichever Unit Frame visual theme happens to be active (see the
+    -- removed themeAccent block in KT:GetStylePalette) -- it's yours to
+    -- pick regardless of which style is selected here, not just on kui.
+    _, h = W:Label(themeContent, "Select the visual theme. This sets the geometry and assets for Unit Frames. The addon's own accent color below stays yours to customize regardless of which style you pick.", -themeY, 11); themeY = themeY + h
+    if KT.VisualThemes and KT.VisualThemes.CreateSelector then
+        -- The cards used to be laid out edge to edge across the whole block,
+        -- flush against its accent rail and right border, so they read as
+        -- pasted over the section instead of belonging to it. They now sit
+        -- in an inset tray with even padding, like the rest of the blocks'
+        -- content, with a clear gap under the description.
+        local trayLeft, trayRight, trayPad, trayGap = 12, 10, 10, 8
+        local trayW = (sc:GetWidth() - 22) - trayLeft - trayRight
+        local tray = CreateFrame("Frame", nil, themeContent, "BackdropTemplate")
+        tray:SetPoint("TOPLEFT", themeContent, "TOPLEFT", trayLeft, -(themeY + trayGap))
+        tray:SetWidth(trayW)
+        KT:AddBackdrop(tray, 0.012, 0.014, 0.020, 0.95)
+        KT:AddBorder(tray, 1, 1, 1, 0.07)
+        h = KT.VisualThemes:CreateSelector(tray, {
+            columns = 4, compact = true,
+            xOffset = trayPad, yOffset = trayPad,
+            width = trayW - (trayPad * 2),
+        })
+        -- CreateSelector reports its content height plus 4px of slack.
+        local trayH = trayPad + (h - 4) + trayPad
+        tray:SetHeight(trayH)
+        themeY = themeY + trayGap + trayH
+    end
+    y = y + FinalizeOptionBlock(themeFrame, themeContent, themeY) + 14
 
-    local presetFrame, presetContent = AddOptionBlock(styleCols, "left", "Preset Colors", function(container)
+    -- Colors follow, full width, enabled only for KullThranUI Style.
+    local presetFrame, presetContent = CreateOptionBlock(sc, "Preset Colors", 10, -y, sc:GetWidth() - 22)
+    local presetBuild = function(container)
         local by = 0
         _, h = W:Label(container, "Choose a preset to recolor the KullThranUI menu and sync the main profile accent values.", -by, 11); by = by + h
 
@@ -5999,86 +6054,37 @@ local function BuildGeneralCore(sc, W, y)
             "plague_green",
             "sakura_fall",
         }
-        local btnGap = 10
-        local btnHeight = 36
-        local btnWidth = math.floor((container:GetWidth() - 30 - btnGap) / 2)
-        local currentPreset = KT.db.profile.skin and KT.db.profile.skin.stylePreset or "kui_crimson"
-
-        for index, presetKey in ipairs(presetOrder) do
-            local preset = STYLE_PRESETS[presetKey]
-            local row = math.floor((index - 1) / 2)
-            local col = (index - 1) % 2
-            local x = 10 + (col * (btnWidth + btnGap))
-            local yOff = by + (row * (btnHeight + 8))
-            local btn = CreateFrame("Button", nil, container, "BackdropTemplate")
-            btn:SetSize(btnWidth, btnHeight)
-            btn:SetPoint("TOPLEFT", container, "TOPLEFT", x, -yOff)
-            KT:AddBackdrop(btn, preset.background.r, preset.background.g, preset.background.b, 0.96)
-            KT:AddBorder(btn, preset.accent.r, preset.accent.g, preset.accent.b, currentPreset == presetKey and 0.95 or 0.45)
-
-            local title = btn:CreateFontString(nil, "OVERLAY")
-            title:SetFont(KT.FONT_PATH, 10, "OUTLINE")
-            title:SetPoint("CENTER")
-            title:SetText(preset.label)
-            title:SetTextColor(preset.text.r, preset.text.g, preset.text.b, 1)
-
-            local accentLine = btn:CreateTexture(nil, "ARTWORK")
-            accentLine:SetHeight(2)
-            accentLine:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 3, 3)
-            accentLine:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -3, 3)
-            accentLine:SetColorTexture(preset.accent.r, preset.accent.g, preset.accent.b, 1)
-
-            btn:SetScript("OnClick", function()
+        local gridHeight = KT:CreateAccentPresetGrid(container, {
+            columns = 3,
+            width = container:GetWidth() - 20,
+            xOffset = 10,
+            yOffset = by + 4,
+            cardHeight = 46,
+            gap = 10,
+            fontPath = KT.FONT_PATH,
+            localize = LText,
+            isSelected = function(presetKey)
+                return (KT.db.profile.skin and KT.db.profile.skin.stylePreset or "kui_crimson") == presetKey
+            end,
+            onSelect = function(presetKey)
                 ApplySmartStylePreset(presetKey)
-            end)
-            btn:SetScript("OnEnter", function(self)
-                if KT.AddBorder then KT:AddBorder(self, 1, 1, 1, 0.95) end
-            end)
-            btn:SetScript("OnLeave", function(self)
-                local selected = KT.db.profile.skin and KT.db.profile.skin.stylePreset == presetKey
-                if KT.AddBorder then
-                    KT:AddBorder(self, preset.accent.r, preset.accent.g, preset.accent.b, selected and 0.95 or 0.45)
-                end
-            end)
-        end
-
-        by = by + (math.ceil(#presetOrder / 2) * (btnHeight + 8))
+            end,
+        })
+        by = by + gridHeight + 14
         _, h = W:Label(container, LText("Preset selection also updates accent-driven fields like tracker highlights, chat highlight and castbar color."), -by, 10); by = by + h
         return by
-    end)
-
-    AddOptionBlock(styleCols, "right", "Visual Theme", function(container)
-        local by = 0
-        _, h = W:Label(container, "Select the visual theme. Note: This sets the geometry and assets.", -by, 11); by = by + h
-        if KT.VisualThemes and KT.VisualThemes.CreateSelector then
-            h = KT.VisualThemes:CreateSelector(container, { columns = 2, compact = true, yOffset = by, width = styleCols.blockW - 20 })
-            by = by + h
-        end
-        return by
-    end)
-
-    local colorControlsEnabled = true
-    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme then
-        colorControlsEnabled = KT.VisualThemes:GetRenderedTheme() == "kui"
     end
-    if not colorControlsEnabled and presetFrame and presetContent then
-        presetContent:SetAlpha(0.38)
-        local presetBlocker = CreateFrame("Button", nil, presetFrame)
-        presetBlocker:SetAllPoints(presetContent)
-        presetBlocker:SetFrameLevel(presetContent:GetFrameLevel() + 10)
-        presetBlocker:EnableMouse(true)
-        presetBlocker:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Color presets are available with KullThranUI Style.")
-            GameTooltip:Show()
-        end)
-        presetBlocker:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-    end
+    y = y + FinalizeOptionBlock(presetFrame, presetContent, presetBuild(presetContent)) + 14
 
-y = EndOptionBlocks(styleCols) + 8
-local frame, content = CreateOptionBlock(sc, LText("Manual Colors"), 10, -y, sc:GetWidth() - 22)
+    -- Explicit user request: color presets/manual colors stay fully usable
+    -- regardless of which Unit Frame visual theme is active, not just kui
+    -- -- this full-section mouse-blocking overlay (plus its twin below, for
+    -- the Manual Colors section) was the actual mechanism making the
+    -- controls unselectable; GetStylePalette no longer overrides the
+    -- result anyway (see the removed themeAccent block there), so gating
+    -- input here too was doubly wrong.
+
+    local frame, content = CreateOptionBlock(sc, LText("Manual Colors"), 10, -y, sc:GetWidth() - 22)
         local by = 0
         KT.db.profile.skin = KT.db.profile.skin or {}
         local skin = KT.db.profile.skin
@@ -6243,28 +6249,9 @@ local frame, content = CreateOptionBlock(sc, LText("Manual Colors"), 10, -y, sc:
 
 
 
-    local enabled = true
-    if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme then
-        enabled = (KT.VisualThemes:GetRenderedTheme() == "kui")
-    end
-
-    if not enabled then
-        local blocker = CreateFrame("Button", nil, frame)
-        blocker:SetAllPoints(content)
-        blocker:SetFrameLevel(content:GetFrameLevel() + 10)
-        blocker:EnableMouse(true)
-        blocker:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Color presets and manual palette controls are available with KullThranUI Style.")
-            GameTooltip:Show()
-        end)
-        blocker:SetScript("OnLeave", function(self)
-            GameTooltip:Hide()
-        end)
-        content:SetAlpha(0.38)
-    else
-        content:SetAlpha(1.0)
-    end
+    -- Explicit user request: Manual Colors stays fully usable regardless of
+    -- theme (see the matching removal above, for the Color Presets block).
+    content:SetAlpha(1.0)
 
     y = y + FinalizeOptionBlock(frame, content, by) + 8
 

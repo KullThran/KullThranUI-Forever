@@ -177,7 +177,7 @@ local function GetUnlockPreviewIconOffset()
         return 0
     end
 
-    local baseHeight = (db.height or (bar and bar.GetHeight and bar:GetHeight()) or 20)
+    local baseHeight = (db.height or (bar and bar.GetHeight and bar:GetHeight()) or 25)
     local uiScale = UIParent:GetEffectiveScale()
     local frameScale = (bar and bar.GetEffectiveScale and bar:GetEffectiveScale()) or uiScale
     return (baseHeight + 2) * frameScale / uiScale
@@ -220,12 +220,12 @@ function Mod:RegisterUnlockElement()
             local bar = Mod and Mod.bar
             local db = Mod and Mod.db
             local width = bar and bar.GetWidth and bar:GetWidth() or 135
-            local height = bar and bar.GetHeight and bar:GetHeight() or 20
+            local height = bar and bar.GetHeight and bar:GetHeight() or 25
             if db and db.showIcon then
                 width = width + (db.height or height) + 2
                 height = math.max(height, db.height or height)
             end
-            return math.max(width, 180), math.max(height, 20)
+            return math.max(width, 180), math.max(height, 25)
         end,
         getRect = function()
             local bar = Mod and Mod.bar
@@ -239,7 +239,7 @@ function Mod:RegisterUnlockElement()
             local left = bar:GetLeft() * frameScale / uiScale
             local top = bar:GetTop() * frameScale / uiScale
             local width = (bar.GetWidth and bar:GetWidth() or 135) * frameScale / uiScale
-            local height = (bar.GetHeight and bar:GetHeight() or 20) * frameScale / uiScale
+            local height = (bar.GetHeight and bar:GetHeight() or 25) * frameScale / uiScale
 
             if db and db.showIcon then
                 local extra = GetUnlockPreviewIconOffset()
@@ -249,10 +249,10 @@ function Mod:RegisterUnlockElement()
                     left = left - extra
                     width = width + extra
                 end
-                height = math.max(height, (db.height or 20) * frameScale / uiScale)
+                height = math.max(height, (db.height or 25) * frameScale / uiScale)
             end
 
-            return left, top, math.max(width, 180), math.max(height, 20)
+            return left, top, math.max(width, 180), math.max(height, 25)
         end,
         translateMoverPosition = function(_, pos)
             return TranslateUnlockMoverPosition(pos)
@@ -441,6 +441,19 @@ function Mod:OnInitialize()
             db._ktCastbarDefaultMigrated_v3 = true
         end
 
+        -- Match the Resource Bar's 135x25 default without changing cast bars
+        -- whose size, scale or automatic width has been customized.
+        if not db._ktCastbarDefaultMigrated_v4 then
+            local h = tonumber(db.height)
+            local w = tonumber(db.width)
+            local s = tonumber(db.scale)
+            if db.autoWidth == false and h == 20 and w == 135
+                and (s == nil or s == 1 or s == 1.0) then
+                db.height = 25
+            end
+            db._ktCastbarDefaultMigrated_v4 = true
+        end
+
         if type(db.color) ~= "table" then
             local r, g, b = GetThemeAccentColor()
             db.color = { r = r, g = g, b = b, a = 1 }
@@ -459,7 +472,7 @@ function Mod:OnInitialize()
             autoPosition  = true,
             autoWidth     = false,
             width         = 135,
-            height        = 20,
+            height        = 25,
             scale         = 1.0,
             frameStrata   = "MEDIUM",
             frameLevel    = 10,
@@ -1093,7 +1106,7 @@ function Mod:ApplySettings()
     local db = self.db
 
     bar:SetWidth(db.width or 135)
-    bar:SetHeight(db.height or 20)
+    bar:SetHeight(db.height or 25)
     bar:SetScale(db.scale or 1)
     bar:SetFrameStrata(db.frameStrata or "MEDIUM")
     bar:SetFrameLevel(db.frameLevel  or 10)
@@ -1499,7 +1512,7 @@ function Mod:Refresh()
     if not KT.db.profile.castbar then
         KT.db.profile.castbar = {
             enable = true, autoPosition = true, autoWidth = false,
-            width = 135, height = 20, scale = 1.0,
+            width = 135, height = 25, scale = 1.0,
             frameStrata = "MEDIUM", frameLevel = 10, texture = "Melli",
             color = GetThemeAccentColorTable(),
             colorMode = "THEME",

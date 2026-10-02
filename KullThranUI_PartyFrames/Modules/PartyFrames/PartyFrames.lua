@@ -1946,6 +1946,16 @@ function Mod:EnsureDB()
     for _, mode in ipairs(MODE_ORDER) do
         ApplyAuraDefaults(self.db[mode])
     end
+    -- Explicit user request: party portraits ON in every visual theme. One-shot on module load
+    -- (does not depend on the theme engine re-running), the user can switch them off afterwards.
+    if not self.db.partyPortraitsAllThemesMigrated then
+        self.db.party = type(self.db.party) == "table" and self.db.party or {}
+        self.db.party.showPortrait = true
+        if self.db.party.portraitStyle == nil or self.db.party.portraitStyle == "none" then
+            self.db.party.portraitStyle = "circular"
+        end
+        self.db.partyPortraitsAllThemesMigrated = true
+    end
     if not self.db.arenaTrackerSplitSizesMigrated then
         local arenaEnemy = self.db.arenaEnemy
         if arenaEnemy then
@@ -2476,7 +2486,21 @@ function Mod:SetConfigValue(mode, key, value)
     if not db then return false end
     db[key] = value
     self.auraCache = {}
-    return self:ApplyLayout(mode)
+    local ok, reason = self:ApplyLayout(mode)
+    -- Dispel/aura toggles are not secure layout: apply them right away in combat too,
+    -- instead of waiting for the deferred layout.
+    if not ok and reason == "combat" and type(key) == "string"
+        and (key == "showDispelOverlay" or key:find("^dispel")) then
+        for _, frame in ipairs((self.frames and self.frames[NormalizeMode(mode)]) or {}) do
+            if frame and frame.unit and frame:IsShown() then
+                pcall(function()
+                    if ns.PF_UpdateAuraContainers then ns.PF_UpdateAuraContainers(frame, db) end
+                    self:UpdateFrameAuras(frame)
+                end)
+            end
+        end
+    end
+    return ok, reason
 end
 
 function Mod:HideBlizzardPartyFrames()

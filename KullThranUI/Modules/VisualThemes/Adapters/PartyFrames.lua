@@ -14,7 +14,7 @@ KT.VisualThemes:RegisterModule("partyframes", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
     getOwnedPaths = function()
-        local paths = {}
+        local paths = { "party.showPortrait" }
         for _, mode in ipairs(MODES) do
             paths[#paths + 1] = mode .. ".healthTexture"
             paths[#paths + 1] = mode .. ".absorbBarTexture"
@@ -50,6 +50,9 @@ KT.VisualThemes:RegisterModule("partyframes", {
         else
             texture = "Melli Reforged"
         end
+        -- Explicit user request: party frame portraits are ON in every theme.
+        profile.party = type(profile.party) == "table" and profile.party or {}
+        profile.party.showPortrait = true
         for _, mode in ipairs(MODES) do
             profile[mode] = type(profile[mode]) == "table" and profile[mode] or {}
             profile[mode].healthTexture = texture
@@ -62,5 +65,11 @@ KT.VisualThemes:RegisterModule("partyframes", {
             end
         end
     end,
-    validate = function() end,
+    validate = function(profile)
+        -- One-shot: existing profiles get portraits enabled once (user can turn them off later).
+        if type(profile) ~= "table" or profile._portraitsAllThemesV1 then return end
+        profile._portraitsAllThemesV1 = true
+        profile.party = type(profile.party) == "table" and profile.party or {}
+        profile.party.showPortrait = true
+    end,
 })

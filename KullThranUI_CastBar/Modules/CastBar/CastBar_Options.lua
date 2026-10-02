@@ -155,7 +155,7 @@ KT:RegisterPage("castbar", "Cast Bar", 12, function(sc, W)
 
     local function UpdatePreview()
         local barW = tonumber(db.width) or 135
-        local barH = tonumber(db.height) or 20
+        local barH = tonumber(db.height) or 25
         local barScale = tonumber(db.scale) or 1.0
 
         fakeBar:SetSize(barW, barH)
@@ -282,7 +282,7 @@ KT:RegisterPage("castbar", "Cast Bar", 12, function(sc, W)
             function() return db.width or 135 end,
             function(v) db.width = v; RefreshAndPreview() end, 120, 800, 1); by = by + h
         _, h = W:Slider(container, "Height", -by,
-            function() return db.height or 20 end,
+            function() return db.height or 25 end,
             function(v) db.height = v; RefreshAndPreview() end, 8, 80, 1); by = by + h
         _, h = W:Slider(container, "Scale", -by,
             function() return db.scale or 1.0 end,
