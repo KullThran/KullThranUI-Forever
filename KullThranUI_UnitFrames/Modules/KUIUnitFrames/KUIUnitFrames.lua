@@ -7105,8 +7105,11 @@ local function ResolveClassResource(playerClass)
             and C_SpecializationInfo.GetSpecialization()
         local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
         local specEntry = specID and entry[specID]
-        if not specEntry and not specID and playerClass == "DRUID" then
-            -- Clients without spec info (Forever): combo points exist in Cat.
+        if not specEntry and playerClass == "DRUID" and KT.VisualThemes
+            and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme() == "classic" then
+            -- Classic ornament: Forever reports other/no spec IDs for Druids,
+            -- but combo points always exist in Cat Form.
             specEntry = { Enum.PowerType.ComboPoints, 5 }
         end
         if not specEntry then return nil end
@@ -7558,25 +7561,34 @@ local function CreateCustomClassPower(playerFrame, style)
     end
     if not classicOverlayApplied then
         if isClassicCombo then
-            containerBg:SetColorTexture(0.04, 0.04, 0.04, 0.92)
+            containerBg:SetColorTexture(0.03, 0.03, 0.03, 0.95)
         else
             containerBg:SetColorTexture(bgCol.r, bgCol.g, bgCol.b, bgCol.a)
         end
     end
     if isClassicCombo and not classicOverlayApplied then
-        -- MakeBorder is not defined in this module; draw a 1px gold edge.
-        local function Edge(p1, p2, w, h)
-            local t = container:CreateTexture(nil, "OVERLAY", nil, 2)
-            t:SetColorTexture(0.55, 0.45, 0.25, 1)
-            t:SetPoint(p1, container, p1)
-            t:SetPoint(p2, container, p2)
-            if w then t:SetWidth(w) end
-            if h then t:SetHeight(h) end
+        -- Fallback when the atlas is missing: chamfered plate built from 1px
+        -- strips: a silver outline shape with a dark fill shape inset by 1px.
+        containerBg:SetColorTexture(0, 0, 0, 0)
+        -- Classic plate is ~1.6x a bar row tall, slots nearly fill its height.
+        local ph = playerFrame and playerFrame.Power and playerFrame.Power:GetHeight() or 0
+        if not ph or ph < 6 then ph = 14 end
+        local H = math.max(20, math.floor(ph * 1.6 + 0.5))
+        local C = 4
+        container._ktPlateH = H
+        local function Strip(r, g, b, a, yTop, h, inset, sub)
+            local t = container:CreateTexture(nil, "OVERLAY", nil, sub)
+            t:SetColorTexture(r, g, b, a)
+            t:SetHeight(h)
+            t:SetPoint("TOPLEFT", container, "TOPLEFT", inset, -yTop)
+            t:SetPoint("TOPRIGHT", container, "TOPRIGHT", -inset, -yTop)
         end
-        Edge("TOPLEFT", "TOPRIGHT", nil, 1)
-        Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 1)
-        Edge("TOPLEFT", "BOTTOMLEFT", 1, nil)
-        Edge("TOPRIGHT", "BOTTOMRIGHT", 1, nil)
+        -- outline shape
+        Strip(0.62, 0.62, 0.66, 1, 0, H - C, 0, 0)
+        for k = 1, C do Strip(0.62, 0.62, 0.66, 1, H - C + k - 1, 1, k, 0) end
+        -- fill shape (1px inside the outline)
+        Strip(0.03, 0.03, 0.03, 0.97, 1, H - C - 1, 1, 1)
+        for k = 1, C - 1 do Strip(0.03, 0.03, 0.03, 0.97, H - C + k - 1, 1, k + 1, 1) end
     end
     container._bg = containerBg
     container._ktClassicComboOverlay = classicOverlayApplied and containerBg or nil
@@ -7675,11 +7687,41 @@ local function CreateCustomClassPower(playerFrame, style)
     for i = 1, maxPower do
         pips[i] = MakePip(container, i)
     end
+    if isClassicCombo then
+        -- Slim plate as wide as the bars; round slots spread evenly across it.
+        -- Geometry of the native 126x20 ornament: five 20px slots, 1px gaps,
+        -- 11px side padding.  Scale it to the bar width keeping its aspect.
+        local function Layout()
+            local W = container:GetWidth()
+            if not W or W <= 0 then return end
+            local k = W / 126
+            local d = 20 * k
+            if math.abs((container:GetHeight() or 0) - d) > 0.5 then
+                container:SetHeight(d)
+            end
+            for i, pp in ipairs(pips) do
+                pp:ClearAllPoints()
+                -- Slots are a bit larger than the plate openings and hang
+                -- slightly below its lower edge, like the original ornament.
+                local sz = d * 1.1
+                pp:SetSize(sz, sz)
+                pp:SetPoint("LEFT", container, "LEFT",
+                    (11 + 21 * (i - 1)) * k - (sz - d) / 2, -d * 0.18)
+            end
+        end
+        container:SetScript("OnSizeChanged", Layout)
+        container._ktClassicLayout = Layout
+        Layout()
+    end
 
     -- Update function
     local isSecretResource = (powerType == "SOUL_FRAGMENTS_VENGEANCE")
     local function UpdatePips()
         local cur, max
+        if isClassicCombo and playerClass == "DRUID" and GetShapeshiftFormID then
+            -- Druid combo points only exist in Cat Form (form id 1).
+            container:SetAlpha(GetShapeshiftFormID() == 1 and 1 or 0)
+        end
         if isCustom then
             -- Custom resource: use Compat tracker functions
             if powerType == "SOUL_FRAGMENTS_VENGEANCE" then
@@ -7853,12 +7895,15 @@ local function CreateCustomClassPower(playerFrame, style)
         eventFrame:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
         eventFrame:RegisterUnitEvent("UNIT_MAXPOWER", "player")
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        if isClassicCombo and playerClass == "DRUID" then
+            eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+        end
         if powerType == Enum.PowerType.Runes then
             eventFrame:RegisterEvent("RUNE_POWER_UPDATE")
         end
         eventFrame:SetScript("OnEvent", function(_, event, unit)
             if event == "PLAYER_ENTERING_WORLD" or event == "RUNE_POWER_UPDATE"
-               or (unit == "player") then
+               or event == "UPDATE_SHAPESHIFT_FORM" or (unit == "player") then
                 UpdatePips()
             end
         end)
@@ -9664,7 +9709,11 @@ function InitializeFrames()
             -- ApplyClassicFrameArt's native frame/portrait/bar placement.
             bar:SetParent(frames.player)
             local anchorFrame = frames.player.Power or frames.player
-            PP.Point(bar, "TOP", anchorFrame, "BOTTOM", offsetX, 2 + offsetY)
+            bar:ClearAllPoints()
+            bar:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", offsetX, 1 + offsetY)
+            bar:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", offsetX, 1 + offsetY)
+            bar:SetHeight(20)
+            if bar._ktClassicLayout then bar._ktClassicLayout() end
             if bar._bottomBdrFrame then bar._bottomBdrFrame:Hide() end
         elseif style == "modern" and position == "above" then
             -- Above health bar, inside the frame ? pips stretch to fill health bar width
@@ -9886,6 +9935,28 @@ function InitializeFrames()
                 PositionClassPowerBar(custom)
             end
         end
+    end
+
+    -- /ktcombo: dump why the Classic combo ornament is (not) visible.
+    SLASH_KTCOMBO1 = "/ktcombo"
+    SlashCmdList["KTCOMBO"] = function()
+        local function say(msg) DEFAULT_CHAT_FRAME:AddMessage("|cffffd100ktcombo|r " .. tostring(msg)) end
+        local _, cls = UnitClass("player")
+        local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme()
+        local pt, mx, cu = ResolveClassResource(cls)
+        say(("class=%s theme=%s style=%s forced=%s"):format(tostring(cls), tostring(theme),
+            tostring(db.profile.player.classPowerStyle), tostring(ClassicComboForced() and true or false)))
+        say(("resource=%s max=%s custom=%s"):format(tostring(pt), tostring(mx), tostring(cu)))
+        local c = frames._customClassPower
+        if not c then say("container=nil (no se creo)"); return end
+        local pt1, rel, pt2, x, y = c:GetPoint(1)
+        say(("container shown=%s w=%.0f h=%.0f parent=%s classic=%s alpha=%.2f"):format(
+            tostring(c:IsShown()), c:GetWidth(), c:GetHeight(),
+            tostring(c:GetParent() and c:GetParent():GetName()), tostring(c._ktClassicCombo), c:GetAlpha()))
+        say(("point=%s rel=%s %s x=%s y=%s strata=%s level=%s"):format(tostring(pt1),
+            tostring(rel and rel.GetName and rel:GetName()), tostring(pt2), tostring(x), tostring(y),
+            tostring(c:GetFrameStrata()), tostring(c:GetFrameLevel())))
     end
 
     -- The rendered theme may not be resolved yet at load: re-check shortly
