@@ -956,3 +956,4 @@ La deteccion sigue aceptando tanto ID como nombre de aura y el acceso directo ya
 ## 2026-10-02 — Combo points estilo Classic en el marco de jugador
 - `KUIUnitFrames.lua`: en tema Classic (Rogue/Druida) el adorno de combo points se muestra siempre bajo las barras del player (aunque `classPowerStyle` sea "none"/"blizzard"; el valor guardado no se modifica). Sondea los atlas `ComboPoints-*` con `C_Texture.GetAtlasInfo`; si faltan, usa placa oscura con borde + orbes `Interface\COMMON\Indicator-Red` (activo) / `Indicator-Gray` oscuro (vacío). Druida sin API de spec (Forever) → combo points de Cat. Otros temas sin cambios.
 - No probado en juego, /reload.
+- Fix combo Classic: `MakeBorder` no existe en KUIUnitFrames.lua (llamada a nil abortaba la creación) → borde dorado 1px propio; re-chequeo a los 1.5s por si el tema no estaba resuelto al cargar. No probado en juego, /reload.
