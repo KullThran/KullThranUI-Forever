@@ -37,6 +37,19 @@ local function SetPlayerTargetScale(profile, scale)
     end
 end
 
+-- Class power is part of the Player UnitFrame's visual language.  Keep its
+-- initial state in the per-theme slot so Classic can opt into the attached
+-- combo-point ornament without leaking that choice into the other themes.
+local function SetClassPowerDefaults(profile, enabled)
+    profile.player = type(profile.player) == "table" and profile.player or {}
+    profile.player.showClassPowerBar = enabled == true
+    profile.player.classPowerStyle = enabled and "modern" or "none"
+    profile.player.classPowerPosition = enabled and "bottom" or "top"
+    profile.player.lockClassPowerToFrame = true
+    profile.player.classPowerBarX = 0
+    profile.player.classPowerBarY = 0
+end
+
 KT.VisualThemes:RegisterModule("unitframes", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
@@ -53,6 +66,12 @@ KT.VisualThemes:RegisterModule("unitframes", {
             paths[#paths + 1] = key .. ".borderColor.b"
         end
         paths[#paths + 1] = "player.showPlayerCastbar"
+        paths[#paths + 1] = "player.showClassPowerBar"
+        paths[#paths + 1] = "player.classPowerStyle"
+        paths[#paths + 1] = "player.classPowerPosition"
+        paths[#paths + 1] = "player.lockClassPowerToFrame"
+        paths[#paths + 1] = "player.classPowerBarX"
+        paths[#paths + 1] = "player.classPowerBarY"
         paths[#paths + 1] = "player.frameScale"
         paths[#paths + 1] = "target.frameScale"
         paths[#paths + 1] = "player.customFillColor.r"
@@ -93,6 +112,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- opts in manually. Real per-client themes should show it.
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
+            SetClassPowerDefaults(profile, true)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
             -- Explicit user request: Classic's health bar defaults to green
             -- too, same mechanism as Retail below.
@@ -118,6 +138,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             if profile.target then profile.target.portraitSide = "right" end
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
+            SetClassPowerDefaults(profile, false)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
             -- Explicit user request: Forever's health bar defaults to green
             -- too, same mechanism as Retail below.
@@ -158,6 +179,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             if profile.target then profile.target.portraitSide = "right" end
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
+            SetClassPowerDefaults(profile, false)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
             -- Explicit user request: Retail's health bar defaults to green
             -- (KUIUnitFrames.lua's existing customFillColor/healthClassColored
@@ -178,6 +200,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- kui: reset the classic-border field to UnitFrames' own default
             -- (KUIUnitFrames.lua defaults: frameArtKit = "default").
             profile.frameArtKit = "default"
+            SetClassPowerDefaults(profile, false)
             -- Explicit user request: kui must NOT get Retail/Forever/Classic's
             -- bigger 132% default -- confirmed live, switching TO kui left a
             -- stale 132 behind from whichever real-stock theme was active

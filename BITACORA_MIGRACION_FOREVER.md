@@ -588,3 +588,371 @@ La deteccion sigue aceptando tanto ID como nombre de aura y el acceso directo ya
 - Los live previews ahora crean y actualizan el texto de nivel y el icono de facción PvP, respetando el estado de los toggles y la configuración de fuente, tamaño, outline, color y offsets del nivel.
 - El target con portrait a la derecha coloca el nivel alineado arriba a la derecha del portrait y el icono PvP fuera del portrait, a su derecha; el indicador Elite/Rare también se espeja para evitar solapamientos.
 - Se registró el cambio como parte de la migración 0.0.2 de Forever.
+### 2026-10-01 - Classic: hueco transparente entre el anillo y el portrait
+
+- El backdrop del portrait recorta sus propias texturas al cuadrado de 64px (SetClipsChildren), así que expandir _bg nunca llegaba a la apertura real del UI-TargetingFrame, que es más ancha: quedaba una media luna transparente entre el anillo y el retrato.
+- Nuevo frame de relleno (_ktClassicPortraitFill, en ThemeClientAssets.lua) sin recorte, un nivel por debajo del portrait, con un disco oscuro enmascarado en círculo que solo se amplía 3px por abajo y por el lado de las barras (derecha en Player, izquierda en Target); arriba y por fuera asomaba fuera del anillo (CLASSIC_PORTRAIT_FILL_PAD). El anillo opaco tapa cualquier exceso. Sigue la visibilidad del portrait y se oculta al salir de Classic.
+- Pendiente de QA en juego: confirmar que el hueco desaparece en Player/Target y que el disco no asoma por fuera del anillo; si asoma, bajar CLASSIC_PORTRAIT_FILL_PAD.
+### 2026-10-01 - Visual Styles: tarjetas, botones de color y preview de Classic
+
+- Tarjetas de Visual Styles: la fila de action bars (capRowHeight) sube de 24/29 a 27/32 (~12%).
+- Botones HEALTH/CLASS rediseñados como control segmentado (ThemePreview.lua): pista oscura común, mitad activa con fondo teñido, barra inferior de 2px y etiqueta brillante, chip de color en cada mitad y hover sutil. Sin bloques planos ni texto con contorno.
+- KullThranUI Style: su tarjeta ahora también tiene los botones HEALTH/CLASS (antes solo Classic/Forever/Retail) y la miniatura sigue el color real de salud en vez de forzar siempre el de clase. DrawFlatFrame replica el live preview de Unit Frames: retrato redondo con anillo, nombre dentro de la barra, absorción verde, porcentaje a la derecha y barra de poder fina pegada debajo; sin nivel; caja de tamaño proporcionado en vez de rellenar todo el escenario.
+- Live preview de Unit Frames con tema Classic (KUI_UnitFrames_Options.lua): la foto del retrato se escalaba 1.55x y se salía del anillo. Ahora replica el frame real: foto a 64px recortada a su caja, máscara circular ampliada 0.275 y disco oscuro de relleno con el mismo padding asimétrico. Al salir de Classic se restaura el recorte y el tamaño del retrato.
+- Pendiente de QA en juego: las tres zonas (la sintaxis solo se ha comprobado con un contador de bloques, no hay intérprete de Lua en este entorno).
+### 2026-10-01 - Visual Styles: zona de tarjetas y botones de KUI Style
+
+- La tarjeta de KullThranUI Style incluye una fila de 5 botones planos tipo action bar bajo el unit frame (ThemePreview.lua, rama flat de AddEndCapArt), en el hueco donde las otras tarjetas llevan sus end caps.
+- Las tarjetas ya no van de borde a borde pegadas al riel y al borde derecho del bloque Visual Theme (Options.lua). Ahora están dentro de una bandeja con fondo propio, borde fino y 10px de relleno, con margen bajo la descripción. ThemeSelector.lua admite xOffset para esto.
+- Pendiente de QA en juego.
+### 2026-10-01 - Visual Styles: IN USE, botón Apply, action bars y traducciones
+
+- IN USE ya no se pisa con el título: pasa a ser una pastilla con borde de acento en la línea del subtítulo, justo a continuación del texto, y el conjunto se recentra (ThemePreview.lua).
+- La fila de action bars sube 5px respecto al botón (la tarjeta mantiene su altura, el espacio extra queda sobre APPLY TO ALL).
+- Botón APPLY TO ALL rediseñado: base oscura teñida con el acento de la tarjeta, borde fino de acento, brillo superior y barra de 2px abajo; hover más intenso; la tarjeta ya aplicada se atenúa.
+- Nuevo Locales/Modules/VisualStyles.lua (registrado en el .toc tras OptionsGaps.lua) con 32 textos en esES, deDE, frFR, itIT, ptBR, ruRU, koKR, zhCN y zhTW: bloque Visual Theme, nombres/etiquetas/descripciones de las tarjetas, APPLY TO ALL, IN USE, HEALTH, CLASS, tooltips y los 12 nombres de Preset Colors. Solo rellena lo que no tiene traducción real. ThemePreview.lua usa un helper T() sobre KT:GetLocale() y Options.lua localiza los nombres de preset.
+- Los nombres de marca (WOW FOREVER, WOW RETAIL, WOW CLASSIC, KUI) se dejan sin traducir a propósito.
+- Pendiente de QA en juego, sobre todo anchuras de texto en ruso y alemán.
+### 2026-10-01 - Visual Styles: CLASS/HEALTH sincronizado entre tarjetas
+
+- Al pulsar CLASS o elegir un color en una tarjeta solo se repintaba su propia miniatura; las otras tres conservaban el color anterior y su segmento activo (tras aplicar un tema el perfil queda con healthClassColored=false y verde, así que el resto de tarjetas seguía verde). ThemePreview.lua guarda ahora un registro de las tarjetas visibles (RegisterCardHealthView / RefreshAllCardHealth, reiniciado en cada CreateSelector) y Commit repinta miniaturas y segmentos de todas.
+- En la tarjeta de KUI el color de salud usa SetVertexColor (conserva la textura de la barra) y el anillo del retrato sigue ese color.
+- Pendiente de QA en juego.
+### 2026-10-01 - Damage Meter: skin por Visual Style
+
+- Enhancements_DamageMeter.lua: nueva capa METER_SKINS + ApplyDamageMeterSkin, ejecutada al final de RefreshDamageMeterStyle. Solo recolorea y añade cromo: no mueve filas ni toca datos, colores de clase ni el layout.
+- Classic (estilo Recount): panel marrón oscuro con borde naranja-ocre y barra de título roja con degradado, título dorado claro, filas con fondo oscuro.
+- Retail (medidor de Blizzard): panel oscuro de esquinas redondeadas (UI-Tooltip-Border), título dorado, línea dorada bajo la cabecera, barras con contorno negro de 1px e iconos de clase con marco dorado.
+- Forever: la estructura de Retail en bronce, con marco interior bronce de 2px alrededor de las filas.
+- kui no cambia. Los botones de cabecera (StyleHeaderButton) toman el color del título del skin y dejan de pintar el bloque dorado translúcido. Respeta la opción Mostrar fondo: sin fondo se omite el panel pero se mantiene la cabecera.
+- Pendiente de QA en juego; el degradado de la cabecera usa SetGradient y cae a color plano si el cliente no lo admite.
+### 2026-10-02 - Visual Styles: HEALTH/CLASS independiente por tarjeta
+
+- Todas las tarjetas leían y escribían los mismos ajustes de salud de Player/Target, así que cambiar una cambiaba las cuatro. Ahora cada tarjeta guarda su elección en profile.visualThemeHealth[tema] = { classColored, color } (ThemePreview.lua).
+- Solo la tarjeta del tema en uso modifica los frames reales; las demás únicamente recuerdan su elección. Sin elección guardada una tarjeta muestra el valor por defecto de su tema (clase en kui, verde en los demás) o el perfil real si es el tema activo.
+- Adapters/UnitFrames.lua (validate) reaplica la elección guardada de cada tema al cambiar a él.
+- Pendiente de QA en juego.
+### 2026-10-02 - Live preview de Unit Frames con Forever/Retail
+
+- El atlas del marco se estiraba a la caja de 232x100; ahora se dibuja a su tamaño nativo y centrado, como ApplyForeverUnitFrameArt, de modo que el anillo y las pistas de barra coinciden con las barras (KUI_UnitFrames_Options.lua).
+- La foto del retrato ya no se escala 1.55x: se queda al tamaño stock, recortada, con la máscara ampliada 5 unidades, como el frame real.
+- Nombre y valor pasan al frame de nivel, por encima del arte y fuera del recorte de Health, para que se vean sobre la pestaña del nombre.
+- Retail comparte esta geometría, por lo que queda corregido a la vez. Pendiente de QA en juego.
+### 2026-10-02 - Damage Meter Forever: más claro y borde bronce completo
+
+- El skin de Forever pasa de un panel casi negro a uno marrón cálido más claro (panelBg 0.15/0.11/0.075, 90%) con filas algo más claras.
+- El marco bronce interior alrededor de las filas se sustituye por un borde bronce de 2px alrededor de todo el marco (panelEdgeSize en METER_SKINS.forever). Sin esquinas redondeadas de tooltip.
+- Pendiente de QA en juego.
+
+## 2026-10-02 — Damage Meter: tamaño por defecto unificado
+- Defaults nuevos para todos los Visual Styles y ventanas adicionales: ancho 338, alto 201 (altura de barra 19, filas máx. 10 y fuente 12 ya eran el valor por defecto).
+- Cambiado en Enhancements.lua (defaults), Enhancements_DamageMeter.lua (fallbacks, ventanas adicionales) y Enhancements_Options.lua (preview y sliders).
+- El adapter de Visual Themes del Damage Meter no toca tamaño. Perfiles con tamaño ya guardado conservan sus valores (usar Reset / sliders).
+
+## 2026-10-02 — Unit Frames: textura de barra independiente por Visual Style
+- `Default Texture` (KUI_UnitFrames_Options.lua) ya no se bloquea por el tema activo (`IsColorOwnedPath` incluye `healthBarTexture`).
+- Cada estilo guarda su textura en su propio slot (SaveSlot al cambiar de tema); al volver se restaura. Primera visita sigue usando el seed del tema.
+
+## 2026-10-02 — Retail/Forever: textura por defecto Blizzard Raid Bar
+- Seeds ya la tenían (Adapters/UnitFrames.lua); añadida migración única `MigrateRaidBarDefault` (ThemeEngine.lua, flag `raidBarDefault20261002`) que fuerza "Blizzard Raid Bar" en los slots forever/retail y en el perfil vivo si el tema activo es uno de ellos.
+- Posición de Target: pendiente de diagnóstico (no reproducible sin datos in-game).
+
+## 2026-10-02 — Unit Frames: parpadeo al /reload + smooth nativo
+- Parpadeo: los frames se creaban visibles antes de aplicar el layout real (SavedVariables/posición). Ahora `BeginStartupMask`/`ns.EndStartupMask` (KUIUnitFrames.lua) los mantienen con alpha 0 hasta la primera pasada de layout (0.4s tras RefreshAfterPersistenceReady, tope duro 1.2s).
+- Smooth: `ApplySmoothBar` usa primero la interpolación nativa `Enum.StatusBarInterpolation` (si existe, también con valores "secret"); si no, el tween Lua previo. `smoothBars=true` por defecto es un default AceDB, igual para todos los styles.
+
+## 2026-10-02 — Unit Frames: ornamentos por estilo + borde Rare/Elite en Player
+- `ns.GetThemeOrnamentColor` (KUIUnitFrames.lua): Forever bronce (0.80,0.56,0.24), Retail amarillo, Classic fallback. Usado en el borde del círculo PvP (ahora 26px) y en el borde de los anillos de combo points (Classic blanco).
+- KUI Style: el círculo de fondo del icono PvP siempre oculto; sombra (`_kuiPvPShadow`) bajo el icono en player/target.
+- Opción `playerClassificationBorder` (none/rare/elite) en Unit Frames > General: muestra el borde elegido en Player; en Forever/Retail oculta el arte bronce base, en Classic lo mantiene.
+- Sin locales nuevas a nivel de archivo (límite 200).
+
+## 2026-10-02 — Unit Frames: círculo de nivel, facing, borde Player y posición Target
+- Círculo de nivel (Forever y Retail, `usingClassicLevelOrnament`): máscara con expand x0.85, tamaño 32, sin pixel-snap -> disco redondo en vez de cuadrado redondeado.
+- `portraitFacingMode` (auto/normal/flipped) por unidad, válido en todos los styles (GetPortraitFacing lo respeta primero). El preview usa `KT.ResolvePortraitFacing(unit)` para coincidir con el juego. Desplegable "Portrait Facing" ahora con Auto.
+- Borde Rare/Elite de Player: se voltea según hacia dónde mira el portrait (normal = derecha, hacia el CDM).
+- Target descolocado: `PersistKUIUnitFramePosition` (KUICooldownManager.lua) guardaba GetCenter() sin convertir la escala del frame (132%), así que cualquier re-aplicado (ReloadFrames, toggles) lo movía. Ahora convierte a unidades del frame. Posiciones ya corrompidas: usar Reset Position de Target en Unlock Mode.
+
+## 2026-10-02 — Retail/Forever: druida, círculo de nivel, portrait con ring, dorado
+- Druida transformado en Retail/Forever: ya no se fuerza "flipped" (GetPortraitFacing); Classic mantiene su lógica.
+- Círculo de nivel: máscara nativa `Interface\CharacterFrame\TempPortraitAlphaMask` (lienzo completo, sin padding) y sin expansión -> círculo completo.
+- Retail con Rare/Elite en Player: portrait circular (`frame._ktCircularPortrait`, ThemeClientAssets.lua) en lugar de la máscara "gota", con compensación de padding.
+- Anillo Rare/Elite en Forever/Retail crece hasta tocar la barra de vida (tope 1.45x del portrait) para cerrar el gap al ocultar el arte base.
+- Color Retail de adornos (borde círculo PvP, pips): dorado (0.96,0.76,0.22).
+
+## 2026-10-02 — Druida (portrait hacia afuera) y gap anillo/barras
+- Revertido el caso especial Retail/Forever en `GetPortraitFacing`: el portrait de druida vuelve a "flipped" (con "normal" miraba hacia afuera). El anillo Rare/Elite de Player ahora sigue la dirección VISUAL (facing normal XOR transformado), así no depende del flip del portrait.
+- Gap: se quita el crecimiento del anillo; ahora `frame._ktRingHugShift` (KUIUnitFrames mide el hueco entre anillo y barra de vida) desplaza vida/poder/nombre en `ApplyForeverUnitFrameArt` (ThemeClientAssets.lua) hacia el anillo, dejando 2px de solape. Se resetea al quitar el anillo. Cast bar de Player no se desplaza.
+
+## 2026-10-02 — Classic: anillo Rare/Elite más grande
+- En Classic el anillo (Player y Target) se multiplica x1.12 (KUIUnitFrames.lua, tamaño del `portraitRing`) para cubrir el marco del jugador.
+
+## 2026-10-02 — Forever/Retail: anillo Rare/Elite x1.10
+- El anillo se agranda un 10 % en Forever y Retail (KUIUnitFrames.lua) para evitar gaps; el ajuste de barras (`_ktRingHugShift`) se mide después de este tamaño.
+
+## 2026-10-02 — Gap anillo/barras (2ª pasada)
+- El hug mide contra el borde VISIBLE del anillo (44% del ancho, la textura tiene margen transparente) y deja 4px de solape; antes usaba el 50% y 2px, y se quedaba corto.
+
+## 2026-10-02 — Player Rare/Elite en Forever/Retail: anillo x1.10 adicional (total x1.21 sobre el base)
+
+## 2026-10-02 — Rare/Elite Player: live preview + selector con botones
+- Live preview de Unit Frames (todos los styles): `ns.ApplyPreviewUnit` envuelve el aplicado base y dibuja el anillo RARE/ELITE sobre el portrait de Player (tamaño por style: kui 1.18, classic x1.12, forever/retail x1.21; mirada según `KT.ResolvePortraitFacing`); Forever/Retail ocultan el arte base como en el juego.
+- Opciones: el desplegable se sustituye por dos botones con la textura (Rare / Elite), el seleccionado resaltado; pulsar el activo lo desactiva.
+
+## 2026-10-02 — Preview del anillo Rare/Elite arreglado + botón Default
+- Bug: el preview leía `db.player.playerClassificationBorder` pero la opción vive en la raíz del perfil (`db.playerClassificationBorder`); ahora usa `globalDB`.
+- Selector con 3 botones: Default (arte normal del tema), Rare, Elite. Se elige directamente (ya no se desactiva pulsando de nuevo).
+
+## 2026-10-02 — Preview del anillo: dirección
+- `ns.ApplyPreviewUnit` aplica la misma regla que el juego: mira a la derecha = (facing normal) XOR (transformado), porque el preview muestra el portrait vivo (p.ej. forma de águila de druida) y le faltaba el XOR.
+
+## 2026-10-02 — Accent cards, instalador combinado, Rare/Elite gris sin portrait
+- `KT:CreateAccentPresetGrid` (ThemeSelector.lua): tarjetas de accent (punto con anillo, etiqueta, barra, tinte al seleccionar). Usado en Options > Preset Colors (3 columnas) y en el instalador (6 columnas).
+- Instalador: el paso 3 "Color Theme" pasa a "Visual Style & Color" (tarjetas de Visual Style compactas arriba + accent cards + Class/Custom). Aplicar un estilo recarga la UI y reabre en el paso 3 (resume flags, limpiados al salir de la página). Eliminado el paso 20 (Visual Theme): ahora el paso 19 (módulos) es el último con Finish + Join Discord; TOTAL_INSTALLER_STEPS=19; el paso 20 guardado cae en el 19.
+- Unit Frames: los botones Default/Rare/Elite se atenúan (alpha .35) y se deshabilitan cuando el portrait del Player está desactivado.
+- Locales de las nuevas cadenas en VisualStyles.lua.
+
+## 2026-10-02 — Nombres cirílicos y CJK (chat y unit frames)
+- Diagnóstico: Unit Frames ya cambiaba por texto a Russo One (`EnableTextFontFallback` -> `ResolveTextFontPath`) pero solo para cirílico y solo si la base era Avant Garde. Chat: el ScrollingMessageFrame tiene UNA fuente para todas las líneas y se dejaba sin tocar -> cirílico/CJK salía como cuadrados.
+- KullThranUI.lua: `DetectCJKScript` (hangul/kana/han por bytes UTF-8), `IsCJKCapableFont`, `GetCJKFontForScript` (KR para hangul/kana, SC/TC/KR para han según idioma activo) y `ResolveTextFontPath` ahora cambia a Noto cuando el texto es CJK y la fuente base no lo soporta. Cobertura verificada con fontTools: NotoSansKR cubre latín+cirílico+kana+han+hangul; SC/TC cubren todo menos hangul; Russo One solo latín+cirílico.
+- `KT:GetMultiScriptFontObject` (CreateFontFamily con una fuente por alfabeto) usado en Chat.lua (`ApplyConfiguredFontToFrame`) con pcall; si el cliente no tiene la API no cambia nada.
+
+## 2026-10-02 — KUI Style: anillo Rare/Elite y buffs
+- Anillo Rare/Elite en KUI x1.15 (juego y live preview) para envolver el portrait redondo.
+- Buffs de Player/Target en KUI: `GetKUIStyleBuffYOffset` 5 -> 11 (la fila de buffs seguía solapando el borde superior del frame).
+
+## 2026-10-02 — Fix: DetectCJKScript comparaba un string 'secret' (text == "") antes de comprobar issecretvalue; reordenado.
+
+## 2026-10-02 — KUI Style: ajuste del anillo Rare/Elite en Player
+- El x1.15 dejaba el anillo sobredimensionado respecto al portrait redondo y chocaba con nivel/PvP. Multiplicador KUI ahora x0.95 (juego y live preview). Constante a afinar en `RefreshForeverMetadata` (rama kui) y `ApplyPreviewUnit`.
+
+## 2026-10-02 — Nameplates: forma del combo (Circles / Pips)
+- Nueva opción `classPowerShape` ("circle"|"pip") en Nameplates > Class Resource ("Combo Point Shape"). Antes los combo points eran siempre círculos.
+- Por defecto: círculos; en KUI Style pips (si el valor no está definido se resuelve por tema en `GetClassPowerShape`; el adapter de temas lo siembra al cambiar de estilo y es path propio del tema).
+- Archivos: Nameplates.lua, Nameplates_Options.lua, VisualThemes/Adapters/Nameplates.lua.
+
+## 2026-10-02 — Anillo Rare/Elite: recentrado de la abertura
+- Medido en ELITE.png/RARE.png (512x512): la abertura del anillo está en x≈0.44, y≈0.52 (no 0.5/0.5) y mide ≈0.57 del ancho. El anillo se anclaba por el centro del PNG, por eso salía desplazado a izquierda/abajo.
+- Ahora se desplaza 0.06*ancho (signo según flip) y 0.02*alto arriba, en el frame real (RefreshForeverMetadata) y en el live preview.
+
+## 2026-10-02 — Facing de portraits en KUI Style
+- Causa: el perfil por defecto guarda `portraitFacing` (player "flipped", target "normal"), así que la rama KUI shapeshift-aware (`not settings.portraitFacing`) nunca se ejecutaba: player siempre "flipped" (bien en forma druida, hacia fuera en humano).
+- Fix: KUI usa la misma regla que Classic/Forever/Retail en `GetPortraitFacing` (player: forma -> flipped, humano -> normal; target = espejo del player). El modo explícito `portraitFacingMode` sigue ganando.
+
+## 2026-10-02 — Nameplates: forma de combo con tarjetas + default pips en KUI
+- Bug: el bucle de defaults copiaba `classPowerShape="circle"` a la DB, así que nunca llegaba a resolverse "pip" para KUI. Quitado de `defaults`; migración `_classPowerShapeMigrated_v2` borra el "circle" autorrellenado. Sin valor: KUI=pip, resto=circle.
+- UI: el dropdown se sustituye por dos tarjetas (Circles / Pips) con 5 puntos de muestra (3 llenos), como las tarjetas Rare/Elite.
+
+## 2026-10-02 — KUI Style: icono PvP del Player -2px a la izquierda con Rare/Elite
+- En `RefreshForeverMetadata`, tras decidir el anillo: si kui + player + anillo activo, el icono PvP se re-ancla con x-2 (el ancla se reinicia en cada refresh, no se acumula).
+
+## 2026-10-02 — Combo points / shards: borde negro 1px, sombra, más anchos y separados
+- Nameplates (pips rectangulares: shards, chi, holy power..., y combo en modo Pips): `SetPipDecor` dibuja borde negro 1px + sombra (alpha 0.5, offset abajo/derecha); ancho x1.4 y +2 de separación. En modo Pips el combo deja de usar el cuadrado 2.5x y usa la misma geometría plana. Círculos sin cambios.
+- Unit Frames: pips rectangulares del combo de target (18x10 gap3 -> 24x10 gap5; borde negro en vez del color de clase) y class power custom Bars/Modern (ancho x1.4 en moderno, +2 gap), con `ns.KTTargetCombo:_DecorateRectPip`. Estilo Circles intacto.
+
+## 2026-10-02 — Chat: texto centrado y cuadrados CJK
+- Causa del centrado: `SetFontObject` (font family) sobre el ScrollingMessageFrame reinicia la justificación del objeto de fuente (centrada). Eliminado.
+- Causa de los cuadrados: `CreateFontFamily` elige miembro por locale del cliente, no por glyph, así que no resolvía CJK. Sustituido por un hook de `AddMessage` por frame: si el mensaje trae hangul/kana/han/cirílico, el frame completo cambia a la Noto empaquetada (KR para hangul/kana, SC/TC por idioma para han; todas incluyen latín). Se queda así hasta cambiar la fuente en opciones o recargar.
+- Limitación: una sola fuente por frame; si coinciden coreano y chino en pantalla, las líneas antiguas del otro script pueden verse como cuadrados. Intenté fusionar NotoSansSC+KR en un solo TTF pero fontTools no soporta CFF CID-keyed.
+- Los strings secretos no se pueden inspeccionar (no se detecta script).
+
+## 2026-10-02 — Chat/CJK: fuentes nativas de Blizzard primero
+- Los cuadrados persistían: NotoSans*.ttf del addon son CFF (OpenType), no TrueType glyf, y el cliente puede rechazarlas (hipótesis). Ahora `KT:GetScriptFontCandidates` devuelve primero fuentes del cliente (2002.TTF hangul/kana, ARKai_T / bKAI00M han, FRIZQT___CYR cirílico) y luego las Noto; el hook de chat prueba cada una hasta que SetFont no devuelva false. `GetCJKFontForScript` también prioriza las nativas.
+
+## 2026-10-02 — Rare/Elite de Classic (Blizzard) como opción + sustitución en estilo Classic
+- Nuevas opciones del borde del Player: `classicrare` / `classicelite` (tarjetas "Classic Rare/Elite"), válidas en todos los estilos. Usan `Interface\TargetingFrame\UI-TargetingFrame-Rare|-Elite|-Rare-Elite` (misma hoja 256x128 que la base) recortada alrededor del portrait (`ns.ClassicRing`: cropW/H, portraitCX/CY, uLeft/uRight, scale — constantes sin verificar en juego).
+- Estilo Classic: Rare/Elite (propios y los classic) y targets elite/rare ya NO dibujan el anillo custom; se cambia la textura de `_ktClassicPortraitArt` por la hoja de Classic correspondiente (mismos texcoords que la base). Sin clasificación vuelve a `UI-TargetingFrame`.
+- Preview: mismo recorte.
+- No se pudo ver la textura (descarga bloqueada): recorte y escala son estimaciones.
+
+## 2026-10-02 — Nivel dentro del círculo de la hoja Classic Rare/Elite
+- Con el borde Classic Rare/Elite del Player (cualquier estilo) el nivel se ancla al centro del portrait + (`levelDX`,`levelDY`) = (-18,-23) px de arte x escala (posición del adorno de nivel stock de Classic dentro del recorte) y se oculta nuestro badge, para que quede dentro del círculo propio de la hoja. Constantes en `ns.ClassicRing`, sin verificar en juego.
+
+## 2026-10-02 — Anillo Classic Rare/Elite: capa por debajo de nivel y PvP
+- El recorte Classic ya no se dibuja en la textura `portraitRing` de iOvr: usa un host propio (`_kuiClassicRingHost`/`_kuiClassicRingTex`) con frame level = iOvr-1, de modo que el overlay de nivel/PvP (`lvlOvr`, iOvr+1: nivel, círculo PvP, borde y icono) queda siempre por encima. El anillo normal se oculta mientras el Classic está activo.
+
+## 2026-10-02 — Nivel con anillo Classic: "..." por caja demasiado estrecha
+- La caja del nivel era 18*sc de ancho (~11px) y el número se truncaba a "...". Ahora 40x16 fijo, sin word-wrap, centrada en el ancla.
+
+## 2026-10-02 — Classic: la hoja del Player ya no se queda fija
+- `ApplyClassicUnitFrameArt` re-ejecutaba `art:SetTexture(UI-TargetingFrame)` en cada pase de estilo y pisaba la hoja Rare/Elite elegida. Ahora usa `frame._ktClassicSheetPath` (guardado desde `RefreshForeverMetadata`; nil = base). La rama Classic también cubre `frameArtKit == "classic"`.
+
+## 2026-10-02 — Classic: las tarjetas Rare/Elite modernas vuelven a dibujar el anillo custom
+- En estilo Classic solo "Classic Rare/Elite" cambian la hoja del frame; "Rare/Elite" (modernas) dibujan el anillo custom sobre el frame Classic (antes también cambiaban la hoja y el anillo moderno nunca salía). Preview igual. Targets elite/rare en Classic siguen usando la hoja.
+
+## 2026-10-02 — Pips: compatibilidad futura Retail (Evoker Essence, Caballero de la Muerte Runas)
+- Nameplates: `CLASS_POWER_MAP` añade EVOKER (Essence, 5) y DEATHKNIGHT (Runes, 6) solo si `Enum.PowerType.Essence/Runes` existen (nil en clientes Classic). Resolver de runas (`GetRuneCooldown`: rellena = lista), evento `RUNE_POWER_UPDATE`, color de clase DK. Pasan por el mismo render de pips (forma, borde, sombra, separación).
+- Unit Frames ya contemplaba Essence/Runes en `CLASS_POWER_TYPES` (con RUNE_POWER_UPDATE); sin cambios.
+
+## 2026-10-02 — Forever: minimapa y cabecera del damage meter en bronce
+- Minimap (adapter): borde de Forever 0.82/0.65/0.23 -> bronce 0.80/0.56/0.24 (el mismo de `ns.GetThemeOrnamentColor`); `validate` migra perfiles que aún guardan el dorado antiguo mientras el tema renderizado es forever.
+- Damage Meter: `METER_SKINS.forever.title` (texto "Damage Done"/"Current" y flechas) -> bronce. Solo Forever; Classic/Retail/KUI sin cambios.
+
+## 2026-10-02 — Recorte Classic Rare/Elite: sin restos del overlay de barras
+- El recorte (136px de arte) dejaba a la derecha del portrait las muescas de la caja de barras de Classic. `cropW` 136 -> 112 y `uRight` 0.46875 -> 0.5625 (= 1 - 112/232*0.90625). Solo afecta a estilos no Classic (en Classic se usa la hoja completa).
+
+## 2026-10-02 — Recorte Classic Rare/Elite: sin gap con las barras (Forever/Retail)
+- Tras recortar el overlay, quedaba hueco entre el borde del recorte y las barras (la base stock está oculta). Se reactiva el desplazamiento medido de barras/nombre (`_ktRingHugShift`) para el anillo Classic: borde visible = centro portrait + (cropW - portraitCX)*sc, solape 4px.
+
+## 2026-10-02 — Localización de las novedades
+- Revisadas las cadenas nuevas de Unit Frames, Nameplates e Installer contra todos los ficheros de `Locales`. Faltaban (en los 9 idiomas) y se añaden a `Locales/Modules/VisualStyles.lua`: Classic Rare, Classic Elite, Combo Point Shape, Circles, Pips, Smooth Health/Power Bars, Show Elite / Rare Indicator, Show PvP Icon Backdrop Circle, Show Character Level, Level Font Size / Text Color / Text Outline / X Offset / Y Offset, Frame Size.
+- Ya estaban traducidas: Portrait Facing, Auto, Normal, Flipped, Default, Theme portrait, Rare, Elite, Player Rare / Elite Border, textos del installer combinado y tarjetas de acento.
+
+## 2026-10-02 — Accent de Forever = #DC8560
+- #DC8560 = (0.862745, 0.521569, 0.376471). Aplicado a: accent/color del tema Forever en `ThemeCatalog`, `Adapters/Skin.lua` (accentColor + customBorderColor, con migración en `validate` desde el dorado 0.82/0.65/0.23), borde del minimapa (adapter Minimap, migra dorado y bronce anterior), cromo del damage meter (`ThemeEngine` DAMAGE_METER_CHROME_COLORS) y `METER_SKINS.forever.title` (títulos "Damage Done"/"Current" y flechas), y `GetAccent()` del Objective Tracker (si el tema renderizado es Forever y no hay color custom).
+- No tocados: adapters CastBar/Nameplates/PartyFrames/ResourceBars (siguen con su valor propio), ornamentos bronce de Unit Frames.
+
+## 2026-10-02 — #DC8560: aplicación efectiva en Forever (migración + tracker)
+- Los valores guardados (slots del tema y perfiles activos) seguían con el dorado/bronce y los seeds solo corren al cambiar de tema. `ThemeEngine:MigrateForeverAccent` (flag `foreverAccentDC8560`) escribe #DC8560 en los slots Forever de `minimap` (borderColor) y `skin` (accentColor, customBorderColor) y, si Forever está activo, en los perfiles vivos; reintenta si el módulo aún no existe.
+- Objective Tracker: en Forever el acento es #DC8560 aunque haya color custom guardado (antes el custom ganaba).
+
+## 2026-10-02 — Objective Tracker: títulos en #DC8560 en Forever
+- `ApplyTitleAccent` usaba el color de clase para los títulos de misión; en Forever ahora usa #DC8560 (resto de estilos igual).
+
+## 2026-10-02 — Classic: barra de casteo estilo Classic y texto sin cortes (player/target/focus)
+- `SeatStockCastbar` ya recortaba el texto, pero el pase de ajustes de KUIUnitFrames reaplicaba `castSpellNameSize/castDurationSize` (13) justo después, anulándolo. Nuevo `ns.ApplyClassicCastbarLook(frame)` (llamado tras esos bloques): en Classic pone textura Blizzard `UI-StatusBar` (barra + capa de tinte), color amarillo Classic (1, .7, 0; también en `PostCastStart`) y limita Text/Time a 0.85 x alto de la barra; fuera de Classic restaura WHITE8X8.
+
+## 2026-10-02 — Classic: borde del círculo PvP plateado
+- El borde del círculo del icono PvP en Classic pasa de amarillo (1,.82,.2) a plata (0.78,0.80,0.85). Forever bronce / Retail oro sin cambios.
+
+## 2026-10-02 — Classic cast bar: texto aún alto e icono casi invisible
+- El tope de fuente se anulaba con cualquier `SetFont` posterior: ahora `hooksecurefunc(fs,"SetFont")` en Text/Time recorta siempre a 0.70 x alto de barra (mín. 8) mientras el modo Classic está activo.
+- Icono del hechizo: en Classic pasa a max(alto+6, 18) px y se eleva al strata/nivel del overlay de indicadores (+3) para no quedar bajo el arte del frame; fuera de Classic se restaura strata/nivel.
+
+## Classic: borde PvP gris oscuro, cast bar más corta y texto menor
+- Borde del círculo PvP (Classic): plateado → gris oscuro (0.42, 0.43, 0.46).
+- Cast bar Classic: inset de 6px por lado en `SeatStockCastbar` (player/target) para no tapar la textura del marco.
+- Texto de cast bar: tope `max(7, h*0.55)` (antes `max(8, h*0.70)`).
+- No probado en juego: requiere /reload.
+
+## Classic cast bar: corrección
+- Revertido el inset (la barra recupera su ancho completo por la derecha).
+- Player en Classic: icono dentro de la barra a la izquierda (como target/focus), tamaño = alto de barra −1, ya no cuelga sobre el overlay.
+- No probado en juego: /reload.
+
+## Objective Tracker: textos en amarillo en Classic
+- `Skin.lua`: títulos de misión/cabeceras y cabecera "Dungeon Bosses" en amarillo (1, 0.82, 0) cuando el tema renderizado es Classic. Bordes sin cambio. No probado en juego: /reload.
+
+## Party frames: retratos activados en todos los temas
+- Default `party.showPortrait = true` (PartyFrames.lua, 3 bloques) y el adapter `partyframes` lo siembra en todos los temas (kui/classic/forever/retail); `party.showPortrait` pasa a ser path propio del tema.
+- Migración one-shot (`_portraitsAllThemesV1`) activa los retratos en perfiles existentes. Solo modo party (no raid). No probado en juego: /reload.
+
+## Party frames: retratos — migración al cargar el módulo
+- La migración vía adapter no se ejecutaba si el tema ya estaba activo. Añadida migración one-shot en `Mod:EnsureDB` (`partyPortraitsAllThemesMigrated`): `party.showPortrait=true` y estilo "circular" si estaba en none/nil. No probado en juego: /reload.
+
+## Classic Rare/Elite del player: recorte en vez de hoja completa
+- Con la hoja completa `UI-TargetingFrame-Rare|Elite` como arte del frame, las barras salían amarillas (visto en juego). En Classic el player ya no cambia la hoja: conserva el arte base y dibuja el recorte alrededor del retrato (`playerClassicRingKind`). Target sigue cambiando hoja por clasificación. No probado en juego: /reload; el ajuste del recorte en Classic (nivel/PvP) puede necesitar retoque.
+
+## Recorte Classic Rare/Elite: no cortar la parte inferior
+- El recorte cortaba garras/cola inferiores del dragón: `cropH` 100→128 y `vBottom` 0.78125→1 (toda la altura de la hoja). Izquierda/derecha sin cambio. No probado en juego: /reload.
+
+## Recorte Classic Rare/Elite: ampliado por el lado de las barras
+- El recorte terminaba en una línea vertical (x=144 de la hoja) y cortaba cabeza/cola del dragón junto a la caja de barras: `cropW` 112→136, `uRight` 0.5625→0.46875 (x=120). Nuevo `hugW=112` mantiene el cálculo de acercamiento de barras en Forever/Retail. Sin verificar en juego: /reload. Si el recorte más ancho tapara las barras, bajar `cropW`/subir `uRight`.
+- Nota: el recorte NO cambia el color amarillo de la barra de poder (sigue igual), así que la causa previa que di no era correcta.
+
+## Recorte Classic Rare/Elite: dos tiras
+- Ensanchar todo el recorte dejó ver líneas doradas del marco de barras de la hoja (cortadas en vertical). Revertido a cropW=112/uRight=0.5625 para las filas superiores; una segunda textura (`_kuiClassicRingTex2`, `extW/extU/extV` en `ns.ClassicRing`) cubre solo la franja inferior (desde 71.9% de la altura) más ancha, para no cortar garras/cola. Idem en la vista previa de opciones (`classificationRing2`). `extV` y `extU` son estimados desde la captura: sin verificar en juego (/reload).
+
+## Revertido: Classic Rare/Elite del player vuelve a la hoja completa
+- A petición del usuario se deshacen los intentos de recorte: en Classic el player vuelve a cambiar la hoja completa (`UI-TargetingFrame-Rare|Elite`), y las constantes del recorte (usado en otros estilos) vuelven a cropW=112, cropH=100, vBottom=0.78125; eliminadas las texturas de franja extra. La barra de poder amarilla se deja como está.
+
+## Damage meter Classic: borde negro; chat: fuente de respaldo temporal
+- `METER_SKINS.classic.panelEdge` pasa a negro (0,0,0,1).
+- Chat: al llegar un mensaje en chino/coreano/japonés/ruso se usa la fuente de respaldo de Blizzard solo mientras haya ese texto: cada mensaje rearma un temporizador de 45 s y al vencer se restaura la fuente del usuario (Avant Garde). No se fuerza si la fuente base ya cubre el script o si SetFont falla. No probado en juego: /reload. Limitación: el frame tiene una única fuente, así que durante esos 45 s todo el chat usa la de respaldo.
+
+## PvP circle dorado con Rare en Classic
+- Player + tema Classic + borde `rare` o `classicrare`: el borde del círculo PvP pasa a dorado (0.96, 0.76, 0.22); resto, gris oscuro. No probado en juego: /reload.
+
+## Corrección: PvP circle dorado solo con Elite
+- El círculo dorado aplica con borde `elite`/`classicelite` (no Rare). No probado en juego: /reload.
+
+## Live preview: nivel en el círculo de la hoja Classic Rare/Elite
+- En la vista previa, con Classic Rare/Elite el nivel se colocaba con el layout normal (descolocado). Ahora usa los mismos offsets que el frame real (`levelDX/DY` de `ns.ClassicRing`), oculta el círculo propio y el anillo se dibuja bajo el texto (ARTWORK,7). No probado en juego: /reload. Si el orden de refresco del preview recolocara el nivel después del anillo, habrá que llamar al anillo tras el layout del nivel.
+
+## Live preview Classic: porcentaje de vida centrado en la barra
+- `ApplyStockLayoutToPreview`: en Classic el texto de valor se ancla al CENTER de la barra de vida (antes junto al nombre). Solo preview; no probado en juego: /reload. No toca el frame real.
+
+## Auditoría: toggles de overlay de dispel (Unit Frames / Party Frames)
+- Revisado por lectura de código: Party (`showDispelOverlay` en render manual, `b.dispel:SetShown`, estilos AuraKit) y Unit Frames (`dispelOverlay` en KTDispelSlots, dispelBorderFrame, estilo de debuffs del target) respetan el toggle fuera de combate.
+- Hallazgo: en combate ambos "se quedaban bloqueados" — UF: `ReloadFrames` salía sin hacer nada; PF: `SetConfigValue` solo guardaba y difería el layout. Corregido: `ns.ApplyDispelOverlayLive()` (UF) y refresco directo de contenedores/auras (PF) para las claves dispel*/showDispelOverlay. No probado en juego.
+- No verificado: que un `AuraContainer` se pueda mostrar/ocultar en combate sin restricciones del cliente (envuelto en pcall).
+
+## Castbar del player editable en todos los estilos
+- Quitado `LockIfThemeOwned` del toggle "Show Castbar" (Unit Frames options). El tema sigue sembrándola activa al aplicarse y `player.showPlayerCastbar` sigue guardándose por slot de tema, así que la elección se conserva por estilo. No probado en juego: /reload.
+
+## Perfiles: etiqueta de variante (Forever/Retail) + importación cruzada con aviso
+- Ya existía: prefijo "KullThranUI Forever|Retail - " en el nombre, `KT.PROFILE_FLAVOR`, envoltorio `flavor` en las cadenas, y rechazo de cadenas de otra variante.
+- Nuevo (`KullThranUI.lua`): `GetProfileFlavorFromName`, `GetProfileDisplayName` ("[Forever] Nombre") y `StampProfileMeta` (`profile._flavorMeta = {flavor, interface, importedFrom}`; no se exporta). Sellado al cargar (`Core.lua`, tras `SanitizeProfileForFlavor`) y tras importar.
+- `Profiles.lua`: `ValidatePayloadFlavor` ya no rechaza la otra variante; devuelve un aviso (3er valor) que se imprime, se añade al popup y deja `importedFrom` en `_flavorMeta`. Los perfiles se ven como "[Forever] X" en el desplegable. `SanitizeProfileForFlavor` sigue apagando lo exclusivo de Retail al importar en Forever. La lista de perfiles sigue filtrada por la variante actual.
+- No probado en juego: /reload. Los perfiles Retail guardados en SavedVariables solo aparecerían en la lista cuando se use la variante Retail (el filtro por prefijo no cambia).
+
+## Cast bar del player en Forever/Retail: icono dentro de la barra
+- El icono del player colgaba a la izquierda de la barra y tapaba el aro del retrato. La condición que ya movía el icono dentro de la barra (como target/focus) pasa de "solo Classic" a "cualquier estilo distinto de KUI" (Classic, Forever, Retail). KUI conserva el icono fuera. No probado en juego: /reload.
+
+## Cast bar Forever/Retail: texto 2 px menor
+- `SeatStockCastbar` pasa `shrinkPx=2` a `ScaleStockBarText` para `castbar.Text`/`castbar.Time` fuera de Classic (tamaño final −2, mínimo 6) y guarda un tope (`_ktStockCastCap`) con hook de `SetFont` para que refrescos posteriores no lo deshagan. Classic sin cambios. No probado en juego: /reload.
+
+## Action Bars: Action Bar Art (cartas) + respeta Hide Bar Art; opciones editables en todos los estilos
+- Nuevo selector visual "Action Bar Art" (General): tarjetas Default (arte del cliente) / Retail (wyvern/gryphon vía `ResolveRetailAtlasOverride`) / Classic (EndCap-Dwarf) con mini barra. Guarda `frameArtKit`.
+- El arte ya no lo fuerza el tema: se quitó el forzado en `StyleAllBars` y en `validate` del adapter (solo repara valores inválidos); el tema solo siembra.
+- `Mod.IsBarArtHidden`: lee el ajuste de Edit Mode `HideBarArt` de la barra principal; si está activo, ningún kit dibuja caps/borde (oculta chrome nativo y el host Classic) y se re-aplica con hook a `UpdateSystemSettingHideBarArt`. Sin verificar en juego que ese enum/método exista en Forever.
+- CDM: `validate` deja de forzar borde (tamaño/color), `reskinBorders` y `frameArtKit`; solo repara shapes inválidas. Nameplates/damage meter no tenían bloqueo de UI.
+- Pendiente de /reload y prueba en juego.
+
+## Logo Forever del panel de opciones sin tinte en el estilo Forever
+- `Options.lua`: `_foreverLogo` junto a la versión usa vertex color blanco (textura original) cuando el estilo renderizado es Forever; en los demás estilos sigue con el accent. Aplicado en la creación y en el refresco de accent. No probado en juego: /reload.
+
+## Action Bar Art: previews más completos
+- Tarjetas apiladas (470x92): placa oscura con rieles de color por kit, 12 botones con iconos reales de hechizos y borde, caps grandes solapando la placa, nombre y subtítulo. Mismas texturas/atlas que antes. No probado en juego: /reload.
+
+## Action Bar Art: previews corregidos
+- Tarjetas centradas en el panel (holder anclado a TOP). Retail ahora usa `KT.GetRetailAtlasPixels` (arte Retail real, independiente del tema activo; antes `ResolveRetailAtlasOverride` devolvía nil fuera del tema Retail y se veía el de Forever). Caps con su proporción real (sin estirar) y pegados a los extremos de la placa; placa y botones centrados sobre el mismo eje.
+- Iconos: acciones reales del jugador (slots 1–72) y después hechizos de clase conocidos del libro de hechizos (`IsPlayerSpell` filtra lo que no existe en el cliente); relleno con iconos genéricos. API de spellbook sin verificar en juego (envuelta en pcall). Interpreté "filtro de habilidades de Forever" como ese filtro de hechizos conocidos; si te referías a otra cosa, dímelo.
+
+## Action Bar Art: caps dentro del marco y etiqueta "Forever"
+- Los caps se escalan para caber entre el borde de la tarjeta y la placa (`CAP_MAX_W`=68, alto máx 76) manteniendo proporción; el de Forever se salía del marco. La tarjeta "Default" ahora se llama "Forever" (la clave guardada sigue siendo `default`). No probado en juego: /reload.
+
+## Versión 0.0.9
+- `## Version:` 0.0.8 → 0.0.9 en los 26 TOC (KullThranUI, 24 módulos y MinimapStats). `KT.VERSION` se lee del TOC (con fallback "0.0.4" solo si no hay metadata). Entrada 0.0.9 añadida a `CHANGELOG.md`. El archivo de historial interno de `Options.lua` (`CHANGELOG_LATEST_ARCHIVED_VERSION`, 0.0.4) no se ha tocado.
+
+## Pet frame: arte por estilo (Classic / Forever / Retail)
+- Referencia: EllesmereUI (`EUI_UnitFrames` kit `pet`): Classic usa la hoja `Interface\TargetingFrame\UI-SmallTargetingFrame` (128x64) con retrato 37px, barras 69x8 y nombre encima; Forever/Retail usan el atlas mini `UI-HUD-UnitFrame-TargetofTarget-PortraitOn` (120x49) con las máscaras `Party-PortraitOn-Bar-Health/Mana-Mask`.
+- `ThemeClientAssets.lua`: nuevas `VT:ApplyPetFrameArt(frame, portrait, kind, {scale})` / `VT:ClearPetFrameArt(frame)` (geometría en una tabla `PetArt`, sin tocar player/target). El arte se escala con `frameWidth/101` (el ancho del pet sigue siendo editable); colores, fuentes, textos y borde siguen siendo del usuario. Fuerza el retrato visible mientras haya arte (el default del pet es sin retrato) y lo vuelve a ocultar al limpiar.
+- `KUIUnitFrames.lua`: rama `unit=="pet"` en `ApplyClassicFrameArt` (Classic → hoja Classic; Forever/Retail → atlas mini; otro tema → limpia y repone anclas de power/retrato/texto), llamada final al final de `StylePetFrame` y tras el layout genérico de `ReloadFrames` (rama pet).
+- Sin verificar en juego: nombre exacto del atlas ToT y las máscaras Party en Forever; no existe override de píxeles Retail para ese atlas, así que en un cliente Forever el estilo Retail dibuja el arte del cliente (no el dorado). Si el atlas no resuelve, el pet cae al render normal. /reload.
+
+## Live preview de Unit Frames: pet con arte por estilo
+- `KUI_UnitFrames_Options.lua`: `PREVIEW_STOCK_GEOMETRY` gana `pet` en forever/retail (atlas mini ToT 120x49) y classic (`UI-SmallTargetingFrame` 128x64 en caja 128x53, con `artW/artH/artX/artY` en la rama de textura cruda). `ApplyStockLayoutToPreview` escala el pet con `frameWidth/101` (igual que el marco real), no dibuja nivel y centra el valor en la barra solo si el texto derecho no es "none". Mismos números que `PetArt.geom` de `ThemeClientAssets.lua`. No probado en juego: /reload (en KUI sigue el layout normal del preview).
+
+## KUI Tracker en los estilos nuevos: auras y live preview
+- Revisión: el tracker se ancla a la caja del `PlayerFrame`. En Classic la fila de buffs va sobre el borde superior del marco (`CLASSIC_BUFFS_ABOVE_FRAME_GAP`) y chocaba con los trackers `TOPRIGHT_OUT/TOPLEFT_OUT` (defensive/interrupt); en Forever/Retail la fila queda dentro de la franja del arte, por debajo del borde superior de la caja, y no choca.
+- `ThemeClientAssets.lua`: los renders de player Classic/Forever calculan `frame._ktAuraRowLift` (alto de la fila de buffs por encima del borde superior; 0 si no sobresale) y lo limpian al retirar el arte.
+- `KUICooldownManager.lua` (ancla `playerframe`): si el tracker es KUI, el lado es `TOPRIGHT_OUT`/`TOPLEFT_OUT` y los buffs del player se muestran, suma `_ktAuraRowLift` al offset Y. Interrupt sigue apilado sobre Defensive.
+- `KUI_CooldownManager_Options.lua`: el preview del KUI Tracker dibuja, en Classic/Forever/Retail, la caja stock 232x100 (arte, retrato circular, barras, nombre, valor centrado) y la fila de buffs si `showBuffs` no es false, con la misma elevación de los trackers. KUI mantiene el preview de siempre. Datos en `ns.TRACKER_PREVIEW_STOCK` (copia de la geometría del player).
+- No probado en juego: /reload. Sin verificar: que el tracker se re-ancle al cambiar de estilo sin /reload.
+
+## KUI Tracker: Unlock Mode no movía los trackers
+- Causa: `RegisterCDMUnlockElements` registra los KUI Tracker como barras normales (`CDM_kui_<tipo>`). Su `savePosition` guardaba la posición y ponía `anchorTo="none"`, pero no marcaba `customTracker[tipo].positionMode="free"`; el siguiente `BuildAllCDMBars` → `SyncKUITrackerBars` lo volvía a anclar al player frame y la posición arrastrada se perdía. (El bloque "Utility trackers" busca frames `KUI_CustomTracker_<tipo>` que no se crean en ningún sitio, así que nunca registraba nada.)
+- Arreglo (`KUICooldownManager.lua`): para barras `kui_*`, `savePosition` marca `positionMode="free"` y `_kuiTrackerFreePosition`; `loadPosition` solo devuelve posición guardada en modo libre; nuevo `clearPosition` que vuelve a anclar al player frame.
+- Sin diagnosticar: el solape visual de los movers de Defensive/Interrupt/Trinket con Resource Bars/Cast Bar en el screenshot (parecen centrados sobre la esquina del player frame en vez de pegados a ella). No probado en juego: /reload.
+
+## KUI Tracker: catálogos exclusivos de Forever + racial del Haranir
+- Referencia EllesmereUI: mantiene un catálogo Forever aparte y, con `IS_FOREVER`, quita los presets de Retail (lust, Time Spiral, pociones de temporada) y sustituye la healthstone por las piedras vanilla (5 familias: 9421/19012/19013, 5510/19010/19011, 5509/19008/19009, 5511/19006/19007, 5512/19004/19005); detecta Forever por interfaz 16000–19999 (`EllesmereUI_ClientGate.lua`).
+- `KUICooldownManager.lua`: `ns.KUI_IS_FOREVER` ya no exige `==16001` (rango 16000–19999 o `KT.IS_FOREVER`). En Forever: `HEALTH_ITEMS` pasa a pociones de curación vanilla + las 15 healthstones (marcadores de grupo 300/60), `PREPOT_ITEM_IDS`/prioridad de poción de combate, prioridad de poción de vida y de healthstone (todas las piedras, de mayor a menor) son vanilla; el fallback de defensivos por `partyTracker` (IDs retail) queda desactivado. Eso alimenta tanto el auto-detect como el catálogo del picker (`GetExtraSpells`). Retail conserva sus listas.
+- Racial del elfo nuevo: `RACE_RACIALS.Haranir` tenía `{1287685, 12594416}` (IDs no válidos); ahora `{1237885}` (Thorn Bloom, el mismo ID que usa EllesmereUI), con lo que `BuildAutoTrackerSpells("defensive")` la autodetecta por raza.
+- {unverified}: los IDs de pociones vanilla (curación 118/858/929/1710/3928/13446 y combate 13442/5634/3387/13455) van de memoria, y si Haranir existe en Forever. Las pociones de maná siguen el fallback por tooltip. No probado en juego: /reload.
+
+## KUI Tracker: picker por tracker (sin pociones en Racials) + racial 1259416
+- Causa del screenshot: `BuildTrackerCandidates` (`KUI_CooldownManager_Options.lua`) añadía las pociones de salud (`CDMHealthItemsByID`) y las prepot (`CDMPrepotItemIDs`) al picker de TODOS los trackers; los ítems sin nombre cacheado se veían como `-1000929`.
+- Arreglo: esas dos listas solo salen en el tracker Potions (incluye también las healthstones, cooldown 60), ordenadas y con nombre real (`GetItemNameByID`, pide la carga del ítem si no está cacheado; "Item N" como último recurso). El tracker Defensive lista la racial propia (`ns.IsSpellKnownSafe`, exportado) para poder volver a añadirla.
+- `RACE_RACIALS.Haranir = { 1259416 }` (ID dado por el propietario; sustituye al 1237885 de EllesmereUI que puse antes). `BuildAutoTrackerSpells("defensive")` la elige por raza + conocida, así que entra por defecto en su aura. No probado en juego: /reload.
+
+## Chat: Avant Garde fija, sin cambios bajo ningún concepto
+- `Chat.lua`: `GetResolvedFont` devuelve siempre `KT.DEFAULT_FONT_PATH` (AAA_ITC_Avant_Garde.ttf); ya no lee `db.font` ni el LSM. `KT_DEFAULT_FONT` (chrome: pestañas, botones, título) usa también esa fuente en vez de la global. `db.font` se fuerza a "AAA_ITC_Avant_Garde" en cada carga.
+- Se elimina el cambio temporal de fuente por scripts CJK/cirílico (hook de `AddMessage`) y se desactiva el fallback por región (`EnableChatFrameTextFontFallback`). Cada frame de chat lleva un candado: hooks de `SetFont`/`SetFontObject` que devuelven la fuente a Avant Garde manteniendo el tamaño/flags pedidos (Blizzard u otros addons no pueden cambiarla).
+- `Chat_Options.lua`: se quita el desplegable "Font" (tamaño y contorno siguen editables) y el preview usa siempre Avant Garde.
+- Efecto conocido: el texto chino/coreano/ruso se verá con cuadrados si Avant Garde no tiene esos glifos (decisión explícita). No probado en juego: /reload.
+
+## 2026-10-02 — Combo points estilo Classic en el marco de jugador
+- `KUIUnitFrames.lua`: en tema Classic (Rogue/Druida) el adorno de combo points se muestra siempre bajo las barras del player (aunque `classPowerStyle` sea "none"/"blizzard"; el valor guardado no se modifica). Sondea los atlas `ComboPoints-*` con `C_Texture.GetAtlasInfo`; si faltan, usa placa oscura con borde + orbes `Interface\COMMON\Indicator-Red` (activo) / `Indicator-Gray` oscuro (vacío). Druida sin API de spec (Forever) → combo points de Cat. Otros temas sin cambios.
+- No probado en juego, /reload.

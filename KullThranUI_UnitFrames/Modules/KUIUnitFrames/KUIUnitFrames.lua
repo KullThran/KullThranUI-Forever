@@ -7101,9 +7101,14 @@ local function ResolveClassResource(playerClass)
         powerType, isCustom = entry, false
     else
         -- Tabla con specIDs: resolver según especialización activa
-        local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization()
+        local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+            and C_SpecializationInfo.GetSpecialization()
         local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
         local specEntry = specID and entry[specID]
+        if not specEntry and not specID and playerClass == "DRUID" then
+            -- Clients without spec info (Forever): combo points exist in Cat.
+            specEntry = { Enum.PowerType.ComboPoints, 5 }
+        end
         if not specEntry then return nil end
 
         if type(specEntry) == "table" and type(specEntry[1]) == "string" then
@@ -7486,12 +7491,31 @@ local function CreateCustomClassPower(playerFrame, style)
 
     local isModern = (style == "modern")
     local isCircle = (style == "circles")
+    local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
+    local comboPowerType = Enum and Enum.PowerType and Enum.PowerType.ComboPoints or 4
+    local isClassicCombo = renderedTheme == "classic" and not isCustom
+        and powerType == comboPowerType
+    -- Atlas availability differs between clients: probe first, fall back to
+    -- stock textures (glossy red orb on a dark plate) when it is missing.
+    local function HasAtlas(name)
+        return C_Texture and C_Texture.GetAtlasInfo
+            and C_Texture.GetAtlasInfo(name) ~= nil
+    end
 
     -- Dimensiones de cada pip según estilo
     local sizeAdj = db.profile.player.classPowerSize or 8
     local spacingAdj = db.profile.player.classPowerSpacing or 2
     local pipSize, pipH
-    if isModern then
+    if isClassicCombo then
+        -- The legacy PlayerFrame combo ornament is a 126x20 strip: five
+        -- 20px points, four 1px gaps and 11px of art padding on each side.
+        -- Keep that native geometry so ComboPoints-AllPointsBG, the empty
+        -- point overlay and the red active atlas line up without stretching
+        -- individual pips.
+        pipSize = 20
+        pipH = 20
+    elseif isModern then
         pipSize = math.floor(sizeAdj * 1.4 + 0.5)  -- wider pips
         pipH = math.max(3, math.floor(sizeAdj * 0.375))
     elseif isCircle then
@@ -7501,8 +7525,8 @@ local function CreateCustomClassPower(playerFrame, style)
         pipSize = sizeAdj + 12
         pipH = sizeAdj
     end
-    local gap = isCircle and spacingAdj or (spacingAdj + 2)
-    local pad = isModern and 0 or 4
+    local gap = isClassicCombo and 1 or (isCircle and spacingAdj or (spacingAdj + 2))
+    local pad = isClassicCombo and 22 or (isModern and 0 or 4)
     -- Ajustar a píxeles físicos
     pipSize = PP.Scale(pipSize)
     pipH    = PP.Scale(pipH)
@@ -7520,16 +7544,36 @@ local function CreateCustomClassPower(playerFrame, style)
     -- Fondo detrás de todos los pips
     local bgCol = db.profile.player.classPowerBgColor
         or { r = 0.082, g = 0.082, b = 0.082, a = 1.0 }
-    local containerBg = container:CreateTexture(nil, "BACKGROUND")
+    local containerBg = container:CreateTexture(nil, isClassicCombo and "OVERLAY" or "BACKGROUND", nil,
+        isClassicCombo and -1 or 0)
     containerBg:SetAllPoints()
-    containerBg:SetColorTexture(bgCol.r, bgCol.g, bgCol.b, bgCol.a)
+    local classicOverlayApplied = false
+    if isClassicCombo and containerBg.SetAtlas and HasAtlas("ComboPoints-AllPointsBG") then
+        classicOverlayApplied = pcall(containerBg.SetAtlas, containerBg,
+            "ComboPoints-AllPointsBG", false)
+        if classicOverlayApplied then
+            containerBg:SetVertexColor(1, 1, 1, 1)
+            UnsnapTex(containerBg)
+        end
+    end
+    if not classicOverlayApplied then
+        if isClassicCombo then
+            containerBg:SetColorTexture(0.04, 0.04, 0.04, 0.92)
+        else
+            containerBg:SetColorTexture(bgCol.r, bgCol.g, bgCol.b, bgCol.a)
+        end
+    end
+    if isClassicCombo and not classicOverlayApplied then
+        MakeBorder(container, 0.55, 0.45, 0.25, 1)
+    end
     container._bg = containerBg
+    container._ktClassicComboOverlay = classicOverlayApplied and containerBg or nil
 
     -- Color de pip vacío
     local emptyCol = db.profile.player.classPowerEmptyColor
         or { r = 0.2, g = 0.2, b = 0.2, a = 1.0 }
 
-    if not isModern then
+    if not isModern and not isClassicCombo then
         MakeBorder(container, 0, 0, 0, 0.8)
     end
 
@@ -7560,7 +7604,21 @@ local function CreateCustomClassPower(playerFrame, style)
         -- Capa vacía (visible cuando el recurso no está lleno)
         local pipEmpty = pip:CreateTexture(nil, "ARTWORK", nil, 0)
         pipEmpty:SetAllPoints()
-        if pipTexPath then
+        local emptyAtlasApplied = false
+        if isClassicCombo and pipEmpty.SetAtlas and HasAtlas("ComboPoints-PointBg") then
+            emptyAtlasApplied = pcall(pipEmpty.SetAtlas, pipEmpty,
+                "ComboPoints-PointBg", false)
+            if emptyAtlasApplied then
+                pipEmpty:SetVertexColor(1, 1, 1, 1)
+                UnsnapTex(pipEmpty)
+            end
+        end
+        if emptyAtlasApplied then
+            -- Atlas already supplies the metal ring and dark empty center.
+        elseif isClassicCombo then
+            pipEmpty:SetTexture("Interface\\COMMON\\Indicator-Gray")
+            pipEmpty:SetVertexColor(0.08, 0.08, 0.08, 1)
+        elseif pipTexPath then
             pipEmpty:SetTexture(pipTexPath)
             pipEmpty:SetVertexColor(emptyCol.r, emptyCol.g, emptyCol.b, emptyCol.a)
         else
@@ -7570,7 +7628,21 @@ local function CreateCustomClassPower(playerFrame, style)
         -- Capa de relleno (encima de la vacía)
         local pipFill = pip:CreateTexture(nil, "ARTWORK", nil, 1)
         pipFill:SetAllPoints()
-        if pipTexPath then
+        local fillAtlasApplied = false
+        if isClassicCombo and pipFill.SetAtlas and HasAtlas("ComboPoints-ComboPoint") then
+            fillAtlasApplied = pcall(pipFill.SetAtlas, pipFill,
+                "ComboPoints-ComboPoint", false)
+            if fillAtlasApplied then
+                pipFill:SetVertexColor(1, 1, 1, 1)
+                UnsnapTex(pipFill)
+            end
+        end
+        if fillAtlasApplied then
+            -- The native atlas owns Classic's red fill and highlight.
+        elseif isClassicCombo then
+            pipFill:SetTexture("Interface\\COMMON\\Indicator-Red")
+            pipFill:SetVertexColor(1, 1, 1, 1)
+        elseif pipTexPath then
             pipFill:SetTexture(pipTexPath)
             pipFill:SetVertexColor(cr, cg, cb, 1)
         else
@@ -7579,7 +7651,9 @@ local function CreateCustomClassPower(playerFrame, style)
 
         pip._fill = pipFill
         pip._empty = pipEmpty
-        if not isCircle and ns.KTTargetCombo and ns.KTTargetCombo._DecorateRectPip then
+        pip._ktClassicComboAtlas = emptyAtlasApplied and fillAtlasApplied
+        if not isClassicCombo and not isCircle
+            and ns.KTTargetCombo and ns.KTTargetCombo._DecorateRectPip then
             ns.KTTargetCombo:_DecorateRectPip(pip)
         end
         return pip
@@ -7648,13 +7722,29 @@ local function CreateCustomClassPower(playerFrame, style)
                         local sb = CreateFrame("StatusBar", nil, pips[i])
                         sb:SetAllPoints(pips[i]._fill or pips[i])
                         sb:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-                        sb:SetStatusBarColor(cr, cg, cb, 1)
+                        if isClassicCombo then
+                            local sbTexture = sb:GetStatusBarTexture()
+                            if sbTexture and sbTexture.SetAtlas and HasAtlas("ComboPoints-ComboPoint") then
+                                pcall(sbTexture.SetAtlas, sbTexture,
+                                    "ComboPoints-ComboPoint", false)
+                                UnsnapTex(sbTexture)
+                            elseif sbTexture then
+                                sb:SetStatusBarTexture("Interface\\COMMON\\Indicator-Red")
+                            end
+                            sb:SetStatusBarColor(1, 1, 1, 1)
+                        else
+                            sb:SetStatusBarColor(cr, cg, cb, 1)
+                        end
                         sb:SetFrameLevel(pips[i]:GetFrameLevel() + 1)
                         pips[i]._secretBar = sb
                     end
                     pips[i]._secretBar:SetMinMaxValues(i - 1, i)
                     local secretValueOK = pcall(pips[i]._secretBar.SetValue, pips[i]._secretBar, cur)
-                    pips[i]._secretBar:SetStatusBarColor(cr, cg, cb, 1)
+                    if isClassicCombo then
+                        pips[i]._secretBar:SetStatusBarColor(1, 1, 1, 1)
+                    else
+                        pips[i]._secretBar:SetStatusBarColor(cr, cg, cb, 1)
+                    end
                     pips[i]._secretBar:SetShown(secretValueOK)
                     -- Hide normal fill; StatusBar replaces it
                     if pips[i]._fill then pips[i]._fill:Hide() end
@@ -7769,6 +7859,7 @@ local function CreateCustomClassPower(playerFrame, style)
     container._pipH = pipH
     container._gap = gap
     container._pad = pad
+    container._ktClassicCombo = isClassicCombo
 
     -- Reposition pips to fill a given width (for "above" position)
     -- Uses Snap() to round all positions to physical pixel boundaries
@@ -9553,7 +9644,17 @@ function InitializeFrames()
             bar._castbarWatcher:Hide()
         end
 
-        if style == "modern" and position == "above" then
+        if bar._ktClassicCombo then
+            -- CLASSIC owns this ornament's geometry.  It sits immediately
+            -- below the native power bar, inside the lower part of the
+            -- 232x100 stock-art box shown in the reference.  Do not call
+            -- ResizeFrameForClassPower here: that generic path would undo
+            -- ApplyClassicFrameArt's native frame/portrait/bar placement.
+            bar:SetParent(frames.player)
+            local anchorFrame = frames.player.Power or frames.player
+            PP.Point(bar, "TOP", anchorFrame, "BOTTOM", offsetX, 2 + offsetY)
+            if bar._bottomBdrFrame then bar._bottomBdrFrame:Hide() end
+        elseif style == "modern" and position == "above" then
             -- Above health bar, inside the frame ? pips stretch to fill health bar width
             -- Bottom of pips flush with top of health bar, top of pips flush with top of border
             bar:SetParent(frames.player)
@@ -9684,6 +9785,17 @@ function InitializeFrames()
         bar:Show()
     end
 
+    local function ClassicComboForced()
+        local _, cls = UnitClass("player")
+        return (cls == "ROGUE" or cls == "DRUID")
+            and KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme() == "classic"
+    end
+    if ClassicComboForced() and classPowerStyle ~= "modern" then
+        -- Classic always shows its own combo ornament under the player bars.
+        if savedClassPowerBar then savedClassPowerBar:Hide() end
+        classPowerStyle = "modern"
+    end
     if classPowerStyle ~= "none" and frames.player then
         if classPowerStyle == "blizzard" then
             if savedClassPowerBar then
@@ -9709,6 +9821,9 @@ function InitializeFrames()
         -- Also keep showClassPowerBar in sync for backward compat
         db.profile.player.showClassPowerBar = (style ~= "none")
         db.profile.player.classPowerStyle = style
+        if ClassicComboForced() and style ~= "modern" then
+            style = "modern" -- saved style untouched; Classic draws its ornament
+        end
 
         -- Clean up existing
         if frames._customClassPower then

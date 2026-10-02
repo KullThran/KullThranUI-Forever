@@ -7,17 +7,28 @@ Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/file
 
 ## 0.0.9 (2026-10-02)
 
-This beta delivers a major visual-style refresh, deeper frame customization, and clearer combat information.
+Beta centered on a full visual-style refresh: Forever, Classic and Retail now look like their originals while staying customizable.
 
-- Reworked the Forever, Classic and Retail visual styles with authentic frame art and more consistent colors across unit frames, action bars, cast bars, resource bars, nameplates, the minimap, the damage meter and the objective tracker.
-- Redesigned player, target and pet frames with improved portrait masking, correct portrait facing, better level and rare/elite indicator placement, cleaner name and buff alignment, and a new frame-size option.
-- Fixed modern Rare/Elite portrait borders in Forever and Retail so they replace the base ornament cleanly and the health/resource bars meet the gold edge without leaving a gap or covering the portrait.
-- Added an Action Bar Art selector with live previews. The selected art also follows the existing Hide Bar Art setting.
-- Added Circles and Pips choices for combo points, with improved sizing, contrast and placement on unit frames, resource bars and nameplates.
-- Added per-ability cooldown display rules, including always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge-specific display controls.
-- Enabled party-frame portraits by default for every visual style and made dispel-overlay changes apply immediately, including during combat.
-- Improved profile imports by identifying the game version they were created for and warning before importing a profile from a different version.
-- Improved chat readability for Chinese, Korean, Japanese and Russian text, and fixed alert hiding so active loot rolls remain visible.
+**New**
+- Forever, Classic and Retail styles with authentic player, target and pet frame art, plus matching action bars, cast bars, resource bars, nameplates, minimap, damage meter and objective tracker.
+- Pet frame follows the selected style and appears in the Unit Frames live preview.
+- Classic combo points: red orbs on a dark plate under the player bars (Classic style only).
+- Action Bar Art selector with live previews.
+- Circles and Pips options for combo points.
+- Per-ability cooldown display rules: always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge controls.
+- The new race's racial is detected by default in the KUI Tracker.
+
+**Improved**
+- Redesigned player, target and pet frames: portraits, level and rare/elite indicators, names, buffs and a new frame-size option.
+- KUI Tracker adapts to every style, with buffs placed correctly and an accurate live preview.
+- KUI Tracker catalogs are exclusive to Forever, and each item appears only in its proper tracker.
+- Party portraits on by default; dispel overlay changes apply instantly, even in combat.
+- Profile imports warn when a profile comes from a different game version.
+- Chat uses Avant Garde as its fixed font.
+
+**Fixed**
+- KUI Tracker elements move and keep their position in Unlock Mode.
+- Rare/Elite portrait borders and loot-roll alerts display correctly.
 
 ## 0.0.8 (2026-09-27)
 
