@@ -7564,7 +7564,19 @@ local function CreateCustomClassPower(playerFrame, style)
         end
     end
     if isClassicCombo and not classicOverlayApplied then
-        MakeBorder(container, 0.55, 0.45, 0.25, 1)
+        -- MakeBorder is not defined in this module; draw a 1px gold edge.
+        local function Edge(p1, p2, w, h)
+            local t = container:CreateTexture(nil, "OVERLAY", nil, 2)
+            t:SetColorTexture(0.55, 0.45, 0.25, 1)
+            t:SetPoint(p1, container, p1)
+            t:SetPoint(p2, container, p2)
+            if w then t:SetWidth(w) end
+            if h then t:SetHeight(h) end
+        end
+        Edge("TOPLEFT", "TOPRIGHT", nil, 1)
+        Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 1)
+        Edge("TOPLEFT", "BOTTOMLEFT", 1, nil)
+        Edge("TOPRIGHT", "BOTTOMRIGHT", 1, nil)
     end
     container._bg = containerBg
     container._ktClassicComboOverlay = classicOverlayApplied and containerBg or nil
@@ -9875,6 +9887,15 @@ function InitializeFrames()
             end
         end
     end
+
+    -- The rendered theme may not be resolved yet at load: re-check shortly
+    -- after so Classic always gets its combo ornament without a second reload.
+    C_Timer.After(1.5, function()
+        if ClassicComboForced() and frames.player and not frames._customClassPower
+            and frames._toggleClassPower then
+            frames._toggleClassPower(db.profile.player.classPowerStyle or "none")
+        end
+    end)
 
     oUF:SetActiveStyle("KUITarget")
     frames.target = oUF:Spawn("target", "KullThranUI_UF_Target")
