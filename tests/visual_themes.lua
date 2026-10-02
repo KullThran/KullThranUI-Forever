@@ -164,6 +164,10 @@ expect(KT.db.profile.unitFrames.player.borderColor.r, 0.862745, "classic unit bo
 expect(KT.db.profile.unitFrames.frameArtKit, "classic", "classic unit frame art kit")
 expect(KT.db.profile.unitFrames.player.frameScale, 132, "classic player frame scale default")
 expect(KT.db.profile.unitFrames.target.frameScale, 132, "classic target frame scale default")
+expect(KT.db.profile.unitFrames.player.showClassPowerBar, true, "classic enables player class power")
+expect(KT.db.profile.unitFrames.player.classPowerStyle, "modern", "classic uses custom class power renderer")
+expect(KT.db.profile.unitFrames.player.classPowerPosition, "bottom", "classic seats class power below player power")
+expect(KT.db.profile.unitFrames.player.lockClassPowerToFrame, true, "classic class power stays attached")
 
 expect(KT.VisualThemes:ApplyAll("retail"), true, "apply retail")
 expect(KT.db.profile.unitFrames.portraitStyle, "circular", "retail portraits use the stock round cutout")
@@ -191,6 +195,8 @@ expect(KT.db.profile.cooldownManager.cdmBars.bars[1].frameArtKit, "default", "re
 expect(KT.db.profile.cooldownManager.cdmBars.barDefaults.frameArtKit, "default", "retail CDM barDefaults frame art kit")
 expect(KT.db.profile.unitFrames.player.frameScale, 132, "retail player frame scale default")
 expect(KT.db.profile.unitFrames.target.frameScale, 132, "retail target frame scale default")
+expect(KT.db.profile.unitFrames.player.showClassPowerBar, false, "retail does not inherit classic class power")
+expect(KT.db.profile.unitFrames.player.classPowerStyle, "none", "retail does not inherit classic combo renderer")
 
 expect(KT.VisualThemes:ApplyAll("kui"), true, "restore KUI")
 expect(KT.db.profile.actionbars.buttonStyle, "SIMPLICITY", "restore action style")
