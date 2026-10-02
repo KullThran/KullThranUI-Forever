@@ -20,11 +20,24 @@ KT.VisualThemes:RegisterModule("minimap", {
     seed = function(profile, themeKey)
         if themeKey == "forever" then
             profile.shape = "ROUND"
-            profile.borderColor = { r = 0.82, g = 0.65, b = 0.23, a = 1 }
+            profile.borderColor = { r = 0.862745, g = 0.521569, b = 0.376471, a = 1 } -- Forever #DC8560
         elseif themeKey == "classic" then
             profile.shape = "ROUND"
             profile.borderColor = { r = 0.92, g = 0.72, b = 0.22, a = 1 }
         end
     end,
-    validate = function() end,
+    validate = function(profile)
+        -- Forever's ring color moved to #DC8560: migrate the earlier gold / bronze values.
+        local c = profile and profile.borderColor
+        local VT = KT.VisualThemes
+        if c and VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+            local function near(r, g, b)
+                return math.abs((c.r or 0) - r) < 0.01 and math.abs((c.g or 0) - g) < 0.01
+                    and math.abs((c.b or 0) - b) < 0.01
+            end
+            if near(0.82, 0.65, 0.23) or near(0.80, 0.56, 0.24) then
+                profile.borderColor = { r = 0.862745, g = 0.521569, b = 0.376471, a = c.a or 1 }
+            end
+        end
+    end,
 })

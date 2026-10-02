@@ -31,7 +31,7 @@ local KT_CHAT_WINDOW_DEFAULT_Y = 45
 local KT_CHAT_DB_KEY = "kullthran_chat_window"
 local KT_CHAT_POSITION_DEBUG_MAX = 80
 local KT_BRAND_COLOR = { r = KT.C_R or 1, g = KT.C_G or 0, b = KT.C_B or 0.333 }
-local KT_DEFAULT_FONT = KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
+local KT_DEFAULT_FONT = KT.DEFAULT_FONT_PATH or KT.FONT_PATH or "Fonts\\FRIZQT__.TTF" -- chat chrome: always Avant Garde
 local KT_DEFAULT_FONT_NAME = "AAA_ITC_Avant_Garde"
 local KT_CHAT_SCROLL_TEXTURE = "Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up"
 local KT_CHAT_DEFAULT_PANEL_COLOR = { r = 0.04, g = 0.06, b = 0.08, a = 0.1 }
@@ -212,15 +212,25 @@ local function KT_IsApproxEqual(value, target)
 end
 
 local function KT_IsSecretValue(value)
-    return value ~= nil and issecretvalue(value)
+    local ok, secret = pcall(function(candidate)
+        if candidate == nil then return false end
+        return issecretvalue(candidate) and true or false
+    end, value)
+    return not ok or secret == true
 end
 
 local function KT_CanAccessValue(value)
-    if value == nil or KT_IsSecretValue(value) then
-        return false
-    end
-
-    local ok, canAccess = pcall(canaccessvalue, value)
+    local ok, canAccess = pcall(function(candidate)
+        if candidate == nil or KT_IsSecretValue(candidate) then return false end
+        if canaccessvalue(candidate) ~= true then return false end
+        -- Retail can expose a secret string through type() and, in tainted
+        -- execution, even through canaccessvalue(). Probe the first harmless
+        -- string operation while still inside pcall before returning it.
+        if type(candidate) == "string" then
+            local _ = candidate == ""
+        end
+        return true
+    end, value)
     return ok and canAccess == true
 end
 
@@ -2756,7 +2766,7 @@ function Mod:EnsureDB()
     KT.db.profile.chat.tabHighlightTexture = KT.db.profile.chat.tabHighlightTexture or KT_CHAT_DEFAULT_TAB_HIGHLIGHT_TEXTURE
     KT.db.profile.chat.history = type(KT.db.profile.chat.history) == "table" and KT.db.profile.chat.history or {}
     KT.db.profile.chat.privateWindows = type(KT.db.profile.chat.privateWindows) == "table" and KT.db.profile.chat.privateWindows or {}
-    KT.db.profile.chat.font = KT.db.profile.chat.font or KT_DEFAULT_FONT_NAME
+    KT.db.profile.chat.font = KT_DEFAULT_FONT_NAME -- fixed: Avant Garde, never user/profile-changeable
     KT.db.profile.chat.fontSize = KT.db.profile.chat.fontSize or 12
     local chatFontOutline = tostring(KT.db.profile.chat.fontOutline or "")
     if chatFontOutline ~= "OUTLINE" and chatFontOutline ~= "NONE" and chatFontOutline ~= "THICKOUTLINE" then
@@ -3173,16 +3183,13 @@ function Mod:GetHighlightColor()
     return self.db.highlightColor or KT_CHAT_DEFAULT_HIGHLIGHT_COLOR
 end
 
-function Mod:GetResolvedFont()
-    local fontName = self.db.font or KT_DEFAULT_FONT_NAME
-    local fontPath = KT_DEFAULT_FONT
+-- The chat font is fixed: ITC Avant Garde, always. Neither the saved profile,
+-- the global font setting nor any script fallback may change it.
+local KT_CHAT_FIXED_FONT = KT.DEFAULT_FONT_PATH
+    or "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf"
 
-    if LSM and LSM.Fetch then
-        local fetched = LSM:Fetch("font", fontName, true)
-        if fetched then
-            fontPath = fetched
-        end
-    end
+function Mod:GetResolvedFont()
+    local fontPath = KT_CHAT_FIXED_FONT
 
     local fontOutline = tostring(self.db.fontOutline or "")
     if fontOutline ~= "OUTLINE" and fontOutline ~= "NONE" and fontOutline ~= "THICKOUTLINE" then
@@ -3193,6 +3200,8 @@ function Mod:GetResolvedFont()
 end
 
 function Mod:EnableChatFrameTextFontFallback(frame, baseFontPath)
+    -- Disabled on purpose: the chat font never changes (see KT_CHAT_FIXED_FONT).
+    if true then return end
     if not (frame and frame.GetRegions and KT and KT.EnableTextFontFallback) then
         return
     end
@@ -3249,6 +3258,38 @@ function Mod:ApplyConfiguredFontToFrame(frame, fontPath, fontSize, fontOutline)
     if frame.SetFont then
         pcall(frame.SetFont, frame, fontPath, fontSize, fontOutline)
     end
+
+    -- Font lock: anything that tries to give this frame another font (Blizzard's
+    -- chat code, another addon, a global font replacer) is put straight back to
+    -- Avant Garde, keeping the size/flags that were requested.
+    if hooksecurefunc and not frame.KT_ChatFontLocked then
+        frame.KT_ChatFontLocked = true
+        local function Enforce(self)
+            if self.KT_ChatFontEnforcing or not self.GetFont then return end
+            local want = Mod:GetResolvedFont()
+            local path, size, flags = self:GetFont()
+            if path == want then return end
+            self.KT_ChatFontEnforcing = true
+            pcall(self.SetFont, self, want, size or 12, flags or "")
+            self.KT_ChatFontEnforcing = nil
+        end
+        if frame.SetFont then
+            hooksecurefunc(frame, "SetFont", function(self, path, size, flags)
+                if self.KT_ChatFontEnforcing then return end
+                local want = Mod:GetResolvedFont()
+                if path ~= want then
+                    self.KT_ChatFontEnforcing = true
+                    pcall(self.SetFont, self, want, size or select(2, self:GetFont()) or 12, flags or "")
+                    self.KT_ChatFontEnforcing = nil
+                end
+            end)
+        end
+        if frame.SetFontObject then
+            hooksecurefunc(frame, "SetFontObject", Enforce)
+        end
+    end
+    frame.KT_ChatScriptFont = nil
+    if frame.SetJustifyH then pcall(frame.SetJustifyH, frame, "LEFT") end
 
     self:EnableChatFrameTextFontFallback(frame, fontPath)
     self:ApplyFrameFading(frame)
@@ -6520,6 +6561,12 @@ function Mod:BuildEntryFromEvent(event, ...)
     -- Blizzard's HistoryKeeper globals, which then explodes later on normal
     -- CHANNEL/PARTY traffic. Build the entry directly from the event payload
     -- instead of calling MessageEventHandler on a synthetic frame.
+    local secretsOk, containsSecrets = pcall(hasanysecretvalues, ...)
+    if not secretsOk or containsSecrets then
+        -- Blizzard's native chat frame owns protected Retail payloads. Never
+        -- select, compare or format those values in addon-tainted execution.
+        return nil
+    end
     local chatType = tostring(event or ""):gsub("^CHAT_MSG_", "")
     local info = ChatTypeInfo[chatType] or ChatTypeInfo.SYSTEM or {}
     -- Parentheses keep select from passing the sender as the fallback value.

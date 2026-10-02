@@ -1063,7 +1063,7 @@ local function GetSafeDB()
         db.general._ktResourceBarsDefaultMigrated_v2 = true
     end
 
-    db.health    = db.health    or { enabled = false, height = 25, borderSize = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, textFormat = "both", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE }
+    db.health    = db.health    or { enabled = true, height = 25, borderSize = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, textFormat = "both", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE }
     db.primary   = db.primary   or { enabled = true,  height = 25, borderSize = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00, fillA = 1, textFormat = "curpp", textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE, classColor = true, colorMode = "power", specColors = {}, hideManaBySpec = {}, markers = { enabled = false, values = "", width = 2, colorR = 1, colorG = 1, colorB = 1, colorA = 0.95 } }
     db.secondary = db.secondary or { enabled = true,  pipHeight = 14, pipSpacing = 2, borderSize = 1, fillR = 0.95, fillG = 0.90, fillB = 0.60, fillA = 1, showText = true, textSize = 13, barAlpha = 1, texture = DEFAULT_BAR_TEXTURE, classColor = true, colorMode = "power", specColors = {}, pipColors = {}, markers = { mode = "loadout", character = CreateDefaultMarkerProfile(), specs = {}, loadouts = {} } }
     db.powerColors = db.powerColors or {}
@@ -1083,6 +1083,28 @@ local function GetSafeDB()
     if not db.health.texture then db.health.texture = DEFAULT_BAR_TEXTURE end
     if not db.primary.texture then db.primary.texture = DEFAULT_BAR_TEXTURE end
     if not db.secondary.texture then db.secondary.texture = DEFAULT_BAR_TEXTURE end
+    -- Scalar backfill. The "section = section or { ... }" lines above only
+    -- inject defaults when the whole section table is missing, so a profile
+    -- saved before a field existed keeps that field nil forever. That is what
+    -- produced the runtime cascade (nil pipSpacing arithmetic, then nil
+    -- textSize reaching SetFont). Fill any missing scalar here, once, so the
+    -- saved profile converges instead of relying on per-call Site guards.
+    local SECTION_SCALAR_DEFAULTS = {
+        { db.health,    { enabled = false, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30 } },
+        -- VisualThemes can seed these section tables before Resource Bars
+        -- initializes them. Backfill only missing enable flags so a profile
+        -- reset starts with the module on, while an explicit false remains
+        -- untouched.
+        { db.primary,   { enabled = true, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00 } },
+        { db.secondary, { enabled = true, pipHeight = 14, pipSpacing = 2, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.95, fillG = 0.90, fillB = 0.60 } },
+    }
+    for _, entry in ipairs(SECTION_SCALAR_DEFAULTS) do
+        local section, defaults = entry[1], entry[2]
+        for key, value in pairs(defaults) do
+            if section[key] == nil then section[key] = value end
+        end
+    end
+
     if db.primary.classColor == nil then db.primary.classColor = true end
     if db.secondary.classColor == nil then db.secondary.classColor = true end
     if db.primary.colorMode == "spec" and not HasUserDefinedSpecColors(db.primary.specColors) and MatchesDefaultColor(db.primary, 0.00, 0.55, 1.00) then
@@ -1103,6 +1125,46 @@ local function GetSafeDB()
 
     return db
 end
+
+--- Restores every color/size scalar on the SAVED profile to the addon
+--- defaults. GetSafeDB only fills nil, so a profile that already carries odd
+--- values (e.g. written by an interrupted migration, or by the VisualThemes
+--- adapter seeding sparse tables) keeps them forever and the bars render
+--- "weird" even though the defaults are correct. This only touches
+--- color/size fields -- never `general.matchCooldownWidth`/`manualWidth`,
+--- never the enabled flags, never the round-pip clustering, because those are
+--- deliberate per-client differences from the Retail tree.
+function KRBRestoreProfileColorsAndSizes()
+    local db = GetSafeDB()
+    if not db then return false end
+
+    local RESET = {
+        health    = { enabled = false, fillR = 0.15, fillG = 0.75, fillB = 0.30, fillA = 1, height = 25, textSize = 13, barAlpha = 1, borderSize = 1 },
+        primary   = { fillR = 0.00, fillG = 0.55, fillB = 1.00, fillA = 1, height = 25, textSize = 13, barAlpha = 1, borderSize = 1 },
+        secondary = { fillR = 0.95, fillG = 0.90, fillB = 0.60, fillA = 1, pipHeight = 14, pipSpacing = 2, textSize = 13, barAlpha = 1, borderSize = 1 },
+    }
+    local changed = 0
+    for section, defaults in pairs(RESET) do
+        db[section] = type(db[section]) == "table" and db[section] or {}
+        for key, value in pairs(defaults) do
+            if db[section][key] ~= value then
+                db[section][key] = value
+                changed = changed + 1
+            end
+        end
+    end
+    db.health = db.health or {}
+    db.health.enabled = false
+    db.enabled = true
+    db.primary = db.primary or {}
+    db.secondary = db.secondary or {}
+    db.primary.enabled = true
+    db.secondary.enabled = true
+    KRB:BuildBars()
+    return changed
+end
+
+_G._KRB_RestoreProfileColorsAndSizes = KRBRestoreProfileColorsAndSizes
 
 _G._KRB_GetDB = function() return GetSafeDB() end
 _G._KRB_GetMarkerState = function()
@@ -1329,6 +1391,27 @@ local function IsComboSecondaryResource(resource)
     return resource and resource.power == PT.COMBO
 end
 
+--- Texture for the round (circular-masked) pips. The VisualThemes adapter
+--- seeds "Melli Dark" for the forever theme because that is the right texture
+--- for its BARS, but Melli Dark is a full-width bar strip: clipped to a small
+--- circle it renders as a mostly-empty ring with one bright edge segment,
+--- which is what made the combo pips look broken. Round pips always take
+--- Melli Reforged, which was authored for small framed shapes.
+local ROUND_PIP_TEXTURE_NAME = "Melli Reforged"
+local ROUND_PIP_TEXTURE_PATH =
+    "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\CustomTextures\\MelliReforged.tga"
+
+local function ResolvePipTexture(db, round)
+    local name = db and db.secondary and db.secondary.texture or DEFAULT_BAR_TEXTURE
+    if round then
+        local fetched = LSM and LSM:Fetch("statusbar", ROUND_PIP_TEXTURE_NAME, true)
+        if fetched then return fetched end
+        return ROUND_PIP_TEXTURE_PATH
+    end
+    local fetched = LSM and LSM:Fetch("statusbar", name)
+    return fetched or "Interface\\Buttons\\WHITE8x8"
+end
+
 local function ApplyResourcePipShape(pip, round, combo)
     if not pip then return end
     if round then
@@ -1375,7 +1458,9 @@ local function ApplyResourcePipShape(pip, round, combo)
             if fill and fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, mask) end
         end
         if pip._circleBorder then pip._circleBorder:Hide() end
-        if pip._border then pip._border:Show() end
+        -- MakePixelBorder returns a plain table exposing only SetSize/SetShown,
+        -- not a real Region -- :Show() doesn't exist on it and crashed here.
+        if pip._border then pip._border:SetShown(true) end
     end
 end
 
@@ -1768,7 +1853,7 @@ function KRB:BuildBars()
         if db.general.matchCooldownWidth then secW = refWidth
         else secW = db.general.manualWidth or 135 end
 
-        secondaryFrame:SetSize(secW, db.secondary.pipHeight)
+        secondaryFrame:SetSize(secW, db.secondary.pipHeight or 14)
         StackAbove(secondaryFrame)
 
         if sec.type == "bar" then
@@ -1777,7 +1862,7 @@ function KRB:BuildBars()
             if not secondaryBar then
                 secondaryBar = CreateStatusBar(secondaryFrame, "KUI_SecondaryBar")
             end
-            secondaryBar:SetSize(secW, db.secondary.pipHeight)
+            secondaryBar:SetSize(secW, db.secondary.pipHeight or 14)
             secondaryBar:ClearAllPoints()
             secondaryBar:SetPoint("CENTER", secondaryFrame, "CENTER")
             
@@ -1797,7 +1882,7 @@ function KRB:BuildBars()
             secondaryBar:SetAlpha(db.secondary.barAlpha or 1)
             secondaryBar._border:SetSize(db.secondary.borderSize)
             secondaryBar._border:SetShown(db.secondary.borderSize > 0)
-            secondaryBar._text:SetFont(GetRBFont(), db.secondary.textSize, "OUTLINE")
+            secondaryBar._text:SetFont(GetRBFont(), SafeNum(db.secondary.textSize, 13), "OUTLINE")
             secondaryBar:Show()
             local markerMax = 0
             if sec.kind == "stagger" then
@@ -1816,7 +1901,11 @@ function KRB:BuildBars()
                 secondaryBar:Hide()
             end
             
-            local pipW = (secW - (db.secondary.pipSpacing * (sec.max - 1))) / sec.max
+            -- A profile saved before pipSpacing existed has no such key, and the
+            -- raw db.secondary.pipSpacing read then threw on arithmetic during
+            -- BuildBars. Resolve it once, defensively, and reuse it below.
+            local pipSpacing = SafeNum(db.secondary.pipSpacing, 2)
+            local pipW = (secW - (pipSpacing * (sec.max - 1))) / sec.max
             -- Round pips (Classic/Forever) must be square, or the circular
             -- mask stretches into an oval -- confirmed live via screenshot,
             -- pips visibly squashed sideways. pipW above divides the WHOLE
@@ -1826,15 +1915,18 @@ function KRB:BuildBars()
             -- (centered) instead of spreading them across the full bar
             -- width also matches the explicit request that themed pips sit
             -- close together rather than spread edge-to-edge.
-            local pipH = db.secondary.pipHeight
+            local pipH = db.secondary.pipHeight or 14
             local clusterOffsetX = 0
             if roundResourcePips then
+                -- Round pips switch off the theme's bar strip texture; see
+                -- ResolvePipTexture for why.
+                texSec = ResolvePipTexture(db, true)
                 -- Explicit user request: +15% pip size on top of the
                 -- square/cluster fix. Both dimensions must stay equal, or
                 -- the circular mask goes back to stretching into an oval.
-                pipW = db.secondary.pipHeight * 1.15
+                pipW = (db.secondary.pipHeight or 14) * 1.15
                 pipH = pipW
-                local clusterW = pipW * sec.max + db.secondary.pipSpacing * (sec.max - 1)
+                local clusterW = pipW * sec.max + pipSpacing * (sec.max - 1)
                 clusterOffsetX = math.max(0, (secW - clusterW) / 2)
             end
             for i = 1, sec.max do
@@ -1847,7 +1939,7 @@ function KRB:BuildBars()
                     pips[i]._border = MakePixelBorder(pips[i], 0, 0, 0, 1, 1)
                 end
                 ApplyResourcePipShape(pips[i], roundResourcePips, comboResourcePips)
-                local x = clusterOffsetX + (i - 1) * (pipW + db.secondary.pipSpacing)
+                local x = clusterOffsetX + (i - 1) * (pipW + pipSpacing)
                 pips[i]:SetSize(pipW, pipH)
                 pips[i]:ClearAllPoints()
                 pips[i]:SetPoint("LEFT", secondaryFrame, "LEFT", x, 0)
@@ -1881,7 +1973,7 @@ function KRB:BuildBars()
         if not primaryBar then
             primaryBar = CreateStatusBar(anchorFrame, "KUI_PrimaryBar")
         end
-        primaryBar:SetSize(refWidth, db.primary.height)
+        primaryBar:SetSize(refWidth, db.primary.height or 25)
         StackAbove(primaryBar)
         primaryBar:SetStatusBarTexture(texPri)
         primaryBar._bg:SetColorTexture(0.07, 0.07, 0.07, db.general.bgA)
@@ -1892,7 +1984,7 @@ function KRB:BuildBars()
         primaryBar:SetAlpha(db.primary.barAlpha or 1)
         primaryBar._border:SetSize(db.primary.borderSize)
         primaryBar._border:SetShown(db.primary.borderSize > 0)
-        primaryBar._text:SetFont(GetRBFont(), db.primary.textSize, "OUTLINE")
+        primaryBar._text:SetFont(GetRBFont(), SafeNum(db.primary.textSize, 13), "OUTLINE")
         primaryBar:Show()
         HideMarkers(primaryBar)
     elseif primaryBar then
@@ -1905,15 +1997,17 @@ function KRB:BuildBars()
         if not healthBar then
             healthBar = CreateStatusBar(anchorFrame, "KUI_HealthBar")
         end
-        healthBar:SetSize(refWidth, db.health.height)
+        healthBar:SetSize(refWidth, db.health.height or 25)
         StackAbove(healthBar)
         healthBar:SetStatusBarTexture(texHea)
         healthBar._bg:SetColorTexture(0.07, 0.07, 0.07, db.general.bgA)
-        healthBar:GetStatusBarTexture():SetVertexColor(db.health.fillR, db.health.fillG, db.health.fillB, db.health.fillA or 1)
+        healthBar:GetStatusBarTexture():SetVertexColor(
+            SafeNum(db.health.fillR, 0.15), SafeNum(db.health.fillG, 0.75),
+            SafeNum(db.health.fillB, 0.30), SafeNum(db.health.fillA, 1))
         healthBar:SetAlpha(db.health.barAlpha or 1)
         healthBar._border:SetSize(db.health.borderSize)
         healthBar._border:SetShown(db.health.borderSize > 0)
-        healthBar._text:SetFont(GetRBFont(), db.health.textSize, "OUTLINE")
+        healthBar._text:SetFont(GetRBFont(), SafeNum(db.health.textSize, 13), "OUTLINE")
         healthBar:Show()
     elseif healthBar then
         healthBar:Hide()

@@ -29,6 +29,11 @@ end
 
 local function GetAccent()
     local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    -- Forever style: fixed #DC8560 border/accent (wins over a stored custom color).
+    local VT = KT.VisualThemes
+    if VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+        return 0.862745, 0.521569, 0.376471
+    end
     if db and db.colorMode == "custom" and db.customColor then
         return db.customColor.r, db.customColor.g, db.customColor.b
     end
@@ -100,7 +105,23 @@ local function ApplyTitleAccent(fs)
         end
     end
 
-    local r, g, b = GetAccent()
+    -- Explicit user request: quest/mission titles use the player's class
+    -- color instead of the addon's own generic accent color.
+    local r, g, b
+    local _, classToken = UnitClass("player")
+    local classColor = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+    local VT = KT.VisualThemes
+    if VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+        -- Forever style: titles use the fixed #DC8560 instead of the class color.
+        r, g, b = 0.862745, 0.521569, 0.376471
+    elseif VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "classic" then
+        -- Classic style: titles use Blizzard's classic yellow.
+        r, g, b = 1, 0.82, 0
+    elseif classColor then
+        r, g, b = classColor.r, classColor.g, classColor.b
+    else
+        r, g, b = GetAccent()
+    end
     fs:SetTextColor(r, g, b)
     _titleTextGuards[fs] = nil
 end
@@ -508,6 +529,10 @@ function Skin:RefreshDungeonBossFallback()
     frame.header:SetText(LText("Dungeon Bosses"))
     StyleFontString(frame.header, 13)
     local ar, ag, ab = GetAccent()
+    local VTc = KT.VisualThemes
+    if VTc and VTc.GetRenderedTheme and VTc:GetRenderedTheme() == "classic" then
+        ar, ag, ab = 1, 0.82, 0
+    end
     frame.header:SetTextColor(ar, ag, ab, 1)
     frame.header:Show()
 

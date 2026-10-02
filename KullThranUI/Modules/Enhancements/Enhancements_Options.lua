@@ -1373,8 +1373,8 @@ local function ResolveEnhancementMediaPath(mediaType, value, fallback)
 end
 local function CreateDamageMeterLivePreview(container, config, startY)
     local y = startY or 0
-    local previewWidth = math.max(150, tonumber(config and config.width) or 320)
-    local previewHeight = math.max(72, tonumber(config and config.height) or 220)
+    local previewWidth = math.max(150, tonumber(config and config.width) or 338)
+    local previewHeight = math.max(72, tonumber(config and config.height) or 201)
     local preview = CreateFrame("Frame", nil, container, "BackdropTemplate")
     preview:SetPoint("TOP", container, "TOP", 0, -y)
     preview:SetSize(previewWidth, previewHeight + 26)
@@ -1451,8 +1451,8 @@ local function CreateDamageMeterLivePreview(container, config, startY)
         local headerSize = math.max(10, math.min(18, tonumber(cfg.headerFontSize) or 12))
         local fontSize = math.max(9, math.min(16, tonumber(cfg.fontSize) or 12))
         local rowHeight = math.max(16, math.min(26, tonumber(cfg.rowHeight) or 19))
-        previewWidth = math.max(150, tonumber(cfg.width) or 320)
-        previewHeight = math.max(72, tonumber(cfg.height) or 220)
+        previewWidth = math.max(150, tonumber(cfg.width) or 338)
+        previewHeight = math.max(72, tonumber(cfg.height) or 201)
         local availableWidth = math.max(280, (container:GetWidth() or previewWidth) - 20)
         preview:SetScale(math.min(1, availableWidth / previewWidth))
         preview:SetSize(previewWidth, previewHeight + 26)
@@ -1756,13 +1756,13 @@ local function BuildDamageMeterBlock(container, W, db)
     y = y + h
 
     _, h = W:Slider(container, LText("Damage Bar Width"), -y,
-        function() return damageMeterConfig.width or 320 end,
+        function() return damageMeterConfig.width or 338 end,
         function(v) damageMeterConfig.width = v; Refresh() end,
         150, 720, 5)
     y = y + h
 
     _, h = W:Slider(container, LText("Window Height"), -y,
-        function() return damageMeterConfig.height or 220 end,
+        function() return damageMeterConfig.height or 201 end,
         function(v) damageMeterConfig.height = v; damageMeterConfig.autoHeight = false; Refresh() end,
         72, 700, 2)
     y = y + h

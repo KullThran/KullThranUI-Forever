@@ -2463,7 +2463,7 @@ local function AddFrameLayoutControls(container, W, mode)
         ); by = by + h
     end
     _, h = W:Toggle(container, "Show Portrait", -by,
-        function() return GetValue(configMode, "showPortrait", configMode == "party") == true end,
+        function() return GetValue(configMode, "showPortrait", false) == true end,
         function(v) ApplyValue(configMode, "showPortrait", v and true or false) end
     ); by = by + h
     _, h = W:Dropdown(container, "Portrait Style", -by, PORTRAIT_STYLES,

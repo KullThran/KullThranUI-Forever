@@ -408,98 +408,13 @@ local function ResetButtonStyle(btn)
 
 end
 
-local ACTIONBAR_CLASSIC_ART = {
-    slot = "Interface\\Buttons\\UI-Quickslot2",
-    empty = "Interface\\Buttons\\UI-Quickslot",
-    pushed = "Interface\\Buttons\\UI-Quickslot-Depress",
-    highlight = "Interface\\Buttons\\ButtonHilight-Square",
-    checked = "Interface\\Buttons\\CheckButtonHilight",
-    equipped = "Interface\\Buttons\\UI-ActionButton-Border",
-}
-
-local function SetClassicActionTexture(texture, path)
-    if not texture then return end
-    if texture.SetAtlas then texture:SetAtlas(nil) end
-    texture:SetTexture(path)
-    texture:SetTexCoord(0, 1, 0, 1)
-end
-
-local function ClassicButtonHasAction(btn)
-    if not btn then return false end
-
-    local action = btn.action
-    if not action and btn.GetAttribute then
-        local ok, value = pcall(btn.GetAttribute, btn, "action")
-        if ok then action = value end
-    end
-    if action and HasAction then
-        local ok, filled = pcall(HasAction, action)
-        if ok then return filled and true or false end
-    end
-    return false
-end
-
--- Explicit user request: applying a theme must ONLY swap the decorative
--- texture paths, nothing else -- confirmed live via screenshot, icons went
--- nearly invisible under the previous version. That version resized the
--- "normal" (border) texture to 66x66 (~1.8x the button's own 36x36) with no
--- blend mode set (opaque BLEND, not ADD), so the enlarged, still-mostly-
--- opaque border texture visually swallowed the icon underneath; it also
--- stripped the icon's own mask/texcoord and re-anchored its cooldown swipe,
--- none of which is a "texture decoration". This version only calls
--- SetClassicActionTexture on each piece and leaves every icon, size, point,
--- blend mode, and layer exactly as Blizzard's own button template set it.
-local function ApplyClassicButtonArt(btn, db)
-    if not btn or not (db and db.frameArtKit == "classic") then return end
-
-    -- normal/border keep the retail button template's own point/size by
-    -- default, which doesn't match the classic art's own proportions --
-    -- confirmed live via screenshot, textures bleeding outside the button's
-    -- own edges. An exact SetAllPoints match (tried first) made the frame
-    -- read as noticeably smaller than a real classic slot border; the -4/+4
-    -- overhang tried next was apparently too much the other way -- confirmed
-    -- live, a visibly square, mismatched edge around the icon. Pulled back
-    -- to a minimal 1px overhang.
-    local normal = btn.NormalTexture or (btn.GetNormalTexture and btn:GetNormalTexture())
-    if normal then
-        SetClassicActionTexture(normal, ClassicButtonHasAction(btn) and ACTIONBAR_CLASSIC_ART.slot or ACTIONBAR_CLASSIC_ART.empty)
-        normal:ClearAllPoints()
-        normal:SetPoint("TOPLEFT", btn, "TOPLEFT", -1, 1)
-        normal:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, -1)
-    end
-
-    local pushed = btn.PushedTexture or (btn.GetPushedTexture and btn:GetPushedTexture())
-    if pushed then
-        SetClassicActionTexture(pushed, ACTIONBAR_CLASSIC_ART.pushed)
-    end
-
-    -- highlight/checked are inherently additive overlays in WoW's own UI
-    -- convention (a glow, not a replacement) -- confirmed live: without an
-    -- explicit ADD blend mode, mousing over a button darkened it completely
-    -- instead of glowing, since the highlight texture's own dark pixels
-    -- rendered as opaque black under the default BLEND mode.
-    local highlight = btn.HighlightTexture or (btn.GetHighlightTexture and btn:GetHighlightTexture())
-    if highlight then
-        SetClassicActionTexture(highlight, ACTIONBAR_CLASSIC_ART.highlight)
-        highlight:SetBlendMode("ADD")
-    end
-
-    local checked = btn.CheckedTexture or (btn.GetCheckedTexture and btn:GetCheckedTexture())
-    if checked then
-        SetClassicActionTexture(checked, ACTIONBAR_CLASSIC_ART.checked)
-        checked:SetBlendMode("ADD")
-    end
-
-    local name = btn:GetName()
-    local border = (name and _G[name .. "Border"]) or btn.Border
-    if border then
-        SetClassicActionTexture(border, ACTIONBAR_CLASSIC_ART.equipped)
-        border:ClearAllPoints()
-        border:SetAllPoints(btn)
-    end
-
-    btn.KT_ClassicArt = true
-end
+-- Explicit user request: Classic theme should only decorate the ends of the
+-- action bar (the gargoyle/gryphon end-caps below), never the individual
+-- buttons -- confirmed live via screenshot, per-button texture swaps (the
+-- "normal"/border art) rendered as a diamond-shaped overlay obscuring many
+-- icons across the bar. Button styling for Classic is intentionally a
+-- no-op now; ApplyClassicActionBarCaps (below) is the only Classic-specific
+-- action bar art.
 
 local CLASSIC_ACTIONBAR_CAP = "Interface\\MainMenuBar\\UI-MainMenuBar-EndCap-Dwarf"
 
@@ -550,6 +465,20 @@ end
 
 local function SetNativeActionBarCapTexture(texture, atlas)
     if not texture or not texture.SetAtlas or not atlas then return end
+    -- This workspace tests on a Forever-flavored client, which remaps this
+    -- atlas name to its own art regardless of which visual theme is
+    -- selected -- plain SetAtlas draws Forever's version even under Retail
+    -- theme. KT.ResolveRetailAtlasOverride (ThemeClientAssets.lua, a
+    -- separate addon) hands back the real Retail sheet file + pixel rect
+    -- when (and only when) that override actually applies; nil otherwise,
+    -- falling straight through to the normal atlas path unchanged.
+    local override = KT.ResolveRetailAtlasOverride and KT.ResolveRetailAtlasOverride(atlas)
+    if override and override.file and override.leftTexCoord then
+        texture:SetTexture(override.file)
+        texture:SetTexCoord(override.leftTexCoord, override.rightTexCoord,
+            override.topTexCoord, override.bottomTexCoord)
+        return
+    end
     texture:SetAtlas(atlas)
     texture:SetTexCoord(0, 1, 0, 1)
 end
@@ -658,7 +587,18 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
         _kuiPagingFrame:SetParent(owner)
     end
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
-    _kuiPagingFrame:SetFrameLevel((owner:GetFrameLevel() or 1) + 25)
+    -- Confirmed live via /kupdebug: the gargoyle end-cap (which occupies
+    -- roughly the same screen region) uses
+    -- owner:GetEndCapsFrameLevel() as ITS baseline, not plain
+    -- GetFrameLevel() -- Blizzard's own end-caps level is much higher
+    -- (101 measured) than the base action bar level, so this widget's old
+    -- "+25 over GetFrameLevel()" (75) always landed underneath it,
+    -- invisible despite being correctly shown/positioned. Match the same
+    -- baseline the gargoyle uses, with enough margin to guarantee staying
+    -- above it regardless of exactly how high that baseline is.
+    local pagingBaseLevel = (owner.GetEndCapsFrameLevel and owner:GetEndCapsFrameLevel())
+        or owner:GetFrameLevel() or 1
+    _kuiPagingFrame:SetFrameLevel(pagingBaseLevel + 5)
     -- Explicit user request: the page selector belongs next to Action Bar
     -- 1's FIRST slot, not its last. Earlier attempts anchored to a custom
     -- texture we created (host.left, nested under the real, protected
@@ -683,12 +623,40 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     _kuiPagingFrame:Show()
 end
 
+-- Blizzard's Edit Mode "Hide Bar Art" option for the main action bar. Every art kit
+-- (default / retail / classic) must respect it. {unverified in game: setting name on Forever}
+function Mod.IsBarArtHidden(frame)
+    if not frame then return false end
+    local enumSetting = _G.Enum and _G.Enum.EditModeActionBarSetting
+    local key = enumSetting and enumSetting.HideBarArt
+    if key and type(frame.GetSettingValueBool) == "function" then
+        local ok, v = pcall(frame.GetSettingValueBool, frame, key)
+        if ok and v ~= nil then return v == true end
+    end
+    return frame.KT_HideBarArt == true
+end
+
 local function ApplyClassicActionBarCaps(db)
     local mainActionBar = _G.MainActionBar
     local mainMenuBar = _G.MainMenuBar
     local frameArtKit = db and db.frameArtKit or "default"
     local classic = frameArtKit == "classic"
     local retail = frameArtKit == "retail"
+
+    -- Edit Mode "Hide Bar Art": no kit may draw its caps/border (re-applied when it changes).
+    if mainActionBar and not Mod._hideArtHooked and mainActionBar.UpdateSystemSettingHideBarArt then
+        Mod._hideArtHooked = true
+        hooksecurefunc(mainActionBar, "UpdateSystemSettingHideBarArt", function()
+            if C_Timer and C_Timer.After then C_Timer.After(0, function() Mod:StyleAllBars() end) end
+        end)
+    end
+    if Mod.IsBarArtHidden(mainActionBar or mainMenuBar) then
+        HideNativeActionBarChrome(mainActionBar)
+        if mainMenuBar ~= mainActionBar then HideNativeActionBarChrome(mainMenuBar) end
+        if Mod._classicActionBarCaps then Mod._classicActionBarCaps:Hide() end
+        EnsureKUIActionBarPaging(mainActionBar or mainMenuBar, _G.MicroMenuContainer)
+        return
+    end
 
     if classic then
         HideNativeActionBarChrome(mainActionBar)
@@ -769,8 +737,8 @@ local function ApplyClassicActionBarCaps(db)
     left:SetSize(128 * scale, 128 * scale)
     right:SetSize(128 * scale, 128 * scale)
 
-    -- EllesmereUI Classic geometry: compact caps outside the two ends of
-    -- the button grid, with the right cap mirrored.
+    -- Compact caps outside the two ends of the button grid, with the
+    -- right cap mirrored.
     left:SetPoint("BOTTOMRIGHT", host, "BOTTOMLEFT", 28 * scale, -3 * scale)
     right:SetPoint("BOTTOMLEFT", host, "BOTTOMRIGHT", -29 * scale, -3 * scale)
     SetClassicCapTexture(left, false)
@@ -1258,22 +1226,22 @@ function Mod:StyleAllBars()
     if InCombatLockdown() then return end
     local db = KT.db.profile.actionbars
     if not db then return end
-    -- Repair profiles/slots created before the Classic cap kit existed. The
-    -- active visual theme is authoritative when the stored module field is
-    -- stale, so the visible bar cannot silently remain on the old artwork.
-    local activeTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-        and KT.VisualThemes:GetRenderedTheme()
-    if activeTheme == "classic" then
-        db.frameArtKit = "classic"
-    elseif activeTheme == "retail" then
-        db.frameArtKit = "retail"
-    elseif activeTheme == "forever" or activeTheme == "kui" then
-        db.frameArtKit = "default"
+    -- The art kit is the user's choice (Action Bar Art cards); the theme only seeds it.
+    -- Only repair a missing/invalid value.
+    if db.frameArtKit ~= "default" and db.frameArtKit ~= "retail" and db.frameArtKit ~= "classic" then
+        local activeTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme()
+        db.frameArtKit = activeTheme == "classic" and "classic"
+            or (activeTheme == "retail" and "retail" or "default")
     end
+    -- ApplyClassicActionBarCaps already calls EnsureKUIActionBarPaging itself
+    -- for every theme -- deferred (C_Timer.After(0,...)) with the correct
+    -- ActionButton1-based anchor for Classic, synchronous with the
+    -- MicroMenuContainer anchor otherwise. A redundant fallback call used to
+    -- sit here too, firing BEFORE Classic's deferred call had run and
+    -- creating the widget early with the wrong anchor, which the deferred
+    -- call then had to reposition a tick later -- a real race, removed.
     ApplyClassicActionBarCaps(db)
-    if not _kuiPagingFrame then
-        EnsureKUIActionBarPaging(_G.MainActionBar or _G.MainMenuBar, _G.MicroMenuContainer)
-    end
     local buttons = self:GetAllBlizzardButtons()
     for _, btn in ipairs(buttons) do
         self:StyleButton(btn)
@@ -1303,7 +1271,6 @@ function Mod:StyleButton(btn)
 
     HookButtonCooldownEdge(btn)
     ResetButtonStyle(btn)
-    ApplyClassicButtonArt(btn, db)
 
     if db.buttonStyle == "KUI" then
         self:ApplyModernKUIStyle(btn)
@@ -1711,4 +1678,46 @@ function Mod:ToggleHideMacroText(enabled)
     if not db then return end
     db.hideMacroText = enabled
     self:StyleAllBars()
+end
+
+-- TEMPORARY debug tool: /kupdebug dumps the paging widget's live state.
+-- /run doesn't work on this client, so reusing an addon-registered slash
+-- command (the same pattern /ktpersistdebug and /ktforevertab already use
+-- successfully this whole session) instead. Delete once the action-bar
+-- page-selector visibility issue is resolved -- not meant to ship on.
+SLASH_KUIACTIONBARPAGINGDEBUG1 = "/kupdebug"
+SlashCmdList["KUIACTIONBARPAGINGDEBUG"] = function()
+    local f = _kuiPagingFrame
+    if not f then
+        print("|cffff4444[KUPDEBUG]|r _kuiPagingFrame does not exist -- EnsureKUIActionBarPaging never created it (likely the InCombatLockdown() guard skipped it with no retry, or it was never called at all).")
+        return
+    end
+    local point, relTo, relPoint, x, y = f:GetPoint()
+    local parent = f:GetParent()
+    print(("|cff33ff99[KUPDEBUG]|r shown=%s parent=%s strata=%s level=%s point=%s relTo=%s relPoint=%s x=%s y=%s size=%sx%s alpha=%s")
+        :format(tostring(f:IsShown()), tostring(parent and parent.GetName and parent:GetName() or parent),
+            tostring(f:GetFrameStrata()), tostring(f:GetFrameLevel()),
+            tostring(point), tostring(relTo and relTo.GetName and relTo:GetName() or relTo), tostring(relPoint),
+            tostring(x), tostring(y), tostring(f:GetWidth()), tostring(f:GetHeight()), tostring(f:GetAlpha())))
+    print(("|cff33ff99[KUPDEBUG]|r pageText=%s up=%s down=%s")
+        :format(tostring(f.pageText and f.pageText:GetText()), tostring(f.up and f.up:IsShown()), tostring(f.down and f.down:IsShown())))
+
+    -- Compare against the gargoyle end-cap art, which sits in roughly the
+    -- same screen region -- if IT has a higher frame level (or the same
+    -- strata with regions that just happen to paint over ours), that's
+    -- covering the widget even though the widget's own state is correct.
+    local host = Mod._classicActionBarCaps
+    if host then
+        print(("|cff33ff99[KUPDEBUG]|r gargoyleHost shown=%s strata=%s level=%s size=%sx%s")
+            :format(tostring(host:IsShown()), tostring(host:GetFrameStrata()), tostring(host:GetFrameLevel()),
+                tostring(host:GetWidth()), tostring(host:GetHeight())))
+        if host.left then
+            local lp, _, lRelPoint, lx, ly = host.left:GetPoint()
+            print(("|cff33ff99[KUPDEBUG]|r gargoyleLeft shown=%s size=%sx%s point=%s relPoint=%s x=%s y=%s")
+                :format(tostring(host.left:IsShown()), tostring(host.left:GetWidth()), tostring(host.left:GetHeight()),
+                    tostring(lp), tostring(lRelPoint), tostring(lx), tostring(ly)))
+        end
+    else
+        print("|cffff4444[KUPDEBUG]|r Mod._classicActionBarCaps does not exist")
+    end
 end

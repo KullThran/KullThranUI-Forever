@@ -19,7 +19,8 @@ RAID_CLASS_COLORS = { ROGUE = { r = 1, g = 1, b = 0 } }
 ChatTypeInfo = { SYSTEM = { r = 1, g = 1, b = 0 }, SAY = { r = 1, g = 1, b = 1 } }
 issecretvalue = function(value) return value == '<secret>' end
 canaccessvalue = function(value) return value ~= '<secret>' end
-hasanysecretvalues = function() return false end
+local eventHasSecretValues = false
+hasanysecretvalues = function() return eventHasSecretValues end
 assert(loadfile('KullThranUI_Chat/Modules/Chat.lua'))()
 Mod.db = KT.db.profile.chat
 
@@ -42,6 +43,9 @@ for _, kind in ipairs({ 'SAY', 'YELL', 'GUILD', 'OFFICER', 'PARTY', 'RAID', 'CHA
 end
 contains(Mod:GetEntryMessage(event('SAY', '.', 'Depicaros')), '.')
 assert(event('SAY', '<secret>', 'Depicaros') == nil)
+eventHasSecretValues = true
+assert(event('SAY', 'protected payload', 'Depicaros') == nil)
+eventHasSecretValues = false
 assert(event('SAY', '', 'Depicaros') == nil)
 local say = event('SAY', '.', 'Depicaros-Realm')
 contains(Mod:GetEntryMessage(say), '|Hplayer:Depicaros-Realm:1:SAY:')

@@ -86,6 +86,37 @@ function KT:ScopeProfileName(name)
     return self.PROFILE_NAMESPACE_PREFIX .. name
 end
 
+-- Flavor tag of a stored profile: read from its name prefix ("KullThranUI Forever - ..." /
+-- "KullThranUI Retail - ..."). Returns "forever", "retail" or nil.
+function KT:GetProfileFlavorFromName(name)
+    if type(name) ~= "string" then return nil end
+    if name:sub(1, #"KullThranUI Forever - ") == "KullThranUI Forever - " then return "forever" end
+    if name:sub(1, #"KullThranUI Retail - ") == "KullThranUI Retail - " then return "retail" end
+    return nil
+end
+
+-- Display name for UI lists: "[Forever] MyProfile" instead of the raw namespaced key.
+function KT:GetProfileDisplayName(name)
+    local flavor = self:GetProfileFlavorFromName(name)
+    if not flavor then return name end
+    local label = flavor == "forever" and "Forever" or "Retail"
+    local prefix = "KullThranUI " .. label .. " - "
+    return "[" .. label .. "] " .. name:sub(#prefix + 1)
+end
+
+-- Records which flavor a profile belongs to, and (when imported from the other flavor)
+-- where it came from, so incompatibilities can be traced back. Never exported.
+function KT:StampProfileMeta(profile, importedFrom)
+    if type(profile) ~= "table" then return end
+    local meta = type(profile._flavorMeta) == "table" and profile._flavorMeta or {}
+    meta.flavor = self.PROFILE_FLAVOR
+    meta.interface = self.PROFILE_INTERFACE
+    if importedFrom and importedFrom ~= self.PROFILE_FLAVOR then
+        meta.importedFrom = importedFrom
+    end
+    profile._flavorMeta = meta
+end
+
 function KT:GetProfileEnvelope()
     return {
         client = "KullThranUI",
@@ -635,16 +666,143 @@ function KT:ContainsCyrillic(text)
     return ok and first ~= nil
 end
 
+-- CJK detection by UTF-8 byte ranges (Lua 5.1 safe, no utf8 library).
+-- Hangul: syllables U+AC00-D7AF (EA-ED lead), Jamo U+1100-11FF, Compat Jamo U+3130-318F.
+-- Kana:   Hiragana/Katakana U+3040-30FF (E3 81..E3 83).
+-- Han:    CJK ideographs U+4E00-9FFF + Ext-A (E4-E9 lead, E3 90+), CJK punctuation
+--         U+3000-303F and full-width forms U+FF00-FFEF.
+local HANGUL_UTF8_PATTERNS = {
+    "[\234-\237][\128-\191][\128-\191]",
+    "\225[\132-\135][\128-\191]",
+    "\227[\132-\134][\128-\191]",
+}
+local KANA_UTF8_PATTERN = "\227[\129-\131][\128-\191]"
+local HAN_UTF8_PATTERNS = {
+    "[\228-\233][\128-\191][\128-\191]",
+    "\227[\144-\191][\128-\191]",
+    "\227\128[\128-\191]",
+    "\239[\188-\191][\128-\191]",
+}
+
+local function FindAny(text, patterns)
+    if type(patterns) == "string" then patterns = { patterns } end
+    for _, pattern in ipairs(patterns) do
+        local ok, first = pcall(string.find, text, pattern)
+        if ok and first then return true end
+    end
+    return false
+end
+
+-- Returns "hangul", "kana", "han" or nil for the first CJK script found.
+function KT:DetectCJKScript(text)
+    if type(text) ~= "string" then return nil end
+    -- Secret strings forbid even comparison (== ""): test them FIRST.
+    if _G.issecretvalue and _G.issecretvalue(text) then return nil end
+    if text == "" then return nil end
+    if FindAny(text, HANGUL_UTF8_PATTERNS) then return "hangul" end
+    if FindAny(text, KANA_UTF8_PATTERN) then return "kana" end
+    if FindAny(text, HAN_UTF8_PATTERNS) then return "han" end
+    return nil
+end
+
+-- Fonts that already render CJK on their own (bundled Noto CJK + the client's
+-- native Blizzard CJK faces); they are never swapped.
+function KT:IsCJKCapableFont(path)
+    if type(path) ~= "string" or path == "" then return false end
+    local lower = path:lower()
+    return lower:find("notosans", 1, true) ~= nil
+        or lower:find("2002", 1, true) ~= nil
+        or lower:find("arkai", 1, true) ~= nil
+        or lower:find("bkai", 1, true) ~= nil
+        or lower:find("arhei", 1, true) ~= nil
+        or lower:find("blei00d", 1, true) ~= nil
+end
+
+-- Bundled font that covers a detected CJK script (all three Noto files also
+-- contain Latin, Cyrillic and kana; only KR contains Hangul).
+function KT:GetCJKFontForScript(script)
+    if script == "hangul" or script == "kana" then
+        return "Fonts\\2002.TTF"
+    end
+    local lang = self:GetActiveLanguage()
+    if lang == "zhTW" then return "Fonts\\bKAI00M.TTF" end
+    if lang == "koKR" then return "Fonts\\2002.TTF" end
+    return "Fonts\\ARKai_T.ttf"
+end
+
+-- Ordered font candidates for a script: the client's own Blizzard faces first
+-- (always TrueType, always loadable), then the bundled Noto files (CFF-based, may
+-- be rejected by the client). Callers try them until SetFont reports success.
+function KT:GetScriptFontCandidates(text)
+    local cjk = self:DetectCJKScript(text)
+    if cjk == "hangul" then
+        return { "Fonts\\2002.TTF", self.BUNDLED_KO_FONT }
+    elseif cjk then
+        local lang = self:GetActiveLanguage()
+        if cjk == "kana" then
+            return { "Fonts\\2002.TTF", "Fonts\\ARKai_T.ttf", self.BUNDLED_KO_FONT }
+        elseif lang == "zhTW" then
+            return { "Fonts\\bKAI00M.TTF", "Fonts\\ARKai_T.ttf", self.BUNDLED_ZHTW_FONT }
+        end
+        return { "Fonts\\ARKai_T.ttf", "Fonts\\bKAI00M.TTF", self.BUNDLED_ZHCN_FONT }
+    end
+    if self:ContainsCyrillic(text) then
+        return { "Fonts\\FRIZQT___CYR.TTF", self.CYRILLIC_FONT_PATH }
+    end
+    return nil
+end
+
 function KT:ResolveTextFontPath(text, baseFontPath)
     local base = (type(baseFontPath) == "string" and baseFontPath ~= "")
         and baseFontPath
         or self.FONT_PATH
         or self.DEFAULT_FONT_PATH
 
+    -- Korean / Japanese / Chinese names: any face that cannot draw CJK (Avant
+    -- Garde, Russo One, Friz Quadrata, user-picked Latin fonts) is swapped for
+    -- the bundled Noto face that has the glyphs.
+    local cjk = self:DetectCJKScript(text)
+    if cjk and not self:IsCJKCapableFont(base) then
+        return self:GetCJKFontForScript(cjk) or base
+    end
+
     if self:ContainsCyrillic(text) and self:IsDefaultBundledFont(base) then
         return self.CYRILLIC_FONT_PATH
     end
     return base
+end
+
+-- Builds (and caches) a font object that carries one face per alphabet. Used by
+-- widgets that hold MANY lines in one font (chat's ScrollingMessageFrame), where
+-- swapping the whole font per string is impossible. The client picks the member
+-- by alphabet, so Latin text keeps the user's font while Cyrillic/CJK glyphs
+-- come from the bundled faces. Returns nil when the client lacks the API.
+local MULTI_SCRIPT_FONTS = {}
+function KT:GetMultiScriptFontObject(basePath, size, flags)
+    if type(_G.CreateFontFamily) ~= "function" or type(basePath) ~= "string" or basePath == "" then
+        return nil
+    end
+    size = tonumber(size) or 12
+    flags = flags or ""
+    local key = basePath .. "|" .. size .. "|" .. flags
+    local cached = MULTI_SCRIPT_FONTS[key]
+    if cached ~= nil then return cached or nil end
+
+    local members = {
+        { alphabet = "roman", file = basePath, height = size, flags = flags },
+        { alphabet = "russian", file = self.CYRILLIC_FONT_PATH, height = size, flags = flags },
+        { alphabet = "korean", file = self.BUNDLED_KO_FONT, height = size, flags = flags },
+        { alphabet = "simplifiedchinese", file = self.BUNDLED_ZHCN_FONT, height = size, flags = flags },
+        { alphabet = "traditionalchinese", file = self.BUNDLED_ZHTW_FONT, height = size, flags = flags },
+    }
+    local name = "KTMultiScriptFont" .. tostring(#key) .. "_" .. tostring(size) .. "_" .. tostring(math.random(1, 1000000000))
+    local ok, obj = pcall(_G.CreateFontFamily, name, members)
+    if ok and obj then
+        MULTI_SCRIPT_FONTS[key] = obj
+        return obj
+    end
+    MULTI_SCRIPT_FONTS[key] = false
+    return nil
 end
 
 function KT:RefreshTextFontFallback(fontString, text)

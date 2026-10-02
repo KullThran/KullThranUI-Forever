@@ -122,23 +122,30 @@ local function GetProfileFlavorLabel()
     return GetProfileFlavor()
 end
 
+-- Returns ok, errorMessage, crossFlavorWarning. Strings from the OTHER flavor (Forever <-> Retail)
+-- are allowed: the data is usually compatible, so it imports with a warning and the profile is
+-- tagged with where it came from (see KT:StampProfileMeta).
 local function ValidatePayloadFlavor(payload)
     if type(payload) ~= "table" then
         return false, "Perfil invalido."
     end
 
-    local expectedFlavor = GetProfileFlavor()
-    if payload.client ~= "KullThranUI" or payload.flavor ~= expectedFlavor then
-        return false, "Este perfil pertenece a otra variante de KullThranUI (" ..
-            tostring(payload.flavor or "desconocida") .. "). No se puede importar en " ..
-            tostring(GetProfileFlavorLabel()) .. "."
+    local flavor = payload.flavor
+    if payload.client ~= "KullThranUI" or (flavor ~= "forever" and flavor ~= "retail") then
+        return false, "Cadena de perfil no reconocida como de KullThranUI."
     end
 
     if payload.version ~= (KT and KT.PROFILE_FORMAT_VERSION or 2) then
         return false, "Version de perfil no soportada. Exporta el perfil de nuevo desde esta variante."
     end
 
-    return true
+    local warning
+    if flavor ~= GetProfileFlavor() then
+        warning = "Aviso: este perfil viene de la variante " .. tostring(flavor) ..
+            " y se esta importando en " .. tostring(GetProfileFlavorLabel()) ..
+            ". Normalmente es compatible, pero puede dar incompatibilidades."
+    end
+    return true, nil, warning
 end
 
 local MODULE_BY_ID = {}
@@ -1468,7 +1475,7 @@ local function BuildTransferProfile(profileData)
     for key, value in pairs(profileData or {}) do
         if key == "interruptsGlow" then
             snapshot[key] = SanitizeInterruptGlowProfile(value)
-        elseif key ~= "progressBars" and key ~= "BlizzMove" and key ~= "dandersIntegration" then
+        elseif key ~= "progressBars" and key ~= "BlizzMove" and key ~= "dandersIntegration" and key ~= "_flavorMeta" then
             snapshot[key] = DeepCopy(value)
         end
     end
@@ -1627,7 +1634,7 @@ function Mod:ImportProfileString(importString)
         return false, err
     end
 
-    local flavorOK, flavorError = ValidatePayloadFlavor(payload)
+    local flavorOK, flavorError, crossWarning = ValidatePayloadFlavor(payload)
     if not flavorOK then
         return false, flavorError
     end
@@ -1653,8 +1660,10 @@ function Mod:ImportProfileString(importString)
         return false, "Tipo de importacion desconocido."
     end
 
+    if KT.StampProfileMeta then KT:StampProfileMeta(GetRootProfile(), crossWarning and payload.flavor or nil) end
+    if crossWarning and KT.Print then KT:Print(crossWarning) end
     self:RefreshProfileRuntime()
-    PromptReloadPopup("El perfil se ha importado correctamente.")
+    PromptReloadPopup("El perfil se ha importado correctamente." .. (crossWarning and (" " .. crossWarning) or ""))
     return true
 end
 
@@ -1673,7 +1682,7 @@ function Mod:ImportPageProfileString(pageID, importString)
     if not payload then
         return false, err
     end
-    local flavorOK, flavorError = ValidatePayloadFlavor(payload)
+    local flavorOK, flavorError, crossWarning = ValidatePayloadFlavor(payload)
     if not flavorOK then
         return false, flavorError
     end
@@ -1706,9 +1715,11 @@ function Mod:ImportPageProfileString(pageID, importString)
         return false, applyErr
     end
 
+    if KT.StampProfileMeta then KT:StampProfileMeta(GetRootProfile(), crossWarning and payload.flavor or nil) end
+    if crossWarning and KT.Print then KT:Print(crossWarning) end
     SaveExternalProfileSnapshot(KT.db and KT.db:GetCurrentProfile())
     self:RefreshProfileRuntime()
-    PromptReloadPopup("Se ha importado: " .. table.concat(importedLabels, ", ") .. ".")
+    PromptReloadPopup("Se ha importado: " .. table.concat(importedLabels, ", ") .. "." .. (crossWarning and (" " .. crossWarning) or ""))
     return true
 end
 
@@ -1726,7 +1737,7 @@ function Mod:GetProfileValues()
     local filtered = {}
     for _, name in ipairs(list) do
         if not KT.IsProfileNameForCurrentFlavor or KT:IsProfileNameForCurrentFlavor(name) then
-            values[name] = name
+            values[name] = (KT.GetProfileDisplayName and KT:GetProfileDisplayName(name)) or name
             filtered[#filtered + 1] = name
         end
     end

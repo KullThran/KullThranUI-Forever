@@ -19,10 +19,12 @@ KT.VisualThemes:RegisterModule("nameplates", {
     getOwnedPaths = function()
         return {
             "healthBarTexture", "friendlyPlayerHealthTexture", "friendlyNPCHealthTexture",
-            "castBarTexture", "borderStyle", "borderColor", "targetGlowStyle",
+            "castBarTexture", "classPowerShape", "borderStyle", "borderColor", "targetGlowStyle",
+            "hostile", "friendly", "neutral", "miniboss", "boss", "elite", "trivial",
         }
     end,
     seed = function(profile, themeKey)
+        profile.classPowerShape = (themeKey == "kui" or (themeKey ~= "classic" and themeKey ~= "forever" and themeKey ~= "retail")) and "pip" or "circle"
         if themeKey == "classic" then
             profile.healthBarTexture = "Blizzard"
             profile.friendlyPlayerHealthTexture = "Blizzard"
@@ -31,6 +33,13 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "simple"
             profile.borderColor = { r = 0.28, g = 0.18, b = 0.07 }
             profile.targetGlowStyle = "vibrant"
+            profile.hostile = { r = 0.95, g = 0.20, b = 0.08 }
+            profile.friendly = { r = 0.18, g = 0.85, b = 0.30 }
+            profile.neutral = { r = 0.95, g = 0.72, b = 0.12 }
+            profile.miniboss = { r = 1.00, g = 0.28, b = 0.20 }
+            profile.boss = { r = 0.95, g = 0.20, b = 0.25 }
+            profile.elite = { r = 1.00, g = 0.68, b = 0.18 }
+            profile.trivial = { r = 0.68, g = 0.68, b = 0.68 }
         elseif themeKey == "forever" then
             profile.healthBarTexture = "Melli Dark"
             profile.friendlyPlayerHealthTexture = "Melli Dark"
@@ -39,6 +48,13 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "kullthran"
             profile.borderColor = { r = 0.82, g = 0.65, b = 0.23 }
             profile.targetGlowStyle = "kullthranui"
+            profile.hostile = { r = 0.95, g = 0.45, b = 0.12 }
+            profile.friendly = { r = 0.25, g = 0.90, b = 0.40 }
+            profile.neutral = { r = 1.00, g = 0.78, b = 0.18 }
+            profile.miniboss = { r = 1.00, g = 0.34, b = 0.20 }
+            profile.boss = { r = 1.00, g = 0.30, b = 0.20 }
+            profile.elite = { r = 1.00, g = 0.72, b = 0.25 }
+            profile.trivial = { r = 0.72, g = 0.72, b = 0.72 }
         elseif themeKey == "retail" then
             profile.healthBarTexture = "Blizzard Raid Bar"
             profile.friendlyPlayerHealthTexture = "Blizzard Raid Bar"
@@ -47,6 +63,13 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "none"
             profile.borderColor = { r = 0.03, g = 0.05, b = 0.09 }
             profile.targetGlowStyle = "none"
+            profile.hostile = { r = 0.30, g = 0.65, b = 1.00 }
+            profile.friendly = { r = 0.20, g = 0.90, b = 0.35 }
+            profile.neutral = { r = 1.00, g = 0.76, b = 0.18 }
+            profile.miniboss = { r = 0.40, g = 0.72, b = 1.00 }
+            profile.boss = { r = 0.34, g = 0.68, b = 1.00 }
+            profile.elite = { r = 0.55, g = 0.82, b = 1.00 }
+            profile.trivial = { r = 0.70, g = 0.70, b = 0.70 }
         else
             profile.healthBarTexture = "Melli Reforged"
             profile.friendlyPlayerHealthTexture = "Melli Reforged"
@@ -55,6 +78,13 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "kullthran"
             profile.borderColor = { r = 0.067, g = 0.067, b = 0.067 }
             profile.targetGlowStyle = "kullthranui"
+            profile.hostile = { r = 0.24, g = 0.38, b = 1.00 }
+            profile.friendly = { r = 0.22, g = 0.90, b = 0.38 }
+            profile.neutral = { r = 1.00, g = 0.78, b = 0.18 }
+            profile.miniboss = { r = 0.42, g = 0.70, b = 1.00 }
+            profile.boss = { r = 0.34, g = 0.62, b = 1.00 }
+            profile.elite = { r = 0.58, g = 0.84, b = 1.00 }
+            profile.trivial = { r = 0.70, g = 0.70, b = 0.70 }
         end
     end,
     validate = function(profile)

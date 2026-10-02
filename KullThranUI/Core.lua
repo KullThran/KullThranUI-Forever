@@ -2741,6 +2741,9 @@ function KT:InitializeCore()
         if self.SanitizeProfileForFlavor and self.db and self.db.profile then
             self:SanitizeProfileForFlavor(self.db.profile)
         end
+        if self.StampProfileMeta and self.db and self.db.profile then
+            self:StampProfileMeta(self.db.profile)
+        end
 
         -- Forever testing uses the addon defaults, regardless of stale retail
         -- scale values that may be present in the broken SavedVariables.
@@ -2785,6 +2788,23 @@ function KT:InitializeCore()
                 end
             end)
         end
+
+        -- This is the ONE confirmed moment the real SavedVariables (with the
+        -- user's actual theme choice) has just replaced the temporary empty
+        -- AceDB placeholder used while waiting for it -- on this client that
+        -- wait can take anywhere from ~0s up to the 15s timeout above.
+        -- Modules whose rendering depends on KT.db.profile (VisualThemes'
+        -- theme, in particular) were relying on blind fixed-delay retries
+        -- from PLAYER_ENTERING_WORLD instead, which raced this and lost:
+        -- confirmed live via /ktforevertab -- a fresh login showed
+        -- renderedTheme=forever (whatever the placeholder/stale-in-progress
+        -- profile had) and only corrected to the real saved "classic" after
+        -- a manual /reload, which restarts everything with the data already
+        -- present. Broadcast the real signal so listeners can react exactly
+        -- when it happens instead of guessing a delay.
+        if self.SendMessage then
+            self:SendMessage("KT_PERSISTENCE_READY")
+        end
     end
     if mergeAndPin(tryLoadVarfile()) then
         afterMerge()
@@ -2824,6 +2844,57 @@ function KT:InitializeCore()
             end
         end)
     end
+    -- Root cause of the login-vs-reload theme mismatch, found via
+    -- /ktpersistdebug: the very first log line already showed
+    -- "char=Unknown - Classic Beta PvP". AceDB-3.0.lua computes its
+    -- module-level charKey as UnitName("player") .. " - " .. GetRealmName()
+    -- at FILE LOAD time (top-level locals, lines ~254-255 of that library) --
+    -- long before the player's own identity has necessarily synced from the
+    -- server, a well-known WoW client gotcha. That wrong "Unknown"-keyed
+    -- value becomes self.db.keys.char permanently for the session; pinProfileKeys()
+    -- (above) trusts it rather than re-querying, so it pins the WRONG,
+    -- generic "Unknown"-keyed profile -- which happens to have a stale
+    -- "forever" theme saved from a past instance of this exact bug,
+    -- explaining "forever shows on login, correct theme only after
+    -- /reload" exactly. PLAYER_LOGIN guarantees the real name is available;
+    -- recompute the correct key there and re-pin if AceDB's was wrong.
+    local charKeyFrame = CreateFrame("Frame")
+    charKeyFrame:RegisterEvent("PLAYER_LOGIN")
+    charKeyFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    charKeyFrame:SetScript("OnEvent", function(f)
+        local realName = UnitName("player")
+        if not realName or realName == "" or realName == "Unknown" then return end
+        local realKey = realName .. " - " .. tostring(GetRealmName())
+        if not self.db.keys or self.db.keys.char == realKey then return end
+        self:PersistDebug("CHARKEY fix old=%s new=%s", tostring(self.db.keys.char), realKey)
+        self.db.keys.char = realKey
+        pinProfileKeys()
+        rawset(self.db, "profile", nil)
+        rawset(self.db, "global", nil)
+        -- Confirmed live: theme style corrected after this fix, but target's
+        -- frame position and health text size did not -- because this pins
+        -- the profile directly (bypassing AceDB's own :SetProfile(), which
+        -- has the SAME stale-charKey bug at its self.sv.profileKeys[charKey]
+        -- write on line ~471 of AceDB-3.0.lua, so calling it here would just
+        -- reintroduce the problem). That means the standard OnProfileChanged
+        -- callback AceDB normally fires never went out, so modules that only
+        -- do a full re-apply (including position) on a real profile change
+        -- -- like KUIUnitFrames.lua's OnEnable, which does
+        -- KT.db.RegisterCallback(self, "OnProfileChanged", "Refresh") --
+        -- never got that signal; only KT_PERSISTENCE_READY (styling) did.
+        -- Fire the real callback so every properly-registered listener reacts
+        -- exactly as it would to a genuine profile switch.
+        self:PersistDebug("CHARKEY firing OnProfileChanged callbacks=%s hasFire=%s profile=%s",
+            tostring(self.db.callbacks), tostring(self.db.callbacks and self.db.callbacks.Fire),
+            tostring(self.db.keys.profile))
+        if self.db.callbacks and self.db.callbacks.Fire then
+            self.db.callbacks:Fire("OnProfileChanged", self.db, self.db.keys.profile)
+        end
+        self:PersistDebug("CHARKEY OnProfileChanged fired")
+        if self.SendMessage then self:SendMessage("KT_PERSISTENCE_READY") end
+        f:UnregisterAllEvents()
+    end)
+
     local rescueFrame = CreateFrame("Frame")
     rescueFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     rescueFrame:SetScript("OnEvent", function(f)

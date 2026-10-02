@@ -54,10 +54,32 @@ KT.VisualThemes:RegisterModule("resourcebars", {
         profile.general = profile.general or {}
         profile.general.texture = texture
         if frameArtKit then profile.general.frameArtKit = frameArtKit end
+        -- Real crash, confirmed by the user's error log: `profile[key] =
+        -- profile[key] or {}` below, when a key was genuinely nil (this
+        -- adapter running before KUIResourceBars.lua's own OnInitialize
+        -- populates its complete defaults), created a SPARSE table with
+        -- only texture/borderSize/fill set -- no height/pipHeight. That
+        -- sparse table is no longer nil, so KUIResourceBars.lua's own
+        -- `db.health = db.health or {...with height...}` default-merge
+        -- never ran either, permanently leaving height unset and crashing
+        -- (first the options panel's preview animation, then BuildBars'
+        -- own SetSize). A second crash in the SAME spot after the first
+        -- fix proved the table isn't always "new" by the time this runs
+        -- (an already-existing table can still be missing this one field,
+        -- e.g. from before pipHeight existed at all) -- so this must run
+        -- every time, unconditionally, not just on first creation. `x = x
+        -- or default` is already a no-op once a real value is set, so
+        -- there is no cost to always checking.
+        local heightDefaults = { health = 25, primary = 25 }
         for _, key in ipairs({ "health", "primary", "secondary" }) do
             profile[key] = profile[key] or {}
             profile[key].texture = texture
             profile[key].borderSize = borderSize
+            if key == "secondary" then
+                profile[key].pipHeight = profile[key].pipHeight or 14
+            else
+                profile[key].height = profile[key].height or heightDefaults[key]
+            end
         end
         if healthR then
             profile.health.fillR, profile.health.fillG, profile.health.fillB = healthR, healthG, healthB
