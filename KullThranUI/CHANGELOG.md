@@ -11,6 +11,7 @@ This beta delivers a major visual-style refresh, deeper frame customization, and
 
 - Reworked the Forever, Classic and Retail visual styles with authentic frame art and more consistent colors across unit frames, action bars, cast bars, resource bars, nameplates, the minimap, the damage meter and the objective tracker.
 - Redesigned player, target and pet frames with improved portrait masking, correct portrait facing, better level and rare/elite indicator placement, cleaner name and buff alignment, and a new frame-size option.
+- Fixed modern Rare/Elite portrait borders in Forever and Retail so they replace the base ornament cleanly and the health/resource bars meet the gold edge without leaving a gap or covering the portrait.
 - Added an Action Bar Art selector with live previews. The selected art also follows the existing Hide Bar Art setting.
 - Added Circles and Pips choices for combo points, with improved sizing, contrast and placement on unit frames, resource bars and nameplates.
 - Added per-ability cooldown display rules, including always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge-specific display controls.

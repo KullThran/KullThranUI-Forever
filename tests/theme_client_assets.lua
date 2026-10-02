@@ -205,11 +205,48 @@ expect(player.Health.fill.masks[player.Health._ktForeverMask], true, "health fil
 expect(player.Health.bg.masks[player.Health._ktForeverMask], true, "health background mask")
 expect(player.HealthPrediction.damageAbsorb.fill.masks[player.Health._ktForeverMask], true, "absorb mask")
 
+-- Modern Rare/Elite art replaces the base portrait ornament. Health/Power
+-- must grow only toward the portrait: player extends left while preserving
+-- the original right edge, and its masks/prediction grow with the bars.
+local playerBaseHealthRight = player.Health.points[1][4] + player.Health:GetWidth()
+local playerBasePowerRight = player.Power.points[1][4] + player.Power:GetWidth()
+player._ktRingHugShift = -6
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop, "player"), true,
+    "player Rare/Elite bar extension apply")
+near(player.Health.points[1][4], 85 * playerScale - 6, "player Rare/Elite health extends toward portrait")
+near(player.Health:GetWidth(), 124 * playerScale + 6, "player Rare/Elite health width grows")
+near(player.Health.points[1][4] + player.Health:GetWidth(), playerBaseHealthRight,
+    "player Rare/Elite health outer edge stays fixed")
+near(player.Power.points[1][4] + player.Power:GetWidth(), playerBasePowerRight,
+    "player Rare/Elite power outer edge stays fixed")
+near(player.Health._ktForeverMask:GetWidth(), 132 * playerScale + 6,
+    "player Rare/Elite health mask grows with bar")
+near(player.HealthPrediction.damageAbsorb:GetWidth(), 124 * playerScale + 6,
+    "player Rare/Elite absorb grows with health")
+player._ktRingHugShift = nil
+
 -- Applying a second time must produce the same geometry, not feed the new
 -- Health position back through the portrait and drift the whole box.
 expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop, "player"), true, "player reapply")
 near(player.Health.points[1][4], 85 * playerScale, "player stable health x")
 near(player.Portrait.backdrop.points[1][4], 24 * playerScale, "player stable portrait x")
+
+-- PLAYER Rare/Elite borders replace the Forever portrait ornament. The
+-- renderer itself must retain that state across late/repeated art passes.
+player._ktHideForeverPortraitArt = true
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop, "player"), true,
+    "player Rare/Elite art suppression apply")
+expect(player._ktForeverPortraitArt.shown, false, "player Rare/Elite hides Forever art")
+expect(player._ktForeverPortraitArtFill.shown, false, "player Rare/Elite hides Forever fill")
+expect(player._ktForeverPortraitCornerPatch.shown, false, "player Rare/Elite hides first Forever corner patch")
+expect(player._ktForeverPortraitCornerPatch2.shown, false, "player Rare/Elite hides second Forever corner patch")
+player._ktHideForeverPortraitArt = false
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(player, player.Portrait.backdrop, "player"), true,
+    "player no-border art restoration apply")
+expect(player._ktForeverPortraitArt.shown, true, "player no-border restores Forever art")
+expect(player._ktForeverPortraitArtFill.shown, true, "player no-border restores Forever fill")
+expect(player._ktForeverPortraitCornerPatch.shown, false, "player no-border keeps inactive Forever corner hidden")
+expect(player._ktForeverPortraitCornerPatch2.shown, true, "player no-border restores active Forever corner")
 
 -- frame._ktStockNameText lets KUIUnitFrames.lua (which has access to the
 -- profile's leftTextContent/rightTextContent/centerTextContent) tell this
@@ -236,6 +273,20 @@ expect(target._ktForeverPortraitArt.atlas, nil, "target art no longer uses plain
 expect(target._ktForeverPortraitArt.texture, "Interface\\Fake\\StockArt", "target art resolves to player's real sheet file")
 expect(target._ktForeverPortraitArt.texCoord[1], 0.9, "target art texcoord left/right swapped (mirrored)")
 expect(target._ktForeverPortraitArt.texCoord[2], 0.1, "target art texcoord left/right swapped (mirrored)")
+
+-- Target is the exact mirror: keep the left/outer edge fixed and extend both
+-- bars plus their masks to the right, underneath the modern classification ring.
+local targetBaseHealthX = target.Health.points[1][4]
+local targetBasePowerX = target.Power.points[1][4]
+target._ktRingHugShift = 6
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(target, target.Portrait.backdrop, "target"), true,
+    "target Rare/Elite bar extension apply")
+near(target.Health.points[1][4], targetBaseHealthX, "target Rare/Elite health outer edge stays fixed")
+near(target.Power.points[1][4], targetBasePowerX, "target Rare/Elite power outer edge stays fixed")
+near(target.Health:GetWidth(), 124 * targetScale + 6, "target Rare/Elite health width grows")
+near(target.Power:GetWidth(), 124 * targetScale + 6, "target Rare/Elite power width grows")
+near(target.Power._ktForeverMask:GetWidth(), 132 * targetScale + 6,
+    "target Rare/Elite power mask grows with bar")
 
 -- Retail uses each unit's real native mask, seated exactly on the portrait
 -- with no generic 5px expansion. Neither MaskTexture is ever mirrored.

@@ -1205,7 +1205,7 @@ end
 
 
 
-local function ApplyForeverBarMask(bar, geom, scale)
+local function ApplyForeverBarMask(bar, geom, scale, portraitExtension)
     if not (bar and geom and geom.mask and C_Texture and C_Texture.GetAtlasInfo) then return end
     local info = C_Texture.GetAtlasInfo(geom.mask)
     if not info then
@@ -1218,7 +1218,7 @@ local function ApplyForeverBarMask(bar, geom, scale)
             bar._ktForeverMaskRetries = retries + 1
             local delay = ({ 0.2, 0.5, 1.5 })[retries + 1] or 1.5
             C_Timer.After(delay, function()
-                ApplyForeverBarMask(bar, geom, scale)
+                ApplyForeverBarMask(bar, geom, scale, portraitExtension)
             end)
         end
         return
@@ -1236,7 +1236,10 @@ local function ApplyForeverBarMask(bar, geom, scale)
     mask:ClearAllPoints()
     mask:SetPoint("TOPLEFT", bar, "TOPLEFT", (geom.mx or 0) * scale, (geom.my or 0) * scale)
     if info.width and info.height then
-        mask:SetSize(info.width * scale, info.height * scale)
+        -- Rare/Elite portrait rings extend Health/Power only toward the
+        -- portrait. Widen the stock mask by the same amount or the new part
+        -- of the StatusBar remains clipped and the visual gap survives.
+        mask:SetSize(info.width * scale + (portraitExtension or 0), info.height * scale)
     end
 
     SeatMaskOnTexture(bar.GetStatusBarTexture and bar:GetStatusBarTexture(), mask)
@@ -1485,9 +1488,24 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- and circular layouts interpret the configured width identically.
     local scale = ResolveStockScale(frame, geom)
     local circularPortrait = frame._ktCircularPortrait and true or false
-    -- Horizontal slide (set by KUIUnitFrames while a rare/elite ring is shown) that
-    -- closes the gap between the ring and the bars once the base art is hidden.
+    -- PLAYER's Rare/Elite overlay replaces the Forever/Retail portrait art.
+    -- Keep this decision inside the renderer as well as the metadata pass:
+    -- delayed atlas retries and later layout reapplies must not resurrect the
+    -- base ornament after the classification border has hidden it.
+    local showBasePortraitArt = frame._ktHideForeverPortraitArt ~= true
+    -- Signed near-edge extension set by KUIUnitFrames while a Rare/Elite ring
+    -- is shown. Player uses a negative value (extend left), target a positive
+    -- one (extend right). The bars grow only toward the portrait, preserving
+    -- their outer edge instead of translating the whole StatusBar.
     local ringShiftX = (frame._ktRingHugShift and (tonumber(frame._ktRingHugShift) or 0)) or 0
+    local portraitExtension = 0
+    local barShiftX = 0
+    if unit == "player" and ringShiftX < 0 then
+        portraitExtension = -ringShiftX
+        barShiftX = ringShiftX
+    elseif unit == "target" and ringShiftX > 0 then
+        portraitExtension = ringShiftX
+    end
 
     frame:SetSize(geom.w * scale, geom.h * scale)
 
@@ -1543,7 +1561,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     fill:ClearAllPoints()
     fill:SetPoint("TOPLEFT", unitRegion, "TOPLEFT", -fillMargin, fillMargin)
     fill:SetPoint("BOTTOMRIGHT", unitRegion, "BOTTOMRIGHT", fillMargin, -fillMargin)
-    fill:Show()
+    if showBasePortraitArt then fill:Show() else fill:Hide() end
 
     -- Patch for the dome's one real flat-bottom corner, shaped with the
     -- hand-authored concave mask above instead of a plain square -- a
@@ -1570,7 +1588,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         UnsnapTexture(cornerPatch)
         frame._ktForeverPortraitCornerPatch = cornerPatch
     end
-    if leftIsActive then
+    if leftIsActive and showBasePortraitArt then
         cornerPatch:SetColorTexture(0, 0, 0, 1)
         cornerPatch:ClearAllPoints()
         cornerPatch:SetPoint("BOTTOMLEFT", unitRegion, "BOTTOMLEFT", -cornerOverlap, -cornerOverlap)
@@ -1596,7 +1614,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         UnsnapTexture(cornerPatch2)
         frame._ktForeverPortraitCornerPatch2 = cornerPatch2
     end
-    if not leftIsActive then
+    if not leftIsActive and showBasePortraitArt then
         cornerPatch2:SetColorTexture(0, 0, 0, 1)
         cornerPatch2:ClearAllPoints()
         cornerPatch2:SetPoint("BOTTOMRIGHT", unitRegion, "BOTTOMRIGHT", cornerOverlap, -cornerOverlap)
@@ -1660,7 +1678,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- gap. Back to sizing from the resolved info, matching what worked
     -- before the gap was reported.
     art:SetSize((info.width or geom.w) * scale, (info.height or geom.h) * scale)
-    art:Show()
+    if showBasePortraitArt then art:Show() else art:Hide() end
     frame._ktDebugArtCalc = string.format(
         "mirrored=%s infoW=%s infoH=%s setW=%.4f setH=%.4f postSetGetWidth=%s postSetGetHeight=%s",
         tostring(geom.mirror and info.leftTexCoord ~= nil), tostring(info.width), tostring(info.height),
@@ -1685,20 +1703,21 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     if geom.health and type(health) == "table" and health.ClearAllPoints then
         health:ClearAllPoints()
         health:SetPoint("TOPLEFT", frame, "TOPLEFT",
-            geom.health.x * scale + ringShiftX, -geom.health.y * scale)
-        health:SetSize(geom.health.w * scale, geom.health.h * scale)
-        health._xOffset = geom.health.x * scale + ringShiftX
+            geom.health.x * scale + barShiftX, -geom.health.y * scale)
+        health:SetSize(geom.health.w * scale + portraitExtension, geom.health.h * scale)
+        health._xOffset = geom.health.x * scale + barShiftX
         health._rightInset = (geom.w - geom.health.x - geom.health.w) * scale
+            - ((unit == "target") and portraitExtension or 0)
         health._topOffset = geom.health.y * scale
-        ApplyForeverBarMask(health, geom.health, scale)
-        ResizeHealthPrediction(frame, geom.health.w * scale, geom.health.h * scale)
+        ApplyForeverBarMask(health, geom.health, scale, portraitExtension)
+        ResizeHealthPrediction(frame, geom.health.w * scale + portraitExtension, geom.health.h * scale)
         -- TEMPORARY debug: cache the exact arithmetic that just ran, and the
         -- width immediately after SetSize, so /ktforevertab can show whether
         -- something ELSE changes it before the user inspects it later.
         frame._ktDebugHealthCalc = string.format(
             "scale=%.4f geomW=%.2f geomH=%.2f setW=%.4f setH=%.4f postSetGetWidth=%s",
             scale, geom.health.w, geom.health.h,
-            geom.health.w * scale, geom.health.h * scale,
+            geom.health.w * scale + portraitExtension, geom.health.h * scale,
             tostring(health.GetWidth and health:GetWidth()))
     end
 
@@ -1706,9 +1725,9 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     if geom.power and type(power) == "table" and power.ClearAllPoints then
         power:ClearAllPoints()
         power:SetPoint("TOPLEFT", frame, "TOPLEFT",
-            geom.power.x * scale + ringShiftX, -geom.power.y * scale)
-        power:SetSize(geom.power.w * scale, geom.power.h * scale)
-        ApplyForeverBarMask(power, geom.power, scale)
+            geom.power.x * scale + barShiftX, -geom.power.y * scale)
+        power:SetSize(geom.power.w * scale + portraitExtension, geom.power.h * scale)
+        ApplyForeverBarMask(power, geom.power, scale, portraitExtension)
     end
 
     SeatStockCastbar(frame, geom, scale)
@@ -1735,7 +1754,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify or "LEFT") end
         frame._ktDebugNameCalc = string.format(
             "point=%s x=%.4f y=%.4f w=%.4f postSetGetWidth=%s postSetText=%s",
-            tostring(point), geom.name.x * scale, geom.name.y * scale, geom.name.w * scale,
+            tostring(point), geom.name.x * scale + ringShiftX, geom.name.y * scale, geom.name.w * scale,
             tostring(nameText.GetWidth and nameText:GetWidth()),
             tostring(nameText.GetText and nameText:GetText()))
     end
