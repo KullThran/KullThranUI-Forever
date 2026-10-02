@@ -10,4 +10,5 @@
 Init.lua
 ..\KullThranUI\Modules\UnitFramesWidth.lua
 Modules\KUIUnitFrames\KUIUnitFrames.lua
+Modules\KUIUnitFrames\KUI_ComboUnderFrame.lua
 Modules\KUIUnitFrames\KUI_UnitFrames_Options.lua

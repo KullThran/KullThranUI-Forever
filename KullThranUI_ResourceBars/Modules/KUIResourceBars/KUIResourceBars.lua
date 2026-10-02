@@ -1011,15 +1011,15 @@ local function GetSecondaryResource()
     return nil
 end
 
--- Classic visual style draws its own combo-point ornament under the player
--- unit frame, so the Resource Bars combo pips are not shown in that style.
+-- When "Combo Points Under Frame" is active the Resource Bars combo pips are hidden.
 do
     local rawGetSecondary = GetSecondaryResource
     GetSecondaryResource = function()
         local res = rawGetSecondary()
-        if res and res.power == PT.COMBO and KT.VisualThemes
-            and KT.VisualThemes.GetRenderedTheme
-            and KT.VisualThemes:GetRenderedTheme() == "classic" then
+        -- Combo points drawn under the unit frames replace these pips
+        -- (default on in the Classic style, off elsewhere; see UnitFrames).
+        if res and res.power == PT.COMBO and KT.GetComboUnderFrameStyle
+            and KT.GetComboUnderFrameStyle() ~= "off" then
             return nil
         end
         return res

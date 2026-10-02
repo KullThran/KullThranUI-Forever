@@ -5623,22 +5623,36 @@ local function SetupUnitIndicators(frame, unit)
         frame._ktDebugPvPCircleProfileVal = tostring(profile and profile.showPvPCircle)
         frame._ktDebugPvPCircleRenderedTheme = tostring(renderedTheme)
         frame._ktDebugPvPCircleComputed = tostring(showPvPCircle)
-        if pvpFaction == "Horde" then
-            frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. "Horde.png")
-            frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
+        -- PvP icon style: "modern" (ours) or "classic" (stock banner, cropped to
+        -- the 42/64 art area like EllesmereUI's Classic Banner).  Default: the
+        -- Classic style in the Classic theme, ours everywhere else.
+        local pvpStyle
+        if profile then
+            if u == "target" then pvpStyle = profile.pvpIconStyleTarget
+            else pvpStyle = profile.pvpIconStyle end
+        end
+        if pvpStyle ~= "modern" and pvpStyle ~= "classic" then
+            pvpStyle = (renderedTheme == "classic") and "classic" or "modern"
+        end
+        if pvpFaction == "Horde" or pvpFaction == "Alliance" then
+            if pvpStyle == "classic" then
+                frame._kuiPvPIcon:SetSize(28, 28)
+                frame._kuiPvPIcon:SetTexture("Interface\\TargetingFrame\\UI-PVP-" .. pvpFaction)
+                frame._kuiPvPIcon:SetTexCoord(0, 0.65625, 0, 0.65625)
+                frame._kuiPvPShadow:Hide()
+                -- The stock banner has its own plate: no backdrop circle.
+                frame._kuiPvPCircle:Hide()
+                frame._kuiPvPCircleBorder:Hide()
+            else
+                frame._kuiPvPIcon:SetSize(16, 16)
+                frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
+                frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
+                frame._kuiPvPShadow:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
+                frame._kuiPvPShadow:SetShown(renderedTheme == "kui")
+                frame._kuiPvPCircle:SetShown(showPvPCircle)
+                frame._kuiPvPCircleBorder:SetShown(showPvPCircle)
+            end
             frame._kuiPvPIcon:Show()
-            frame._kuiPvPShadow:SetTexture(PVP_ICON_PATH .. "Horde.png")
-            frame._kuiPvPShadow:SetShown(renderedTheme == "kui")
-            frame._kuiPvPCircle:SetShown(showPvPCircle)
-            frame._kuiPvPCircleBorder:SetShown(showPvPCircle)
-        elseif pvpFaction == "Alliance" then
-            frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. "Alliance.png")
-            frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
-            frame._kuiPvPIcon:Show()
-            frame._kuiPvPShadow:SetTexture(PVP_ICON_PATH .. "Alliance.png")
-            frame._kuiPvPShadow:SetShown(renderedTheme == "kui")
-            frame._kuiPvPCircle:SetShown(showPvPCircle)
-            frame._kuiPvPCircleBorder:SetShown(showPvPCircle)
         else
             -- Explicit user request: PvP disabled or no faction on this
             -- unit removes the backdrop circle (and its border) too, never
@@ -7105,13 +7119,6 @@ local function ResolveClassResource(playerClass)
             and C_SpecializationInfo.GetSpecialization()
         local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
         local specEntry = specID and entry[specID]
-        if not specEntry and playerClass == "DRUID" and KT.VisualThemes
-            and KT.VisualThemes.GetRenderedTheme
-            and KT.VisualThemes:GetRenderedTheme() == "classic" then
-            -- Classic ornament: Forever reports other/no spec IDs for Druids,
-            -- but combo points always exist in Cat Form.
-            specEntry = { Enum.PowerType.ComboPoints, 5 }
-        end
         if not specEntry then return nil end
 
         if type(specEntry) == "table" and type(specEntry[1]) == "string" then
@@ -7212,8 +7219,10 @@ function ns.KTTargetCombo:_StylePip(pip, r, g, b)
         if pip._border.SetSnapToPixelGrid then pip._border:SetSnapToPixelGrid(false) end
         if pip._border.SetTexelSnappingBias then pip._border:SetTexelSnappingBias(0) end
     end
-    pip._bg:SetVertexColor(0.22, 0.02, 0.02, 0.92)
-    pip._fill:SetVertexColor(r, g, b, 1)
+    -- Default-game look: black socket, metallic rim, glossy red orb.
+    pip._bg:SetVertexColor(0.03, 0.03, 0.03, 1)
+    pip._fill:SetTexture("Interface\\COMMON\\Indicator-Red")
+    pip._fill:SetVertexColor(1, 1, 1, 1)
     -- Confirmed live via close-up screenshot: the gold border (1, 0.82,
     -- 0.08) blends into the bronze ring the pips sit against, low contrast
     -- against a similarly-colored background. White stands out regardless
@@ -7221,8 +7230,7 @@ function ns.KTTargetCombo:_StylePip(pip, r, g, b)
     do
         local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
             and KT.VisualThemes:GetRenderedTheme()
-        local br, bg2, bb = ns.GetThemeOrnamentColor(theme, { 1, 1, 1 })
-        pip._border:SetVertexColor(br, bg2, bb, 1)
+        pip._border:SetVertexColor(0.66, 0.60, 0.52, 1)
     end
 
     if pip._secretBar then
@@ -7297,6 +7305,13 @@ end
 function ns.KTTargetCombo:Refresh(frame)
     local unit = frame and (frame.unit or (frame.GetAttribute and frame:GetAttribute("unit")))
     if not frame or unit ~= "target" then return end
+
+    -- Target combo display is chosen in the options (default off); this
+    -- ring (or the kui bar) only draws for the "ring" choice.
+    if ns.ComboUnderFrame and ns.ComboUnderFrame.GetStyle("target") ~= "ring" then
+        self:_Hide(frame)
+        return
+    end
 
     -- Explicit user request: only show on neutral/hostile targets, never on
     -- an ally -- combo points are a player-vs-enemy mechanic, and the ring
@@ -7418,7 +7433,7 @@ function ns.KTTargetCombo:Refresh(frame)
 
     local portraitSize = portrait:GetWidth()
     if type(portraitSize) ~= "number" or portraitSize < 1 then portraitSize = 46 end
-    local pipSize = math.max(7, math.min(11, portraitSize * 0.16))
+    local pipSize = math.max(8, math.min(14, portraitSize * 0.21))
     -- Confirmed live via screenshot: the previous wide arc (125 degrees,
     -- radius reaching well past the ring) overlapped both the level badge
     -- and the target's PvP icon, which sit further out near the top of the
@@ -7437,7 +7452,7 @@ function ns.KTTargetCombo:Refresh(frame)
     -- near-zero Y offset (+1px). The lowest pip in the arc landed almost
     -- exactly on top of the PvP faction shield whenever the target is a PvP
     -- ally NPC. Raised so the arc clears that corner instead of ending in it.
-    local arcStartDeg, arcEndDeg = 55, 20
+    local arcStartDeg, arcEndDeg = 95, 15
     ring:SetSize((radius + pipSize) * 2, (radius + pipSize) * 2)
     ring:ClearAllPoints()
     ring:SetPoint("CENTER", portrait, "CENTER", 0, 0)
@@ -7497,8 +7512,8 @@ local function CreateCustomClassPower(playerFrame, style)
     local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
         and KT.VisualThemes:GetRenderedTheme()
     local comboPowerType = Enum and Enum.PowerType and Enum.PowerType.ComboPoints or 4
-    local isClassicCombo = renderedTheme == "classic" and not isCustom
-        and powerType == comboPowerType
+    -- Classic combo ornament now lives in KUI_ComboUnderFrame.lua.
+    local isClassicCombo = false
     -- Atlas availability differs between clients: probe first, fall back to
     -- stock textures (glossy red orb on a dark plate) when it is missing.
     local function HasAtlas(name)
@@ -9846,17 +9861,6 @@ function InitializeFrames()
         bar:Show()
     end
 
-    local function ClassicComboForced()
-        local _, cls = UnitClass("player")
-        return (cls == "ROGUE" or cls == "DRUID")
-            and KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-            and KT.VisualThemes:GetRenderedTheme() == "classic"
-    end
-    if ClassicComboForced() and classPowerStyle ~= "modern" then
-        -- Classic always shows its own combo ornament under the player bars.
-        if savedClassPowerBar then savedClassPowerBar:Hide() end
-        classPowerStyle = "modern"
-    end
     if classPowerStyle ~= "none" and frames.player then
         if classPowerStyle == "blizzard" then
             if savedClassPowerBar then
@@ -9882,9 +9886,6 @@ function InitializeFrames()
         -- Also keep showClassPowerBar in sync for backward compat
         db.profile.player.showClassPowerBar = (style ~= "none")
         db.profile.player.classPowerStyle = style
-        if ClassicComboForced() and style ~= "modern" then
-            style = "modern" -- saved style untouched; Classic draws its ornament
-        end
 
         -- Clean up existing
         if frames._customClassPower then
@@ -9936,37 +9937,6 @@ function InitializeFrames()
             end
         end
     end
-
-    -- /ktcombo: dump why the Classic combo ornament is (not) visible.
-    SLASH_KTCOMBO1 = "/ktcombo"
-    SlashCmdList["KTCOMBO"] = function()
-        local function say(msg) DEFAULT_CHAT_FRAME:AddMessage("|cffffd100ktcombo|r " .. tostring(msg)) end
-        local _, cls = UnitClass("player")
-        local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-            and KT.VisualThemes:GetRenderedTheme()
-        local pt, mx, cu = ResolveClassResource(cls)
-        say(("class=%s theme=%s style=%s forced=%s"):format(tostring(cls), tostring(theme),
-            tostring(db.profile.player.classPowerStyle), tostring(ClassicComboForced() and true or false)))
-        say(("resource=%s max=%s custom=%s"):format(tostring(pt), tostring(mx), tostring(cu)))
-        local c = frames._customClassPower
-        if not c then say("container=nil (no se creo)"); return end
-        local pt1, rel, pt2, x, y = c:GetPoint(1)
-        say(("container shown=%s w=%.0f h=%.0f parent=%s classic=%s alpha=%.2f"):format(
-            tostring(c:IsShown()), c:GetWidth(), c:GetHeight(),
-            tostring(c:GetParent() and c:GetParent():GetName()), tostring(c._ktClassicCombo), c:GetAlpha()))
-        say(("point=%s rel=%s %s x=%s y=%s strata=%s level=%s"):format(tostring(pt1),
-            tostring(rel and rel.GetName and rel:GetName()), tostring(pt2), tostring(x), tostring(y),
-            tostring(c:GetFrameStrata()), tostring(c:GetFrameLevel())))
-    end
-
-    -- The rendered theme may not be resolved yet at load: re-check shortly
-    -- after so Classic always gets its combo ornament without a second reload.
-    C_Timer.After(1.5, function()
-        if ClassicComboForced() and frames.player and not frames._customClassPower
-            and frames._toggleClassPower then
-            frames._toggleClassPower(db.profile.player.classPowerStyle or "none")
-        end
-    end)
 
     oUF:SetActiveStyle("KUITarget")
     frames.target = oUF:Spawn("target", "KullThranUI_UF_Target")
@@ -10504,6 +10474,7 @@ local function SetupOptionsPanel()
             self:Hide()
             ns._ufReloadPending = false
             ReloadFrames()
+            if ns.ComboUnderFrame then ns.ComboUnderFrame:RefreshAll() end
         end)
     end
 

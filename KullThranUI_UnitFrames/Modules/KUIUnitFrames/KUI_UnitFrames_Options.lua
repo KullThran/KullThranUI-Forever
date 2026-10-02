@@ -1346,6 +1346,178 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
     end
 end
 
+-- Combo points under the frame (Player preview), drawn after the
+-- Rare/Elite ring logic so its early returns do not skip it.
+do
+    local rawApplyPreviewUnit = ns.ApplyPreviewUnit
+    ns.ApplyPreviewUnit = function(frame, unitKey, ...)
+        rawApplyPreviewUnit(frame, unitKey, ...)
+        if ns.ComboUnderFrame then ns.ComboUnderFrame.ApplyPreview(frame, unitKey) end
+    end
+end
+
+-- Combo point style picker (tiles) for Player / Target.  Player: Off, Modern,
+-- Classic.  Target: Off, Ring (circle around the portrait), Modern, Classic.
+-- PvP icon style picker (graphic tiles): Modern = ours, Classic = stock banner.
+-- Independent for Player (pvpIconStyle) and Target (pvpIconStyleTarget).
+function ns.BuildPvPPicker(container, W, by, unitKey)
+    local db = GetDB()
+    local isTarget = unitKey == 'target'
+    local dbKey = isTarget and 'pvpIconStyleTarget' or 'pvpIconStyle'
+        local _, lh = W:Label(container, isTarget and 'PvP Icon Style (Target)' or 'PvP Icon Style (Player)', -by, 12)
+        by = by + lh
+        local holder = CreateFrame("Frame", nil, container)
+        holder:SetPoint("TOPLEFT", 10, -by)
+        holder:SetSize(200, 96)
+        local buttons = {}
+        local faction = (UnitFactionGroup and UnitFactionGroup("player")) or "Horde"
+        if faction ~= "Alliance" then faction = "Horde" end
+        local function Current()
+            if db[dbKey] == 'modern' or db[dbKey] == 'classic' then return db[dbKey] end
+            -- Same render-time default as KUIUnitFrames.lua: Classic theme -> classic.
+            local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+                and KT.VisualThemes:GetRenderedTheme()
+            return renderedTheme == 'classic' and 'classic' or 'modern'
+        end
+        local function PaintButtons()
+            local current = Current()
+            local ar, ag, ab = CurrentAccentColor()
+            for key, btn in pairs(buttons) do
+                local on = current == key
+                btn:SetBackdropColor(on and ar * 0.25 or 0.06, on and ag * 0.25 or 0.06, on and ab * 0.25 or 0.08, 1)
+                btn:SetBackdropBorderColor(on and ar or 0.22, on and ag or 0.22, on and ab or 0.26, 1)
+            end
+        end
+        local defs = { { key = 'modern', label = 'Modern' }, { key = 'classic', label = 'Classic' } }
+        for index, def in ipairs(defs) do
+            local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
+            btn:SetSize(92, 96)
+            btn:SetPoint("TOPLEFT", (index - 1) * 100, 0)
+            btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetSize(56, 56)
+            tex:SetPoint("TOP", 0, -8)
+            if def.key == 'classic' then
+                tex:SetTexture("Interface\\TargetingFrame\\UI-PVP-" .. faction)
+                tex:SetTexCoord(0, 0.65625, 0, 0.65625)
+            else
+                tex:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\icons\\EnhancedFriendList\\" .. faction .. ".png")
+            end
+            local fs = btn:CreateFontString(nil, "OVERLAY")
+            fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+            fs:SetPoint("BOTTOM", 0, 8)
+            fs:SetText(LText(def.label))
+            btn:SetScript("OnClick", function()
+                SetAndRefresh(function() db[dbKey] = def.key end)
+                PaintButtons()
+            end)
+            buttons[def.key] = btn
+        end
+        PaintButtons()
+        by = by + 104
+    return by
+end
+
+function ns.BuildComboPicker(container, W, by, unitKey)
+    local CUF = ns.ComboUnderFrame
+    local db = GetDB()
+    local isTarget = unitKey == 'target'
+    local dbKey = isTarget and 'comboTargetStyle' or 'comboUnderFrame'
+    local _, lh = W:Label(container, isTarget and 'Combo Points (Target)' or 'Combo Points Under Player Frame', -by, 12)
+    by = by + lh
+    local holder = CreateFrame("Frame", nil, container)
+    holder:SetPoint("TOPLEFT", 10, -by)
+    holder:SetSize(310, 96)
+    local buttons = {}
+    local function Current()
+        return db[dbKey] or (CUF and CUF.GetStyle(unitKey)) or 'off'
+    end
+    local function PaintButtons()
+        local current = Current()
+        local ar, ag, ab = CurrentAccentColor()
+        for key, btn in pairs(buttons) do
+            local on = current == key
+            btn:SetBackdropColor(on and ar * 0.25 or 0.06, on and ag * 0.25 or 0.06, on and ab * 0.25 or 0.08, 1)
+            btn:SetBackdropBorderColor(on and ar or 0.22, on and ag or 0.22, on and ab or 0.26, 1)
+        end
+    end
+    local defs = { { key = 'off', label = 'Off', hint = 'Hidden' } }
+    if isTarget then defs[#defs + 1] = { key = 'ring', label = 'Ring' } end
+    defs[#defs + 1] = { key = 'modern', label = 'Modern' }
+    defs[#defs + 1] = { key = 'classic', label = 'Classic' }
+    local count = #defs
+    local tileW = (count > 3) and 72 or 92
+    local step = tileW + 6
+    for index, def in ipairs(defs) do
+        local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
+        btn:SetSize(tileW, 96)
+        btn:SetPoint("TOPLEFT", (index - 1) * step, 0)
+        btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        local function Pip(atlas, fallback, x, y, size)
+            local t = btn:CreateTexture(nil, "ARTWORK")
+            t:SetSize(size, size)
+            t:SetPoint("TOP", x, y)
+            if CUF and CUF.HasAtlas(atlas) then t:SetAtlas(atlas, false) else t:SetTexture(fallback) end
+            return t
+        end
+        if def.key == 'modern' and CUF then
+            Pip(CUF.ATLAS.modernFill, "Interface\\COMMON\\Indicator-Red", -12, -16, 22)
+            Pip(CUF.ATLAS.modernEmpty, "Interface\\COMMON\\Indicator-Gray", 12, -16, 22)
+        elseif def.key == 'classic' and CUF then
+            local plate = btn:CreateTexture(nil, "ARTWORK")
+            plate:SetSize(tileW - 12, 13)
+            plate:SetPoint("TOP", 0, -20)
+            if CUF.HasAtlas(CUF.ATLAS.plate) then plate:SetAtlas(CUF.ATLAS.plate, false)
+            else plate:SetColorTexture(0.05, 0.05, 0.05, 1) end
+        elseif def.key == 'ring' then
+            for k = 1, 4 do
+                local a = math.rad(100 - (k - 1) * 28)
+                local t = btn:CreateTexture(nil, "ARTWORK")
+                t:SetSize(11, 11)
+                t:SetPoint("CENTER", btn, "TOP", math.cos(a) * 22 - 6, -34 + math.sin(a) * 16)
+                t:SetTexture(k <= 2 and "Interface\\COMMON\\Indicator-Red" or "Interface\\COMMON\\Indicator-Gray")
+                if k > 2 then t:SetVertexColor(0.1, 0.1, 0.1, 1) end
+            end
+        else
+            local hint = btn:CreateFontString(nil, "OVERLAY")
+            hint:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+            hint:SetPoint("TOP", 0, -24)
+            hint:SetWidth(tileW - 8)
+            hint:SetText(LText(def.hint))
+        end
+        local fs = btn:CreateFontString(nil, "OVERLAY")
+        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        fs:SetPoint("BOTTOM", 0, 8)
+        fs:SetText(LText(def.label))
+        btn:SetScript("OnClick", function()
+            SetAndRefresh(function() db[dbKey] = def.key end)
+            PaintButtons()
+        end)
+        buttons[def.key] = btn
+    end
+    PaintButtons()
+    by = by + 104
+    -- Position preset (below / above the frame) and fine X / Y offsets.
+    local suffix = isTarget and 'Target' or 'Player'
+    local _, ph = W:Dropdown(container, 'Combo Points Position', -by,
+        { below = 'Below Frame', above = 'Above Frame' },
+        function() return db['comboPos' .. suffix] == 'above' and 'above' or 'below' end,
+        function(v) SetAndRefresh(function() db['comboPos' .. suffix] = v end) end)
+    by = by + ph
+    local _, xh = W:Slider(container, 'Combo Points X', -by,
+        function() return db['comboX' .. suffix] or 0 end,
+        function(v) SetAndRefresh(function() db['comboX' .. suffix] = v end) end,
+        -150, 150, 1, '%d')
+    by = by + xh
+    local _, yh = W:Slider(container, 'Combo Points Y', -by,
+        function() return db['comboY' .. suffix] or 0 end,
+        function(v) SetAndRefresh(function() db['comboY' .. suffix] = v end) end,
+        -150, 150, 1, '%d')
+    return by + yh
+end
+
 local function FontValues()
     local vals = {}
     local compat = ns.KUIUFCompat
@@ -2141,6 +2313,8 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
             _, h = W:Dropdown(container, 'Class Power Style', -by, CLASS_POWER_STYLES,
                 function() return db.player.classPowerStyle or 'none' end,
                 function(v) SetAndRefresh(function() db.player.classPowerStyle = v; db.player.showClassPowerBar = (v ~= 'none') end) end); by = by + h
+            by = ns.BuildComboPicker(container, W, by, 'player')
+            by = ns.BuildPvPPicker(container, W, by, 'player')
             _, h = W:Dropdown(container, 'Combat Indicator', -by, COMBAT_INDICATOR_STYLES,
                 function() return NormalizeCombatIndicatorStyle(db.player.combatIndicatorStyle) end,
                 function(v) SetAndRefresh(function() db.player.combatIndicatorStyle = v end) end); by = by + h
@@ -2176,6 +2350,8 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 showHeader = false,
                 showFrameScale = true,
             })
+            by = ns.BuildComboPicker(container, W, by, 'target')
+            by = ns.BuildPvPPicker(container, W, by, 'target')
             return by
         end, 'target')
 
