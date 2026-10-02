@@ -40,6 +40,14 @@ local CLASSIFICATION_NO_PORTRAIT_SIZE = 20
 local CLASSIFICATION_PORTRAIT_SCALE = 1.18
 -- ELITE.png and RARE.png are square 512x512 textures.
 local CLASSIFICATION_TEXTURE_ASPECT = 1
+-- The modern Rare/Elite PNGs have transparent canvas around the visible art.
+-- Keep only a small overlap under the gold edge: following the narrow dragon
+-- silhouette too deeply makes Health/Power invade the portrait aperture.
+ns.ModernClassificationRing = ns.ModernClassificationRing or {
+    centerX = 0.06,
+    visibleRadius = 0.405,
+    barOverlap = 5,
+}
 -- Blizzard Classic's own Rare/Elite frame sheets (same 256x128 layout as
 -- UI-TargetingFrame, so they replace it 1:1 in the Classic style). Outside Classic
 -- the player can show a crop of the portrait side as an overlay ring; the crop
@@ -5534,8 +5542,17 @@ local function SetupUnitIndicators(frame, unit)
                 playerClassicRingKind = nil
             end
         end
-        if u == "player" and (renderedTheme == "forever" or renderedTheme == "retail") then
-            local wantCircular = playerCustomBorder ~= nil
+        local usesForeverArt = renderedTheme == "forever" or renderedTheme == "retail"
+        if u == "player" and not usesForeverArt then
+            frame._ktHideForeverPortraitArt = false
+        end
+        if u == "player" and usesForeverArt then
+            local hideBaseArt = playerCustomBorder ~= nil
+            -- Persist the replacement state on the frame so every renderer
+            -- pass (including delayed atlas retries) keeps the Forever art
+            -- hidden while PLAYER uses a Rare/Elite border.
+            frame._ktHideForeverPortraitArt = hideBaseArt
+            local wantCircular = hideBaseArt
             if (frame._ktCircularPortrait and true or false) ~= wantCircular then
                 frame._ktCircularPortrait = wantCircular
                 local VT2 = KT.VisualThemes
@@ -5543,11 +5560,15 @@ local function SetupUnitIndicators(frame, unit)
                     VT2:ApplyForeverUnitFrameArt(frame, portraitBackdrop, u)
                 end
             end
-            local showBase = playerCustomBorder == nil
-            if frame._ktForeverPortraitArt then frame._ktForeverPortraitArt:SetShown(showBase) end
-            if frame._ktForeverPortraitArtFill then frame._ktForeverPortraitArtFill:SetShown(showBase) end
-            if frame._ktForeverPortraitCornerPatch then frame._ktForeverPortraitCornerPatch:SetShown(showBase) end
-            if frame._ktForeverPortraitCornerPatch2 then frame._ktForeverPortraitCornerPatch2:SetShown(showBase) end
+            -- Hide immediately even if atlas data is temporarily unavailable.
+            -- Restoration is handled by ApplyForeverUnitFrameArt above so it
+            -- restores only the correct side's corner patch, never both.
+            if hideBaseArt then
+                if frame._ktForeverPortraitArt then frame._ktForeverPortraitArt:Hide() end
+                if frame._ktForeverPortraitArtFill then frame._ktForeverPortraitArtFill:Hide() end
+                if frame._ktForeverPortraitCornerPatch then frame._ktForeverPortraitCornerPatch:Hide() end
+                if frame._ktForeverPortraitCornerPatch2 then frame._ktForeverPortraitCornerPatch2:Hide() end
+            end
         end
         -- Explicit user request (corrected): elite/rare/worldboss targets
         -- get ONLY the classification overlay (the thorn/dragon ring) --
@@ -5734,14 +5755,20 @@ local function SetupUnitIndicators(frame, unit)
                     local edge = (u == "target") and frame.Health:GetRight() or frame.Health:GetLeft()
                     if cx and edge then
                         local stockEdge = edge - oldShift
-                        -- The ring texture has transparent margin: its visible edge is
-                        -- ~88% of the half-width. Aim to overlap that visible edge.
-                        local visRadius = ringWidth * 0.44
-                        local ringEdge = (u == "target") and (cx - visRadius) or (cx + visRadius)
+                        -- Follow the ring's overall visible edge rather than the
+                        -- narrow dragon silhouette at this height. The latter sits
+                        -- inside the portrait aperture and over-extends the bars.
+                        local visRadius = ringWidth * ns.ModernClassificationRing.visibleRadius
+                        local ringCenter = cx
+                            + (isFlipped and -ns.ModernClassificationRing.centerX
+                                or ns.ModernClassificationRing.centerX) * ringWidth
+                        local ringEdge = (u == "target") and (ringCenter - visRadius) or (ringCenter + visRadius)
                         local gap = (u == "target") and (ringEdge - stockEdge) or (stockEdge - ringEdge)
                         local newShift = 0
-                        if gap + 4 > 1 then
-                            newShift = (u == "target") and (gap + 4) or -(gap + 4)
+                        if gap + ns.ModernClassificationRing.barOverlap > 1 then
+                            newShift = (u == "target")
+                                and (gap + ns.ModernClassificationRing.barOverlap)
+                                or -(gap + ns.ModernClassificationRing.barOverlap)
                         end
                         if math.abs(newShift - oldShift) > 0.5 then
                             frame._ktRingHugShift = newShift
@@ -5759,7 +5786,9 @@ local function SetupUnitIndicators(frame, unit)
                 -- ~0.44, 0.52 of the texture; mirrored when flipped): shift it so the
                 -- opening sits on the portrait centre.
                 portraitRing:SetPoint("CENTER", portraitBackdrop, "CENTER",
-                    (isFlipped and -0.06 or 0.06) * ringWidth, 0.02 * ringHeight)
+                    (isFlipped and -ns.ModernClassificationRing.centerX
+                        or ns.ModernClassificationRing.centerX) * ringWidth,
+                    0.02 * ringHeight)
                 portraitBackdrop:SetClipsChildren(false)
                 portraitRing:Show()
                 frame._kuiClassificationPortraitActive = true
@@ -11495,10 +11524,3 @@ function Mod:OnDisable()
     end
     HideFrameTree(frames)
 end
-
-
-
-
-
-
-
