@@ -12,7 +12,8 @@ Beta centered on a full visual-style refresh: Forever, Classic and Retail now lo
 **New**
 - Forever, Classic and Retail styles with authentic player, target and pet frame art, plus matching action bars, cast bars, resource bars, nameplates, minimap, damage meter and objective tracker.
 - Pet frame follows the selected style and appears in the Unit Frames live preview.
-- Classic combo points: red orbs on a dark plate under the player bars (Classic style only).
+- Combo points under the Player and Target frames, chosen separately: Off, Modern or Classic (Target also has a portrait Ring), placed below or above the frame with X/Y offsets and a live preview. Classic is on by default in the Classic style.
+- PvP icon styles for Player and Target: Modern or Classic banner, Classic by default in the Classic style.
 - Action Bar Art selector with live previews.
 - Circles and Pips options for combo points.
 - Per-ability cooldown display rules: always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge controls.
