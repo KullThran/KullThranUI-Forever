@@ -1011,6 +1011,21 @@ local function GetSecondaryResource()
     return nil
 end
 
+-- Classic visual style draws its own combo-point ornament under the player
+-- unit frame, so the Resource Bars combo pips are not shown in that style.
+do
+    local rawGetSecondary = GetSecondaryResource
+    GetSecondaryResource = function()
+        local res = rawGetSecondary()
+        if res and res.power == PT.COMBO and KT.VisualThemes
+            and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme() == "classic" then
+            return nil
+        end
+        return res
+    end
+end
+
 -------------------------------------------------------------------------------
 --  Base de Datos: Inicialización Segura
 -------------------------------------------------------------------------------
