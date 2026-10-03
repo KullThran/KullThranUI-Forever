@@ -4,10 +4,10 @@
 --  Setting: KT.db.profile.unitFrames.comboUnderFrame = "off" | "modern" | "classic"
 --    * nil (never touched) resolves to "classic" when the Classic visual style
 --      is rendered and to "off" for every other style/preset.
---    * "modern"  : EllesmereUI-style atlas pips (uf-roguecp-*).
+--    * "modern"  : atlas pips (uf-roguecp-*).
 --    * "classic" : slim ornament plate with round slots (Classic look).
 --
---  Structure follows BetterBlizzFrames' combo module: a bar anchored under the
+--  Structure: a bar anchored under the
 --  frame, one pip per combo point, driven by UnitPower/UnitPowerMax and refreshed
 --  on power / max-power / target / shapeshift events.  Drawing is done here with
 --  plain textures (no Blizzard XML templates).

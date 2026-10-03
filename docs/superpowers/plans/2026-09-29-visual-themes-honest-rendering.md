@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Everything in this plan happens in the `KullThranUI-Forever-Workspace` only. No file in `KullThranUI-Workspace` (Retail) is touched.
-- No tag, comment, identifier, or string in any created/modified file may reference EllesmereUI or any other third-party addon by name.
+- No tag, comment, identifier, or string in any created/modified file may reference any third-party addon by name.
 - `kui`'s seeded values must not change observably, except for dropping a field already confirmed to have zero rendering effect (`classThemeStyle` in UnitFrames).
 - `forever` and `retail` seeds may only: (a) pick among texture/shape/style values already real and already validated by that module, and (b) set a fixed accent/border color. Neither gets a new render branch.
 - Only `classic`, and only in `UnitFrames`, `CastBar`, `ResourceBars`, `CooldownManager`, gets the new 9-slice border option.

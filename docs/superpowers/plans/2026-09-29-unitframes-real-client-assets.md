@@ -14,7 +14,7 @@
 
 - Everything happens in the `KullThranUI-Forever-Workspace` only. `retail` and `kui` are not touched. Any port to Retail is out of scope.
 - ActionBars' side ornaments are explicitly out of scope (deferred to a future spec/plan).
-- No tag, comment, identifier, or string in any changed file may reference EllesmereUI or any third-party project by name. Real Blizzard file paths (`Interface\TargetingFrame\UI-StatusBar`, `Interface\TargetingFrame\UI-TargetingFrame`) and real Blizzard-defined atlas name strings are facts about the game client and are fine to use.
+- No tag, comment, identifier, or string in any changed file may reference any third-party project by name. Real Blizzard file paths (`Interface\TargetingFrame\UI-StatusBar`, `Interface\TargetingFrame\UI-TargetingFrame`) and real Blizzard-defined atlas name strings are facts about the game client and are fine to use.
 - `forever`'s real atlas name is not pinned by the spec or this plan — it is Task 2's own first step to identify one, and the render code must always gate its use behind `C_Texture.GetAtlasInfo(name) ~= nil`, falling back to the current fixed-accent-color look (already shipped) when it doesn't resolve.
 - `classic`'s texture-coordinate slice of `UI-TargetingFrame` is derived independently by inspection in Task 1, not copied from any reference material's own reverse-engineered cuts, and is disclosed as provisional/unverified pending in-game QA — same discipline `ThemeBorderKit`'s crop already used.
 - Switching away from a theme must call that theme's own clear/restore function (hide, not just stop updating) — same rule enforced throughout the already-merged plan.

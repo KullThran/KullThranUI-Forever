@@ -20,7 +20,7 @@ That intuition holds for two of the three non-`kui` themes, and does not for the
 - `classic` UnitFrames render with real, fixed-path vanilla-era Blizzard texture files for the portrait/frame art and the health bar fill, not KullThranUI's own custom textures recolored.
 - `forever` UnitFrames render with real Forever-native atlas art (portrait ring / corner ornament) via `SetAtlas`, verified present at runtime (`C_Texture.GetAtlasInfo`) with a safe fallback to the current fixed-accent-color look if a name doesn't resolve.
 - `retail` and `kui` are untouched by this spec.
-- No tag, comment, identifier, or string anywhere may reference EllesmereUI or any third-party project by name — same absolute rule as before. Real Blizzard file paths and real Blizzard-defined atlas name strings are facts about the game client, not EllesmereUI's IP, and are fine to use; EllesmereUI's own code, comments, or internal identifiers are not.
+- No tag, comment, identifier, or string anywhere may reference any third-party project by name — same absolute rule as before. Real Blizzard file paths and real Blizzard-defined atlas name strings are facts about the game client, not third-party IP, and are fine to use; third-party code, comments, or internal identifiers are not.
 - This is the flagship module for the pattern; ActionBars' gryphon/wyvern side ornaments and any other module are explicitly out of scope here and get their own future spec/plan following the same shape.
 
 ## 3. Non-goals

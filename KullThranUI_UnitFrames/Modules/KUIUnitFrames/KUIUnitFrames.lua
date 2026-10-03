@@ -1401,8 +1401,8 @@ local function GetSettingsForUnit(unit) return UCtx.ResolveSettings(unit) end
 local function GetMiniDonorSettings() return UCtx.ResolveMiniDonor() end
 
 -- Forever/Retail: use Blizzard's own pre-coloured bar atlases as the fill of the
--- Player/Target health and power bars (same atlases EllesmereUI/BetterBlizzFrames
--- reference). Only when the user kept the default texture AND the default health
+-- Player/Target health and power bars (Blizzard client atlases
+-- are used). Only when the user kept the default texture AND the default health
 -- colour; every atlas is validated with GetAtlasInfo and falls back to the flat fill.
 -- The atlas is already coloured, so the bar's vertex colour is forced back to white.
 ns.AtlasFill = {}
@@ -1441,7 +1441,7 @@ function ns.AtlasFill.IsDefaultGreen(c)
         or (near(c.r, 0.10) and near(c.g, 0.90) and near(c.b, 0.10))
 end
 -- Hostile units must not wear the friendly green: class colour for enemy players, reaction
--- colour (tapped = grey) for NPCs, same rule EllesmereUI's oUF health uses.
+-- colour (tapped = grey) for NPCs.
 function ns.AtlasFill.EnemyColor(unit)
     if not unit or not UnitExists(unit) then return end
     local ok, can = pcall(UnitCanAttack, "player", unit)
@@ -5787,7 +5787,7 @@ local function SetupUnitIndicators(frame, unit)
         frame._ktDebugPvPCircleRenderedTheme = tostring(renderedTheme)
         frame._ktDebugPvPCircleComputed = tostring(showPvPCircle)
         -- PvP icon style: "modern" (ours) or "classic" (stock banner, cropped to
-        -- the 42/64 art area like EllesmereUI's Classic Banner).  Default: the
+        -- the 42/64 art area).  Default: the
         -- Classic style in the Classic theme, ours everywhere else.
         local pvpStyle
         if profile then

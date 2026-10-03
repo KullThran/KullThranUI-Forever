@@ -1171,7 +1171,7 @@ local FOREVER_FRAME_GEOMETRY = {
 }
 
 -- Explicit user correction: Retail's target portrait is player's own real
--- atlas, mirrored -- same technique EllesmereUI uses -- not a separate
+-- atlas, mirrored -- not a separate
 -- target-native atlas. Target's own real atlas genuinely lacks the
 -- decorative ring point (see FOREVER_FRAME_GEOMETRY.target's comment), and
 -- the separate "-Type" reputation-strip atlas this used to layer on top
@@ -1413,7 +1413,7 @@ local function ResolveRetailAtlasOverride(atlasName)
     local entry = atlasName and RETAIL_ATLAS_OVERRIDES[atlasName:lower()]
     trail.foundEntry = entry ~= nil
     if not entry then trail.result = "no-table-entry"; return nil end
-    -- Empirical check, matching EllesmereUI's own actual approach: ask the
+    -- Empirical check: ask the
     -- CLIENT what this atlas name resolves to right now, rather than
     -- trusting a client-flavor flag. Confirmed live via /ktretaildebug:
     -- KT:IsForever() returned false on this exact client despite the art

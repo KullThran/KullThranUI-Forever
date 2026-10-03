@@ -5892,8 +5892,8 @@ HEALTH_ITEMS = {
     { itemID = 224464, spellID = 452930, class = "WARLOCK", cooldown = 60, name = "Demonic Healthstone" },
     { itemID = 5512,   spellID = 6262, cooldown = 60, name = "Healthstone" },
 }
--- Forever: only the vanilla consumables exist. Same model EllesmereUI uses
--- (Forever catalogue replaces the retail presets): vanilla healing potions and
+-- Forever: only the vanilla consumables exist. The Forever catalogue replaces
+-- the retail presets: vanilla healing potions and
 -- the five healthstone tiers (base + the two improved-talent stones each).
 -- `cooldown` is only the group marker the tracker uses (60 = stone, 300 = potion);
 -- the real swipe comes from the item's own cooldown.
@@ -5903,7 +5903,7 @@ if ns.KUI_IS_FOREVER then
     for _, id in ipairs({ 13446, 3928, 1710, 929, 858, 118 }) do
         HEALTH_ITEMS[#HEALTH_ITEMS + 1] = { itemID = id, cooldown = 300 }
     end
-    -- Stone families (Ellesmere's Forever healthstone preset): Major, Greater,
+    -- Stone families (Forever healthstone preset): Major, Greater,
     -- Healthstone, Lesser, Minor.
     for _, id in ipairs({
         19013, 19012, 9421, 19011, 19010, 5510, 19009, 19008, 5509,
