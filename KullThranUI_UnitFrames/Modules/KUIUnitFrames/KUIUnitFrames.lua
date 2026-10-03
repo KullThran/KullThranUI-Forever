@@ -793,6 +793,24 @@ local function UnitFrameStrataObjectBlocked(frame)
     return not ok or blocked == true
 end
 
+-- Indicator overlays (level, PvP, combo ring...) stay in the unit frame's
+-- LOW strata and sit above the portrait by frame level, so the world map and
+-- other windows still cover them.
+function ns.ApplyOverlayStrata(overlay, owner)
+    if not (overlay and overlay.SetFrameStrata) then return end
+    owner = owner or overlay:GetParent()
+    local bd = owner and owner.Portrait and owner.Portrait.backdrop
+    local function Apply(f, depth)
+        pcall(f.SetFrameStrata, f, "LOW")
+        if depth < 4 and f.GetChildren then
+            for _, child in ipairs({ f:GetChildren() }) do Apply(child, depth + 1) end
+        end
+    end
+    Apply(overlay, 0)
+    local floor = ((bd and bd.GetFrameLevel and bd:GetFrameLevel()) or 0) + 10
+    if (overlay:GetFrameLevel() or 0) < floor then pcall(overlay.SetFrameLevel, overlay, floor) end
+end
+
 local function SetUnitFrameTreeStrata(frame, seen)
     local frameType = type(frame)
     if (frameType ~= "table" and frameType ~= "userdata")
@@ -815,7 +833,7 @@ local function SetUnitFrameTreeStrata(frame, seen)
         return
     end
     if frame._kuiAbovePortraitOverlay then
-        pcall(frame.SetFrameStrata, frame, "HIGH")
+        ns.ApplyOverlayStrata(frame)
         return
     end
 
@@ -3849,8 +3867,10 @@ local function CreatePortrait(frame, side, frameHeight, unit)
 
     local backdrop = CreateFrame("Frame", nil, frame)
     backdrop._isPortraitBackdrop = true  -- Flag to exclude from strata reset
-    backdrop:SetFrameStrata("MEDIUM")  -- Above frame's LOW strata to render on top
-    backdrop:SetFrameLevel(50)  -- High level to be above all frame elements
+    -- Same LOW strata as the frame (MEDIUM drew it over the world map and
+    -- other windows); a high frame level keeps it above the bars.
+    backdrop:SetFrameStrata("LOW")
+    backdrop:SetFrameLevel(math.max(50, (frame:GetFrameLevel() or 0) + 20))
     backdrop:EnableMouse(false)  -- Allow clicks to pass through to unit frame
     PP.Size(backdrop, adjustedHeight, adjustedHeight)
     backdrop:SetClipsChildren(true)
@@ -5324,8 +5344,8 @@ local function SetupUnitIndicators(frame, unit)
         local ovr = CreateFrame("Frame", nil, frame)
         ovr:SetAllPoints(frame)
         ovr._kuiAbovePortraitOverlay = true
-        ovr:SetFrameStrata("HIGH")
         ovr:SetFrameLevel(frame:GetFrameLevel() + 60)
+        ns.ApplyOverlayStrata(ovr, frame)
         frame._kuiIndicatorOverlay = ovr
     end
     local iOvr = frame._kuiIndicatorOverlay
@@ -6528,8 +6548,8 @@ SetupPlayerStatusIndicators = function(frame, settings)
         local ovr = CreateFrame("Frame", nil, frame)
         ovr:SetAllPoints(frame)
         ovr._kuiAbovePortraitOverlay = true
-        ovr:SetFrameStrata("HIGH")
         ovr:SetFrameLevel(frame:GetFrameLevel() + 60)
+        ns.ApplyOverlayStrata(ovr, frame)
         frame._kuiIndicatorOverlay = ovr
     end
     local iOvr = frame._kuiIndicatorOverlay
