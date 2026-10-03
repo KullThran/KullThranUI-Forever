@@ -3951,7 +3951,7 @@ local function CreatePortrait(frame, side, frameHeight, unit)
             local s3 = key and db.profile[key]
             local zoom = math.max(0.25, ((s3 and s3.portrait3DZoom) or 125) / 100)
             local backdropFrame = self:GetParent()
-            local rot, formZoom, formShift = KT.Portrait3DYaw(updatedUnit, backdropFrame and backdropFrame._portraitSide,
+            local rot, formZoom, formShift = KT.Portrait3DYaw(updatedUnit, (s3 and s3.portraitSide) or (backdropFrame and backdropFrame._portraitSide),
                 s3 and s3.portraitFacingMode,
                 false,
                 s3 and s3.portrait3DRotation)
