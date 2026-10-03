@@ -2420,10 +2420,7 @@ local PORTRAIT_MODES = {
     ["3d"] = "3D Portrait",
     ["class"] = "Class Theme",
 }
-local CIRCULAR_PORTRAIT_MODES = {
-    ["2d"] = "2D Portrait",
-    ["class"] = "Class Theme",
-}
+local PORTRAIT_MODE_ORDER = { "2d", "3d", "class" }
 local PORTRAIT_FACING = {
     normal = "Normal",
     flipped = "Flipped",
@@ -2466,17 +2463,10 @@ local function AddFrameLayoutControls(container, W, mode)
             RefreshPage()
         end
     ); by = by + h
-    _, h = W:Dropdown(container, "Portrait Mode", -by,
-        function()
-            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
-            return style == "circular" and CIRCULAR_PORTRAIT_MODES or PORTRAIT_MODES
-        end,
-        function()
-            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
-            local mode = GetValue(configMode, "portraitMode", "2d")
-            return style == "circular" and mode == "3d" and "2d" or mode
-        end,
-        function(v) ApplyValue(configMode, "portraitMode", v) end
+    _, h = W:Dropdown(container, "Portrait Mode", -by, PORTRAIT_MODES,
+        function() return GetValue(configMode, "portraitMode", "2d") end,
+        function(v) ApplyValue(configMode, "portraitMode", v) end,
+        PORTRAIT_MODE_ORDER
     ); by = by + h
     _, h = W:Dropdown(container, "Portrait Side", -by, PORTRAIT_SIDES,
         function() return GetValue(configMode, "portraitSide", "left") end,

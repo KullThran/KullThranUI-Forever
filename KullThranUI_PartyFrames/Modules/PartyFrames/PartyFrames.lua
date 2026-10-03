@@ -2387,6 +2387,7 @@ end
 
 function Mod:UpdateFrameRange(frame, updateAurasOnChange)
     if not (frame and frame.unit) or frame.fakeUnit then return true end
+    if frame._portraitModelActive then ns.PF_Portrait.RefreshModel(frame) end
     if SafeUnitBoolean(UnitIsDeadOrGhost, frame.unit) or SafeUnitBoolean(UnitIsConnected, frame.unit) == false then
         return true
     end
@@ -3119,12 +3120,98 @@ ns.PF_Portrait.UpdateBorder = function(frame, db, fakeData)
     frame.portraitBorder:SetVertexColor(r, g, b, a)
 end
 
+-- 3D portraits use a PlayerModel. The model is only re-applied when something
+-- that changes it happens (another unit or character in the slot, a model or
+-- portrait event, the unit going offline or out of view). Routine repaints for
+-- flags, range or roster updates leave it alone so the idle animation keeps
+-- playing instead of restarting.
+ns.PF_Portrait.questionMarkModel = "Interface\\Buttons\\TalkToMeQuestionMark.m2"
+
+ns.PF_Portrait.Call = function(object, method, ...)
+    local fn = object and object[method]
+    if not fn then return false end
+    return pcall(fn, object, ...)
+end
+
+ns.PF_Portrait.SafeUnitFlag = function(fn, unit)
+    if not fn then return true end
+    local ok, value = pcall(fn, unit)
+    if not ok or IsSecretValue(value) then return true end
+    return value and true or false
+end
+
+ns.PF_Portrait.IsModelAvailable = function(unit)
+    if unit == "player" then return true end
+    return ns.PF_Portrait.SafeUnitFlag(_G.UnitIsConnected, unit)
+        and ns.PF_Portrait.SafeUnitFlag(_G.UnitIsVisible, unit)
+end
+
+ns.PF_Portrait.GetModelGUID = function(unit)
+    if not (unit and UnitGUID) then return nil end
+    local ok, guid = pcall(UnitGUID, unit)
+    if not ok or IsSecretValue(guid) or type(guid) ~= "string" then return nil end
+    return guid
+end
+
+ns.PF_Portrait.ApplyModel = function(model, unit, force)
+    local available = ns.PF_Portrait.IsModelAvailable(unit)
+    local guid = ns.PF_Portrait.GetModelGUID(unit)
+    local guidChanged = guid ~= nil and model._kuiGUID ~= nil and guid ~= model._kuiGUID
+    if not force and not guidChanged and model._kuiUnit == unit and model._kuiAvailable == available then
+        return true
+    end
+
+    local call = ns.PF_Portrait.Call
+    if available then
+        call(model, "SetCamDistanceScale", 1)
+        call(model, "SetPortraitZoom", 1)
+        call(model, "SetPosition", 0, 0, 0)
+        call(model, "ClearModel")
+        if not call(model, "SetUnit", unit) then
+            model._kuiUnit = nil
+            return false
+        end
+    else
+        call(model, "SetCamDistanceScale", 0.25)
+        call(model, "SetPortraitZoom", 0)
+        call(model, "SetPosition", 0, 0, 0.25)
+        call(model, "ClearModel")
+        call(model, "SetModel", ns.PF_Portrait.questionMarkModel)
+    end
+    model._kuiUnit = unit
+    model._kuiGUID = guid
+    model._kuiAvailable = available
+    return true
+end
+
+-- Models cannot be masked, so a circular portrait keeps the model inside the
+-- square inscribed in the ring. Other styles fill the whole portrait slot.
+ns.PF_Portrait.AnchorModel = function(button, metrics)
+    local model = button.portraitModel
+    if not model then return end
+    local inset = 0
+    if metrics.style == "circular" then
+        inset = math.floor(metrics.size * 0.15 + 0.5)
+    end
+    model:ClearAllPoints()
+    ns.PF_Portrait.Point(model, "TOPLEFT", button.portraitFrame, "TOPLEFT", inset, -inset)
+    ns.PF_Portrait.Point(model, "BOTTOMRIGHT", button.portraitFrame, "BOTTOMRIGHT", -inset, inset)
+end
+
+-- Cheap re-check used by range updates: a member walking into view swaps the
+-- placeholder for the real model without waiting for another repaint.
+ns.PF_Portrait.RefreshModel = function(frame)
+    local model = frame and frame.portraitModel
+    if not (model and model:IsShown() and frame.unit and not frame.fakeUnit) then return end
+    ns.PF_Portrait.ApplyModel(model, frame.unit, false)
+end
+
 ns.PF_Portrait.EnsureModel = function(button)
     if button.portraitModel then return button.portraitModel end
     local ok, model = pcall(CreateFrame, "PlayerModel", nil, button.portraitFrame)
     if not ok or not model then return nil end
     model:SetAllPoints(button.portraitFrame)
-    if model.SetCamera then pcall(model.SetCamera, model, 0) end
+    ns.PF_Portrait.Call(model, "SetCamera", 0)
     model:Hide()
     button.portraitModel = model
     return model
@@ -3171,7 +3258,7 @@ ns.PF_Portrait.SetMask = function(button, style)
         end
     end
 end
-function Mod:UpdatePartyPortrait(frame, db, fakeData)
+function Mod:UpdatePartyPortrait(frame, db, fakeData, forceModel)
     local portraitFrame = frame and frame.portraitFrame
     if not portraitFrame then return end
     local metrics = ns.PF_Portrait.GetMetrics(db, frame._layoutHeight)
@@ -3179,17 +3266,14 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData)
     if not metrics.show or not unit and not fakeData then
         portraitFrame:Hide()
         if frame.portraitModel then frame.portraitModel:Hide() end
+        frame._portraitModelActive = nil
         return
     end
 
     local mode = db.portraitMode or "2d"
-    if metrics.style == "circular" and mode == "3d" then
-        mode = "2d"
-    end
     local classToken = ns.PF_Portrait.GetClassToken(unit, fakeData)
     local portrait = frame.portrait
     local classTexture = frame.portraitClass
-    local model = frame.portraitModel
     portraitFrame:Show()
     ns.PF_Portrait.SetMask(frame, metrics.style)
     portrait:SetTexCoord(metrics.facing == "flipped" and 1 or 0, metrics.facing == "flipped" and 0 or 1, 0, 1)
@@ -3198,32 +3282,33 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData)
     frame.portraitBorder:SetShown(db.portraitBorder ~= false)
     ns.PF_Portrait.UpdateBorder(frame, db, fakeData)
 
-    portrait:Hide()
-    classTexture:Hide()
-    if model then model:Hide() end
-    if mode == "class" and ns.PF_Portrait.ApplyClassTexture(classTexture, classToken) then
-        classTexture:Show()
-    elseif mode == "3d" and unit and not fakeData then
-        model = ns.PF_Portrait.EnsureModel(frame)
-        if model and model.SetUnit then
-            local ok = pcall(model.SetUnit, model, unit)
-            if ok then
-                model:Show()
-            else
-                model:Hide()
-                if _G.SetPortraitTexture then pcall(_G.SetPortraitTexture, portrait, unit) end
-                portrait:Show()
-            end
-        elseif _G.SetPortraitTexture then
-            pcall(_G.SetPortraitTexture, portrait, unit)
-            portrait:Show()
+    local show2D, showClass, showModel = false, false, false
+    if mode == "class" then
+        showClass = ns.PF_Portrait.ApplyClassTexture(classTexture, classToken)
+    elseif mode == "3d" then
+        -- Test frames have no real unit, so they preview the player's own model.
+        local modelUnit = fakeData and "player" or unit
+        local model = ns.PF_Portrait.EnsureModel(frame)
+        if model then
+            ns.PF_Portrait.AnchorModel(frame, metrics)
+            local wasShown = model:IsShown()
+            model:Show()
+            showModel = ns.PF_Portrait.ApplyModel(model, modelUnit, forceModel or not wasShown)
         end
-    elseif fakeData and ns.PF_Portrait.ApplyClassTexture(classTexture, classToken) then
-        classTexture:Show()
-    elseif _G.SetPortraitTexture and unit then
-        pcall(_G.SetPortraitTexture, portrait, unit)
-        portrait:Show()
-    else
+    end
+    if not (showClass or showModel) then
+        if fakeData then
+            showClass = ns.PF_Portrait.ApplyClassTexture(classTexture, classToken)
+        elseif unit and _G.SetPortraitTexture then
+            show2D = pcall(_G.SetPortraitTexture, portrait, unit)
+        end
+    end
+
+    portrait:SetShown(show2D)
+    classTexture:SetShown(showClass)
+    if frame.portraitModel then frame.portraitModel:SetShown(showModel) end
+    frame._portraitModelActive = showModel or nil
+    if not (show2D or showClass or showModel) then
         portraitFrame:Hide()
     end
 
@@ -6160,6 +6245,8 @@ function Mod:SetFrameUnit(frame, unit)
     frame:SetAttribute("unit", frame.unit)
     if not frame.unit and frame.portraitFrame then frame.portraitFrame:Hide() end
     if frame.unit ~= oldUnit then
+        -- A new unit in the slot reloads the 3D model on the next paint.
+        if frame.portraitModel then frame.portraitModel._kuiUnit = nil end
         self._auraUnitFrames = self._auraUnitFrames or {}
         local list = self._auraUnitFrames[oldUnit]
         if list then
@@ -7201,6 +7288,16 @@ function Mod:OnUnitEvent(event, unit)
         if not self._healthPowerFlushQueued then
             self._healthPowerFlushQueued = true
             ns.PF_HealthPowerFlushDriver:Show()
+        end
+        return
+    end
+    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+        -- Only portraits care about these; reload the 3D model when it changed.
+        for i = 1, #frames do
+            local frame = frames[i]
+            if frame and frame:IsShown() and frame._portraitShown then
+                self:UpdatePartyPortrait(frame, self:GetModeDB(frame.mode or "party"), nil, true)
+            end
         end
         return
     end
