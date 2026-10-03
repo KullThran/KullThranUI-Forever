@@ -15,10 +15,13 @@ KT.VisualThemes:RegisterModule("minimap", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
     getOwnedPaths = function()
-        return { "shape", "borderColor" }
+        return { "shape", "borderColor", "ringStyle" }
     end,
     seed = function(profile, themeKey)
-        if themeKey == "forever" then
+        profile.ringStyle = nil -- auto: each style wears its own ring (KUI none)
+        if themeKey == "retail" then
+            profile.shape = "ROUND" -- the Retail ring art is circular
+        elseif themeKey == "forever" then
             profile.shape = "ROUND"
             profile.borderColor = { r = 0.862745, g = 0.521569, b = 0.376471, a = 1 } -- Forever #DC8560
         elseif themeKey == "classic" then

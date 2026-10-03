@@ -953,7 +953,10 @@ local function GetCastScale()
 end
 ns.GetCastScale = GetCastScale
 local function GetHealthBarHeight()
-    return KullThranUINameplatesDB and KullThranUINameplatesDB.healthBarHeight or defaults.healthBarHeight
+    local v = KullThranUINameplatesDB and KullThranUINameplatesDB.healthBarHeight
+    if v and v ~= defaults.healthBarHeight then return v end
+    local th = ns.ThemeBarHeight and ns.ThemeBarHeight()
+    return th or defaults.healthBarHeight
 end
 ns.GetHealthBarHeight = GetHealthBarHeight
 local function GetFriendlyHealthBarHeight()
@@ -1262,7 +1265,18 @@ local textSlotKeys = { "textSlotTop", "textSlotRight", "textSlotLeft", "textSlot
 ns.textSlotKeys = textSlotKeys
 
 local function GetTextSlot(slotKey)
-    return (db and db[slotKey]) or defaults[slotKey]
+    local v = (db and db[slotKey]) or defaults[slotKey]
+    -- Retail/Forever: look Blizzard (nombre dentro de la barra, a la izquierda)
+    -- solo si el usuario no movio los slots (siguen en su valor por defecto).
+    if (slotKey == "textSlotTop" or slotKey == "textSlotLeft")
+        and ns.ThemeBlizzText and ns.ThemeBlizzText() then
+        local top = (db and db.textSlotTop) or defaults.textSlotTop
+        local left = (db and db.textSlotLeft) or defaults.textSlotLeft
+        if top == defaults.textSlotTop and left == defaults.textSlotLeft then
+            return (slotKey == "textSlotTop") and "none" or "enemyName"
+        end
+    end
+    return v
 end
 ns.GetTextSlot = GetTextSlot
 
@@ -1382,7 +1396,9 @@ local function GetClassPowerXOffset()
 end
 ns.GetClassPowerXOffset = GetClassPowerXOffset
 local function GetClassPowerScale()
-    return (db and db.classPowerScale) or defaults.classPowerScale
+    local sc = (db and db.classPowerScale) or defaults.classPowerScale
+    if ns.NameplateStyle and ns.NameplateStyle() == "classic" then sc = sc * 0.8 end
+    return sc
 end
 ns.GetClassPowerScale = GetClassPowerScale
 local function GetClassPowerGap()
@@ -1398,8 +1414,7 @@ ns.GetClassPowerClassColors = GetClassPowerClassColors
 local function GetClassPowerShape()
     if db and db.classPowerShape then return db.classPowerShape end
     -- Unset: KUI Style defaults to pips, every other style to circles.
-    local VT = KT and KT.VisualThemes
-    local theme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+    local theme = ns.NameplateStyle and ns.NameplateStyle()
     if theme == "kui" then return "pip" end
     return "circle"
 end
@@ -2017,7 +2032,12 @@ end
 
 -- Tamaño de fuente para un slot de texto (ej: "textSlotTop")
 local function GetTextSlotSize(slotKey)
-    return (db and db[slotKey .. "Size"]) or defaults[slotKey .. "Size"] or 10
+    local v = (db and db[slotKey .. "Size"]) or defaults[slotKey .. "Size"] or 10
+    if v == (defaults[slotKey .. "Size"] or 10) and ns.ThemeBlizzText and ns.ThemeBlizzText()
+        and (slotKey == "textSlotLeft" or slotKey == "textSlotRight") then
+        return v + 2
+    end
+    return v
 end
 ns.GetTextSlotSize = GetTextSlotSize
 
@@ -2949,6 +2969,7 @@ function ns.RefreshBorderStyle()
         if plate.ApplyBorderStyle then
             plate:ApplyBorderStyle()
         end
+        if ns.ApplyThemeSkin then ns.ApplyThemeSkin(plate) end
     end
 end
 function ns.RefreshBorderColor()
@@ -4343,6 +4364,10 @@ local function GetReactionColor(unit)
     if type(inCombat) == "boolean" and inCombat then
         return eic.r, eic.g, eic.b
     end
+    -- Classic style keeps the saturated colour out of combat (no darkening)
+    if ns.NameplateStyle and ns.NameplateStyle() == "classic" then
+        return eic.r, eic.g, eic.b
+    end
     return DarkenColor(eic.r, eic.g, eic.b)
 end
 local hookedUFs = {}
@@ -4831,6 +4856,7 @@ function NameplateFrame:RefreshPlateState()
     self:UpdateCast()
     ApplyHealthBarTexture(self)
     ApplyCastBarTexture(self)
+    if ns.ApplyThemeSkin then ns.ApplyThemeSkin(self) end
 end
 
 -- Vincula la placa KUI a un unit token y nameplate Blizzard. El orden
@@ -5239,11 +5265,11 @@ function NameplateFrame:UpdateHealthBounds()
 end
 -- Brightens the final resolved color without changing its semantic state.
 local function BrightenNameplateColor(r, g, b)
-    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-        and KT.VisualThemes:GetRenderedTheme()
-    local gain = (theme == "classic" and 1.35) or (theme == "forever" and 1.30)
-        or (theme == "retail" and 1.25) or 1.30
-    local lift = 0.06
+    local theme = ns.NameplateStyle and ns.NameplateStyle()
+    local gain = (theme == "classic" and 1.5) or (theme == "forever" and 0.95)
+        or (theme == "retail" and 0.95) or 1.30
+    local lift = (theme == "classic") and 0.02
+        or ((theme == "forever" or theme == "retail") and 0) or 0.06
     return math.min(1, (r or 0) * gain + lift),
         math.min(1, (g or 0) * gain + lift),
         math.min(1, (b or 0) * gain + lift)
@@ -5430,7 +5456,8 @@ local function ApplyNameAnchor(frame, slotKey)
 
     frame.name:SetParent(frame.healthTextFrame)
     if slotKey == "textSlotLeft" then
-        PP.Point(frame.name, "LEFT", frame.health, "LEFT", 4 + offsetX, offsetY)
+        local lvlInset = (ns.ThemeLevelInset and ns.ThemeLevelInset(frame)) or 0
+        PP.Point(frame.name, "LEFT", frame.health, "LEFT", 4 + offsetX + lvlInset, offsetY)
         frame.name:SetJustifyH("LEFT")
         return true
     end
@@ -5532,6 +5559,7 @@ function NameplateFrame:UpdateLevelAnchor()
     end
     self.level:ClearAllPoints()
     PP.Point(self.level, "BOTTOMLEFT", self.health, "TOPLEFT", x, y)
+    if ns.ApplyThemeLevel then ns.ApplyThemeLevel(self) end
 end
 -- Muestra/oculta el nivel de la unidad con estilo y posición independientes.
 function NameplateFrame:UpdateLevel()

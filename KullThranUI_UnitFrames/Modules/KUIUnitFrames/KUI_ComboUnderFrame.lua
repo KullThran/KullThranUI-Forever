@@ -55,10 +55,13 @@ function CUF.GetStyle(unit)
     if v == "off" or v == "modern" or v == "classic" then return v end
     local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
         and KT.VisualThemes:GetRenderedTheme()
-    return theme == "classic" and "classic" or "off"
+    if theme == "classic" then return "classic" end
+    if theme == "forever" then return "modern" end
+    return "off" -- retail and kui
 end
 -- Exposed on the core addon so other modules (Resource Bars) can query it.
 KT.GetComboUnderFrameStyle = CUF.GetStyle
+KT.RefreshComboUnderFrame = function() if CUF.RefreshAll then CUF:RefreshAll() end end
 
 -- Placement per unit: position "below" (default) or "above" the frame, plus X/Y offsets.
 --   keys: comboPosPlayer/comboXPlayer/comboYPlayer, comboPosTarget/comboXTarget/comboYTarget
@@ -165,6 +168,22 @@ function Widget:SetStyle(style)
         if usePlateAtlas then
             self.plate:SetAtlas(ATLAS.plate, false)
             self.plate:SetVertexColor(1, 1, 1, 1)
+            -- The tray is drawn to hang BELOW a frame; above it is mirrored vertically.
+            -- Pristine atlas coords are read ONCE (first draw is never flipped) and cached: SetAtlas
+            -- with the same atlas can keep the previous coords, so swapping "whatever is there" flips
+            -- back and forth on every refresh.
+            if not self._plateBase then
+                local ulx, uly, llx, lly, urx, ury, lrx, lry = self.plate:GetTexCoord()
+                if ulx and lry then self._plateBase = { ulx, uly, llx, lly, urx, ury, lrx, lry } end
+            end
+            local bse = self._plateBase
+            if bse then
+                if self.flipped then
+                    self.plate:SetTexCoord(bse[3], bse[4], bse[1], bse[2], bse[7], bse[8], bse[5], bse[6])
+                else
+                    self.plate:SetTexCoord(bse[1], bse[2], bse[3], bse[4], bse[5], bse[6], bse[7], bse[8])
+                end
+            end
         else
             self.plate:SetColorTexture(0.03, 0.03, 0.03, 0.95)
         end
@@ -185,10 +204,34 @@ function Widget:Place(anchor, style, width, pos, x, y, topAnchor)
     x, y = x or 0, y or 0
     local above = pos == "above"
     local ref = above and (topAnchor or anchor) or anchor
+    -- Classic tray above: same width as the bars (not the whole frame with the portrait), stacked
+    -- on the TOP edge of the name tab when the name sits above the bars (Classic stock art), else
+    -- on the top edge of the health bar.
+    local extraY, modernDy = 0, 0
+    if above and topAnchor then
+        local hb = topAnchor.Health or topAnchor.health
+        local nameFS = topAnchor._ktStockNameText or topAnchor.NameText or topAnchor.nameText or topAnchor.LeftText or topAnchor.name
+        local nt, ht = nil, hb and hb.GetTop and hb:GetTop()
+        if nameFS and nameFS.GetTop then nt = nameFS:GetTop() end
+        local nameAbove = nt and ht and nt > ht + 2
+        if style == "classic" then
+            ref = hb or ref
+            if nameAbove then extraY = (nt - ht) + 4 end
+        elseif nameAbove and hb then
+            -- stock layouts (Classic/Forever/Retail art): centre on the BARS (not on the whole frame
+            -- with the portrait) and sit on the top of the name tab (name text top + 4px)
+            ref = hb
+            modernDy = (nt + 4) - ht
+        end
+    end
+    if (self.flipped or false) ~= above then
+        self.flipped = above
+        if self.style then self:SetStyle(self.style) end   -- redraw the tray mirrored / normal
+    end
     if style == "classic" then
         if above then
-            f:SetPoint("BOTTOMLEFT", ref, "TOPLEFT", x, y - 1)
-            f:SetPoint("BOTTOMRIGHT", ref, "TOPRIGHT", x, y - 1)
+            f:SetPoint("BOTTOMLEFT", ref, "TOPLEFT", x, y - 1 + extraY)
+            f:SetPoint("BOTTOMRIGHT", ref, "TOPRIGHT", x, y - 1 + extraY)
         else
             f:SetPoint("TOPLEFT", ref, "BOTTOMLEFT", x, 1 + y)
             f:SetPoint("TOPRIGHT", ref, "BOTTOMRIGHT", x, 1 + y)
@@ -196,7 +239,7 @@ function Widget:Place(anchor, style, width, pos, x, y, topAnchor)
         f:SetHeight(20)
     else
         if above then
-            f:SetPoint("BOTTOM", ref, "TOP", x, 3 + y)
+            f:SetPoint("BOTTOM", ref, "TOP", x, 3 + y + modernDy)
         else
             f:SetPoint("TOP", ref, "BOTTOM", x, -3 + y)
         end
@@ -220,10 +263,10 @@ function Widget:Layout()
                 local sz = d * 1.1
                 p:SetSize(sz, sz)
                 if n == 5 then
-                    p:SetPoint("LEFT", f, "LEFT", (11 + 21 * (i - 1)) * k - (sz - d) / 2, -d * 0.18)
+                    p:SetPoint("LEFT", f, "LEFT", (11 + 21 * (i - 1)) * k - (sz - d) / 2, (self.flipped and d or -d) * 0.18)
                 else
                     local gap = (W - n * sz) / (n + 1)
-                    p:SetPoint("LEFT", f, "LEFT", gap + (i - 1) * (sz + gap), -d * 0.18)
+                    p:SetPoint("LEFT", f, "LEFT", gap + (i - 1) * (sz + gap), (self.flipped and d or -d) * 0.18)
                 end
             end
         end
@@ -351,12 +394,15 @@ function CUF.ApplyPreview(frame, unitKey)
         local pw = frame.portraitFrame:GetWidth() or 40
         local size = math.max(7, math.min(12, pw * 0.21))
         local radius = pw * 0.5 + 12
+        local rPos, rX, rY = CUF.GetPlacement("target")
+        local a0, a1 = 95, 15
+        if rPos == "above" then a0, a1 = 140, 40 end
         for i, holder in ipairs(ringPips) do
-            local angle = math.rad(95 + (15 - 95) * ((i - 1) / 4))
+            local angle = math.rad(a0 + (a1 - a0) * ((i - 1) / 4))
             holder:SetSize(size, size)
             holder:ClearAllPoints()
             holder:SetPoint("CENTER", frame.portraitFrame, "CENTER",
-                math.cos(angle) * radius, math.sin(angle) * radius)
+                math.cos(angle) * radius + rX, math.sin(angle) * radius + rY)
             holder.fill:SetShown(i <= 2)
             holder:Show()
         end
@@ -376,6 +422,37 @@ function CUF.ApplyPreview(frame, unitKey)
     obj:SetStyle(style)
     local pos, px, py = CUF.GetPlacement(unitKey)
     obj:Place(anchor, style, anchor:GetWidth(), pos, px, py, frame)
+    -- the preview is laid out a frame later: re-place once the name / bars have real positions
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function()
+            if obj.frame and obj.frame:IsShown() then
+                obj:Place(anchor, style, anchor:GetWidth(), pos, px, py, frame)
+            end
+        end)
+    end
     obj:SetValues(2, 5)
     obj.frame:Show()
+end
+
+-- /ktcombodebug: where the combo widget really is and what the placement code sees.
+SLASH_KTCOMBODEBUG1 = "/ktcombodebug"
+SlashCmdList["KTCOMBODEBUG"] = function()
+    local function T(r) return r and r.GetTop and r:GetTop() and string.format("%.1f", r:GetTop()) or "nil" end
+    for _, unit in ipairs({ "player", "target" }) do
+        local frame = ns.frames and ns.frames[unit]
+        local obj = CUF.live[unit]
+        local pos, px, py = CUF.GetPlacement(unit)
+        print(("KUI combo %s: style=%s pos=%s x=%s y=%s frame=%s objShown=%s flipped=%s"):format(unit,
+            tostring(CUF.GetStyle(unit)), tostring(pos), tostring(px), tostring(py), tostring(frame ~= nil),
+            tostring(obj and obj.frame:IsShown()), tostring(obj and obj.flipped)))
+        if frame then
+            local nm = frame._ktStockNameText or frame.NameText or frame.nameText or frame.LeftText
+            print(("  tops: frame=%s health=%s name=%s (nameShown=%s) objTop=%s objBottom=%s"):format(
+                T(frame), T(frame.Health), T(nm), tostring(nm and nm.IsShown and nm:IsShown()),
+                T(obj and obj.frame), obj and obj.frame:GetBottom() and string.format("%.1f", obj.frame:GetBottom()) or "nil"))
+            print(("  fields: _ktStockNameText=%s NameText=%s LeftText=%s ClassPower=%s classPowerBar=%s"):format(
+                tostring(frame._ktStockNameText ~= nil), tostring(frame.NameText ~= nil), tostring(frame.LeftText ~= nil),
+                tostring(frame.ClassPower ~= nil), tostring(frame.ClassPowerBar ~= nil)))
+        end
+    end
 end

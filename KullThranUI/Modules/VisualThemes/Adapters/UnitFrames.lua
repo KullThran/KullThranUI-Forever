@@ -144,7 +144,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- too, same mechanism as Retail below.
             for _, key in ipairs({ "player", "target" }) do
                 profile[key] = type(profile[key]) == "table" and profile[key] or {}
-                profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+                profile[key].customFillColor = { r = 0.57, g = 1.00, b = 0.235 }
                 profile[key].healthClassColored = false
             end
         elseif themeKey == "retail" then
@@ -187,7 +187,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- over class/reaction coloring).
             for _, key in ipairs({ "player", "target" }) do
                 profile[key] = type(profile[key]) == "table" and profile[key] or {}
-                profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+                profile[key].customFillColor = { r = 0.57, g = 1.00, b = 0.235 }
                 profile[key].healthClassColored = false
             end
         else
@@ -244,7 +244,8 @@ KT.VisualThemes:RegisterModule("unitframes", {
             for _, key in ipairs({ "player", "target" }) do
                 profile[key] = type(profile[key]) == "table" and profile[key] or {}
                 profile[key].healthClassColored = saved.classColored ~= false
-                profile[key].customFillColor = { r = c.r or 0.10, g = c.g or 0.90, b = c.b or 0.10 }
+                local fb = (themeKey == "forever" or themeKey == "retail") and { 0.57, 1.00, 0.235 } or { 0.10, 0.90, 0.10 }
+                profile[key].customFillColor = { r = c.r or fb[1], g = c.g or fb[2], b = c.b or fb[3] }
             end
             if saved.classColored == false then profile.darkTheme = false end
         end

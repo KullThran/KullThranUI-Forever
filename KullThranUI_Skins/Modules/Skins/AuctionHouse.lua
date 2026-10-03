@@ -149,3 +149,59 @@ S.SkinFuncs["Blizzard_AuctionHouseUI"] = function()
     local framesToKill = { AH.MoneyFrameBorder, AH.MoneyFrameInset, AH.BotLeftCorner, AH.BotRightCorner, AH.BottomBorder, AH.LeftBorder, AH.RightBorder, AH.NineSlice, AH.Border, AH.Portrait, AH.PortraitFrame }
     for _, frame in ipairs(framesToKill) do if frame then S:Kill(frame) end end
 end
+
+-- == CLASSIC AUCTION HOUSE (Blizzard_AuctionUI / AuctionFrame, Forever) ==
+-- Conservative: keeps native window art, restyles buttons/editboxes and makes
+-- sure money (coin icons, MoneyInputFrame boxes) stays legible and aligned.
+local function SkinClassicAuctionMoney()
+    for i = 1, 12 do
+        for _, suffix in ipairs({ "MoneyFrame", "BuyoutFrameMoney", "BuyoutFrame" }) do
+            local mf = _G["BrowseButton" .. i .. suffix]
+            if mf then S:RestoreMoneyArt(mf) end
+        end
+        local bf = _G["AuctionsButton" .. i]
+        if bf then S:RestoreMoneyArt(bf) end
+        local bidf = _G["BidButton" .. i]
+        if bidf then S:RestoreMoneyArt(bidf) end
+    end
+    for _, name in ipairs({ "BrowseCurrentBidSort", "BrowseBuyoutPriceSort" }) do
+        if _G[name] then S:RestoreMoneyArt(_G[name]) end
+    end
+    for _, name in ipairs({ "BrowseBidPrice", "BidBidPrice", "StartPrice", "BuyoutPrice" }) do
+        local mif = _G[name]
+        if mif then S:HandleMoneyInput(mif); S:RestoreMoneyArt(mif) end
+    end
+    for _, name in ipairs({ "AuctionsDepositMoneyFrame", "AuctionsItemBuyoutMoneyFrame" }) do
+        if _G[name] then S:RestoreMoneyArt(_G[name]) end
+    end
+end
+
+S.SkinFuncs["Blizzard_AuctionUI"] = function()
+    if not (S.db.enable and S.db.auctionhouse) then return end
+    if not _G.AuctionFrame then return end
+
+    for _, name in ipairs({
+        "BrowseSearchButton", "BrowseResetButton", "BrowseBidButton", "BrowseBuyoutButton", "BrowseCloseButton",
+        "BidBidButton", "BidBuyoutButton", "BidCloseButton",
+        "AuctionsCreateAuctionButton", "AuctionsCancelAuctionButton", "AuctionsCloseButton",
+    }) do
+        if _G[name] then S:HandleButton(_G[name]) end
+    end
+    for _, name in ipairs({
+        "BrowseName", "BrowseMinLevel", "BrowseMaxLevel", "AuctionsStackSizeEntry", "AuctionsNumStacksEntry",
+    }) do
+        if _G[name] then S:HandleEditBox(_G[name]) end
+    end
+    for i = 1, 3 do
+        if _G["AuctionFrameTab" .. i] then S:HandleTab(_G["AuctionFrameTab" .. i]) end
+    end
+
+    SkinClassicAuctionMoney()
+    if not S._ktClassicAHHooked then
+        for _, fn in ipairs({ "AuctionFrameBrowse_Update", "AuctionFrameBid_Update", "AuctionFrameAuctions_Update" }) do
+            if _G[fn] then hooksecurefunc(fn, SkinClassicAuctionMoney) end
+        end
+        if _G.AuctionFrame.HookScript then _G.AuctionFrame:HookScript("OnShow", SkinClassicAuctionMoney) end
+        S._ktClassicAHHooked = true
+    end
+end

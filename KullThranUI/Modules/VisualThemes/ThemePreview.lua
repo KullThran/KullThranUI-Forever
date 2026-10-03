@@ -102,7 +102,7 @@ local SCENES = {
         art = ATLAS_UNIT_ART,
         retail = true,
         panel = { 0.11, 0.09, 0.045, 1 },
-        health = { 0.10, 0.90, 0.10, 1 },
+        health = { 0.57, 1.00, 0.235, 1 },
         power = { 0.12, 0.36, 0.90, 1 },
     },
 }
@@ -527,10 +527,11 @@ local function GetThemeHealthChoice(themeKey)
         if type(player) == "table" then
             local c = player.customFillColor
             return player.healthClassColored ~= false,
-                type(c) == "table" and { c.r or 1, c.g or 1, c.b or 1, 1 } or { 0.10, 0.90, 0.10, 1 }
+                type(c) == "table" and { c.r or 1, c.g or 1, c.b or 1, 1 }
+                or ((themeKey == "forever" or themeKey == "retail") and { 0.57, 1.00, 0.235, 1 } or { 0.10, 0.90, 0.10, 1 })
         end
     end
-    return themeKey == "kui", { 0.10, 0.90, 0.10, 1 }
+    return themeKey == "kui", ((themeKey == "forever" or themeKey == "retail") and { 0.57, 1.00, 0.235, 1 } or { 0.10, 0.90, 0.10, 1 })
 end
 
 local function ResolveThemeHealthColor(themeKey, fallback)

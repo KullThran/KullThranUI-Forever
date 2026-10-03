@@ -1205,8 +1205,22 @@ end
 
 
 
-local function ApplyForeverBarMask(bar, geom, scale, portraitExtension)
+local function ApplyForeverBarMask(bar, geom, scale, portraitExtension, dropOnExtension)
     if not (bar and geom and geom.mask and C_Texture and C_Texture.GetAtlasInfo) then return end
+    -- Power bar with a Rare/Elite ring: the stock Mana mask has a transparent left
+    -- section (that part is tucked under the stock ring), so once the base art is hidden
+    -- the bar showed only a thin sliver at its far left and a gap after it. Drop the
+    -- mask for this case and let the bar be a plain rectangle.
+    if dropOnExtension and portraitExtension and portraitExtension ~= 0 then
+        local m = bar._ktForeverMask
+        if m then
+            local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+            if fill and fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, m) end
+            if bar.bg and bar.bg.RemoveMaskTexture then pcall(bar.bg.RemoveMaskTexture, bar.bg, m) end
+            m:Hide()
+        end
+        return
+    end
     local info = C_Texture.GetAtlasInfo(geom.mask)
     if not info then
         -- Same late-binding GetAtlasInfo problem as
@@ -1727,7 +1741,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         power:SetPoint("TOPLEFT", frame, "TOPLEFT",
             geom.power.x * scale + barShiftX, -geom.power.y * scale)
         power:SetSize(geom.power.w * scale + portraitExtension, geom.power.h * scale)
-        ApplyForeverBarMask(power, geom.power, scale, portraitExtension)
+        ApplyForeverBarMask(power, geom.power, scale, portraitExtension, true)
     end
 
     SeatStockCastbar(frame, geom, scale)

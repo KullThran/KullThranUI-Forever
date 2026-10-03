@@ -163,6 +163,26 @@ local function SkinHeader(header)
         StyleFontString(text, 14)
     end
 
+    -- Accent bar under the header: accent colour fading out to the right.
+    if header.CreateTexture then
+        local bar = header._ktAccentBar
+        if not bar then
+            bar = header:CreateTexture(nil, "ARTWORK", nil, 2)
+            bar:SetTexture("Interface\\Buttons\\WHITE8x8")
+            bar:SetHeight(2)
+            bar:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+            bar:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
+            header._ktAccentBar = bar
+        end
+        if bar.SetGradient and CreateColor then
+            bar:SetVertexColor(1, 1, 1, 1)
+            bar:SetGradient("HORIZONTAL", CreateColor(r, g, b, 1), CreateColor(r, g, b, 0))
+        else
+            bar:SetVertexColor(r, g, b, 0.8)
+        end
+        bar:Show()
+    end
+
     -- Skin +/- collapse buttons
     local function SkinButton(btn)
         if not btn then return end
@@ -629,17 +649,8 @@ local function InitTracker()
             end)
         end
 
-        local headerMenu = otf.HeaderMenu
-        if headerMenu then
-            headerMenu:Hide()
-            headerMenu:SetAlpha(0)
-            if headerMenu.SetHeight then headerMenu:SetHeight(0.001) end
-            headerMenu:HookScript("OnShow", function(self) self:Hide() end)
-        end
-        if otf.Header and otf.Header ~= headerMenu then
-            otf.Header:Hide()
-            otf.Header:HookScript("OnShow", function(self) self:Hide() end)
-        end
+        -- "All Objectives" header (HeaderMenu / Header) is intentionally left
+        -- visible: it is Blizzard's collapse bar for the whole tracker.
         if otf.NineSlice then otf.NineSlice:Hide() end
     end
     

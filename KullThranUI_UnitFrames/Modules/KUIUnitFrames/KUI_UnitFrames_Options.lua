@@ -2153,6 +2153,18 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
             _, h = W:Toggle(container, 'Smooth Health/Power Bars', -by,
                 function() return db.smoothBars ~= false end,
                 function(v) SetAndRefresh(function() db.smoothBars = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Combat Text on Portrait (Dodge / Miss / damage)', -by,
+                function() return db.hitText ~= false end,
+                function(v) SetAndRefresh(function() db.hitText = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, '    Numbers in White (damage and healing)', -by,
+                function() return db.hitTextWhiteNumbers == true end,
+                function(v) SetAndRefresh(function() db.hitTextWhiteNumbers = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Aggro Glow (red pulse on player frame)', -by,
+                function() return db.aggroGlow ~= false end,
+                function(v)
+                    SetAndRefresh(function() db.aggroGlow = v and true or false end)
+                    if ns.AggroGlow and ns.AggroGlow.Update then pcall(ns.AggroGlow.Update, ns.AggroGlow) end
+                end); by = by + h
             local widget
             widget, h = W:Toggle(container, 'Show PvP Icon Backdrop Circle', -by,
                 function()

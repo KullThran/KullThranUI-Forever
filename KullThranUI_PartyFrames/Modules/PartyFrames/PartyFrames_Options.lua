@@ -1203,14 +1203,7 @@ local function RefreshLivePreview(preview)
         else
             unit.portraitFrame:SetPoint("RIGHT", unit.health, "LEFT", -4 + portraitX, portraitY)
         end
-        local healthStrata = unit.health:GetFrameStrata()
-        local previewStrata = healthStrata == "BACKGROUND" and "LOW"
-            or healthStrata == "LOW" and "MEDIUM"
-            or healthStrata == "MEDIUM" and "HIGH"
-            or healthStrata == "HIGH" and "DIALOG"
-            or healthStrata == "DIALOG" and "FULLSCREEN"
-            or healthStrata == "FULLSCREEN" and "FULLSCREEN_DIALOG"
-            or "TOOLTIP"
+        local previewStrata = unit.health:GetFrameStrata()
         unit.portraitFrame:SetFrameStrata(previewStrata)
         unit.portraitFrame:SetFrameLevel(unit.health:GetFrameLevel() + 3)
         local classCoords = PREVIEW_CLASS_COORDS[sample.class or "WARRIOR"]

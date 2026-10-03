@@ -1178,6 +1178,67 @@ function S:HandleEditBox(box)
     box._ktEditBoxSkinned = true
 end
 
+-- Money helpers (MoneyFrame / MoneyInputFrame). Deep strips (StripTextures,
+-- AlphaStripTextures, HandleEditBox) zero the alpha of the coin icons and the
+-- editbox art, leaving tiny unreadable boxes. These restore them.
+function S:RestoreMoneyArt(root, depth)
+    if not root or (root.IsForbidden and root:IsForbidden()) then return end
+    depth = depth or 0
+    if root.GetRegions then
+        for i = 1, root:GetNumRegions() do
+            local r = select(i, root:GetRegions())
+            if r and r.IsObjectType and r:IsObjectType("Texture") and r.SetAlpha then r:SetAlpha(1) end
+        end
+    end
+    for _, key in ipairs({ "NormalTexture", "normalTexture" }) do
+        local t = root[key]
+        if t and t.SetAlpha then t:SetAlpha(1) end
+    end
+    if root.GetNormalTexture then
+        local t = root:GetNormalTexture()
+        if t and t.SetAlpha then t:SetAlpha(1) end
+    end
+    if depth < 4 and root.GetChildren then
+        for _, child in ipairs({ root:GetChildren() }) do
+            S:RestoreMoneyArt(child, depth + 1)
+        end
+    end
+end
+
+function S:HandleMoneyInput(mif)
+    if type(mif) == "string" then mif = _G[mif] end
+    if not mif then return end
+    local name = mif.GetName and mif:GetName()
+    local boxes = {
+        { mif.gold or mif.GoldBox or (name and _G[name .. "Gold"]), 70 },
+        { mif.silver or mif.SilverBox or (name and _G[name .. "Silver"]), 36 },
+        { mif.copper or mif.CopperBox or (name and _G[name .. "Copper"]), 36 },
+    }
+    for _, entry in ipairs(boxes) do
+        local box = entry[1]
+        if box then
+            S:HandleEditBox(box)
+            -- Coin icons / labels live as regions of the editbox; HandleEditBox
+            -- stripped them. Bring back only the money art.
+            if box.GetRegions then
+                for i = 1, box:GetNumRegions() do
+                    local r = select(i, box:GetRegions())
+                    if r and r.IsObjectType and r:IsObjectType("Texture") and r.GetTexture then
+                        local tex = r:GetTexture()
+                        if type(tex) == "string" and tex:lower():find("money", 1, true) then
+                            r:SetAlpha(1)
+                        end
+                    end
+                end
+            end
+            if box.GetHeight and box:GetHeight() < 20 then box:SetHeight(20) end
+            if box.GetWidth and box:GetWidth() < entry[2] then box:SetWidth(entry[2]) end
+            if box.SetJustifyH then box:SetJustifyH("RIGHT") end
+            if box.SetTextInsets then box:SetTextInsets(2, 4, 0, 0) end
+        end
+    end
+end
+
 function S:HandlePortraitFrame(frame)
     if not frame or frame._ktPortraitSkinned or IsProtected(frame) then return end
     S:SkinPremiumWindow(frame)

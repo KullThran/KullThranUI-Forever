@@ -1587,6 +1587,20 @@ function Mod:ApplyTeleportMinimapButtonStyle()
     button._ktPortalIcon:Show()
     if button.border then button.border:Hide() end
     if button.background then button.background:Hide() end
+    if button.overlay then button.overlay:Hide() end
+    -- LibDBIcon dresses its buttons with a gold tracking ring + round dark disc whose field
+    -- names change between versions: hide every texture region that is not ours (keep the
+    -- hover highlight), so no decorative circle is left around the portal icon.
+    local keep = {
+        [button._ktPortalIcon] = true, [button._ktModernBackground] = true,
+        [button.GetHighlightTexture and button:GetHighlightTexture() or false] = true,
+    }
+    for _, region in ipairs({ button:GetRegions() }) do
+        if not keep[region] and region.GetObjectType and region:GetObjectType() == 'Texture' then
+            region:Hide()
+            region:SetAlpha(0)
+        end
+    end
 end
 
 function Mod:SetupMinimapButton()

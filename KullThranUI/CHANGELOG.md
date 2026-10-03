@@ -5,6 +5,37 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.1.0 (2026-10-03)
+
+Beta focused on making every visual style consistent across Unit Frames, Nameplates, Minimap and Skins.
+
+**New**
+- Nameplate style presets (KUI, Classic, Retail, Forever) in Nameplates > General, with a compact preview of each; choosing one resets sizes and offers a reload.
+- Minimap frame rings per style (Forever, Retail, Classic) with a visual selector and Live Preview; choosing a visual style applies its ring and removes the decorative gold circle.
+- Combat text on the portrait (Dodge, Miss, damage) in every style, with an off toggle and a white-numbers option.
+- Incoming heal prediction bar on all unit frames and styles.
+- Aggro glow on/off toggle; it now also lights the Target frame portrait overlays when you hold aggro on the target.
+- Modern PvP icon is the default in Retail and Forever; the PvP circle turns dark grey with the Rare border.
+
+**Improved**
+- Classic nameplates now match the original: bronze rounded border, gold-ringed oval level plate with the difficulty-colored number, the original matte bar texture and saturated red/green fills.
+- Retail and Forever nameplates now use Blizzard's own nameplate atlases (bar fill, rounded border, cast bar), with red enemies, the level inside the bar in white, and an extra bronze ring in Forever. Existing blue or orange enemy colors are migrated automatically.
+- Retail and Forever nameplates are taller; enemy target and focus frames use class or reaction colors instead of the theme green.
+- Rare/Elite portraits keep the atlas frame around the health and power bars.
+- Combo points placed above the frame adapt to the Classic tray (mirrored) and to the loose pips, also in the Live Preview.
+- Resource bars show their resource/power text by default in every theme.
+- Selecting a theme now also resets the nameplate style and sizes.
+- Party frames no longer draw above other windows.
+- Action bars: cooldown swipes now fill the whole icon on KUI and Simplicity buttons and follow the button shape (circle and others) on Blizzard bars.
+- Objective Tracker: the "All Objectives" header is shown again and every module header gets an accent-colored gradient bar.
+- Cooldown Manager: shaped icons no longer show the square background behind them.
+
+**Fixed**
+- Forever clients were detected as Retail, mislabeling profiles; existing misnamed profiles are renamed.
+- The target class portrait kept the previous class after changing target, and flipped did not apply.
+- Chat: clicking a player name opens a whisper again and /played shows its result.
+- Skins: guild invite emblem, Auction House and popup money fields, and the Send Mail layout with attachment feedback.
+
 ## 0.0.9 (2026-10-02)
 
 Beta centered on a full visual-style refresh: Forever, Classic and Retail now look like their originals while staying customizable.

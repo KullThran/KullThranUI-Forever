@@ -20,7 +20,7 @@ KT.VisualThemes:RegisterModule("nameplates", {
         return {
             "healthBarTexture", "friendlyPlayerHealthTexture", "friendlyNPCHealthTexture",
             "castBarTexture", "classPowerShape", "borderStyle", "borderColor", "targetGlowStyle",
-            "hostile", "friendly", "neutral", "miniboss", "boss", "elite", "trivial",
+            "hostile", "enemyInCombat", "friendly", "neutral", "miniboss", "boss", "elite", "trivial",
         }
     end,
     seed = function(profile, themeKey)
@@ -33,9 +33,9 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "simple"
             profile.borderColor = { r = 0.28, g = 0.18, b = 0.07 }
             profile.targetGlowStyle = "vibrant"
-            profile.hostile = { r = 0.95, g = 0.20, b = 0.08 }
-            profile.friendly = { r = 0.18, g = 0.85, b = 0.30 }
-            profile.neutral = { r = 0.95, g = 0.72, b = 0.12 }
+            profile.hostile = { r = 0.82, g = 0.07, b = 0.07 }
+            profile.friendly = { r = 0.10, g = 0.75, b = 0.10 }
+            profile.neutral = { r = 0.95, g = 0.85, b = 0.10 }
             profile.miniboss = { r = 1.00, g = 0.28, b = 0.20 }
             profile.boss = { r = 0.95, g = 0.20, b = 0.25 }
             profile.elite = { r = 1.00, g = 0.68, b = 0.18 }
@@ -48,7 +48,7 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "kullthran"
             profile.borderColor = { r = 0.82, g = 0.65, b = 0.23 }
             profile.targetGlowStyle = "kullthranui"
-            profile.hostile = { r = 0.95, g = 0.45, b = 0.12 }
+            profile.hostile = { r = 1.00, g = 0.00, b = 0.00 }
             profile.friendly = { r = 0.25, g = 0.90, b = 0.40 }
             profile.neutral = { r = 1.00, g = 0.78, b = 0.18 }
             profile.miniboss = { r = 1.00, g = 0.34, b = 0.20 }
@@ -63,12 +63,12 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "none"
             profile.borderColor = { r = 0.03, g = 0.05, b = 0.09 }
             profile.targetGlowStyle = "none"
-            profile.hostile = { r = 0.30, g = 0.65, b = 1.00 }
+            profile.hostile = { r = 1.00, g = 0.00, b = 0.00 }
             profile.friendly = { r = 0.20, g = 0.90, b = 0.35 }
             profile.neutral = { r = 1.00, g = 0.76, b = 0.18 }
-            profile.miniboss = { r = 0.40, g = 0.72, b = 1.00 }
-            profile.boss = { r = 0.34, g = 0.68, b = 1.00 }
-            profile.elite = { r = 0.55, g = 0.82, b = 1.00 }
+            profile.miniboss = { r = 1.00, g = 0.34, b = 0.20 }
+            profile.boss = { r = 1.00, g = 0.30, b = 0.20 }
+            profile.elite = { r = 1.00, g = 0.72, b = 0.25 }
             profile.trivial = { r = 0.70, g = 0.70, b = 0.70 }
         else
             profile.healthBarTexture = "Melli Reforged"
@@ -78,13 +78,18 @@ KT.VisualThemes:RegisterModule("nameplates", {
             profile.borderStyle = "kullthran"
             profile.borderColor = { r = 0.067, g = 0.067, b = 0.067 }
             profile.targetGlowStyle = "kullthranui"
-            profile.hostile = { r = 0.24, g = 0.38, b = 1.00 }
+            profile.hostile = { r = 0.85, g = 0.10, b = 0.10 }
             profile.friendly = { r = 0.22, g = 0.90, b = 0.38 }
             profile.neutral = { r = 1.00, g = 0.78, b = 0.18 }
-            profile.miniboss = { r = 0.42, g = 0.70, b = 1.00 }
-            profile.boss = { r = 0.34, g = 0.62, b = 1.00 }
-            profile.elite = { r = 0.58, g = 0.84, b = 1.00 }
+            profile.miniboss = { r = 1.00, g = 0.34, b = 0.20 }
+            profile.boss = { r = 1.00, g = 0.30, b = 0.20 }
+            profile.elite = { r = 1.00, g = 0.72, b = 0.25 }
             profile.trivial = { r = 0.70, g = 0.70, b = 0.70 }
+        end
+        -- the plate fill of a generic enemy comes from enemyInCombat (GetReactionColor fallback), not
+        -- from "hostile" (only used by the optional color override): follow the theme's hostile color
+        if type(profile.hostile) == "table" then
+            profile.enemyInCombat = { r = profile.hostile.r, g = profile.hostile.g, b = profile.hostile.b }
         end
     end,
     validate = function(profile)

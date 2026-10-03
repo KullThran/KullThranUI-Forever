@@ -191,14 +191,76 @@ local function StyleCheckButton(button)
     StyleFrameFonts(button)
 end
 
+local function UpdateAttachmentState(button, index)
+    if not (button and button.backdrop) then return end
+    local filled = false
+    local quality
+    if _G.GetSendMailItem then
+        local _, _, texture, _, q = _G.GetSendMailItem(index)
+        filled = texture ~= nil
+        quality = q
+    elseif _G.HasSendMailItem then
+        filled = _G.HasSendMailItem(index) and true or false
+    end
+
+    local icon = button.Icon or button.icon or _G[(button:GetName() or "") .. "IconTexture"]
+    if filled then
+        -- Occupied: lighter background, white (or item quality) border, full icon.
+        local r, g, b = 1, 1, 1
+        if quality and quality > 1 and _G.GetItemQualityColor then
+            r, g, b = _G.GetItemQualityColor(quality)
+        end
+        button.backdrop:SetBackdropColor(0.16, 0.16, 0.18, 1)
+        button.backdrop:SetBackdropBorderColor(r, g, b, 1)
+        if icon then icon:SetAlpha(1); if icon.SetDesaturated then icon:SetDesaturated(false) end end
+    else
+        -- Empty: dim grey slot so occupied ones stand out.
+        button.backdrop:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
+        button.backdrop:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+        if icon then icon:SetAlpha(0.35) end
+    end
+end
+
+local function UpdateSendMailFieldState()
+    -- To / Subject / money boxes: white border when they hold text, grey when empty.
+    for _, box in ipairs({
+        _G.SendMailNameEditBox, _G.SendMailSubjectEditBox,
+        _G.SendMailMoneyGold, _G.SendMailMoneySilver, _G.SendMailMoneyCopper,
+    }) do
+        if box and box.backdrop then
+            local text = box.GetText and box:GetText()
+            if text and text ~= "" and text ~= "0" then
+                box.backdrop:SetBackdropBorderColor(1, 1, 1, 1)
+            else
+                box.backdrop:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+            end
+        end
+    end
+end
+
+local function HookSendMailFields()
+    for _, box in ipairs({
+        _G.SendMailNameEditBox, _G.SendMailSubjectEditBox,
+        _G.SendMailMoneyGold, _G.SendMailMoneySilver, _G.SendMailMoneyCopper,
+    }) do
+        if box and box.HookScript and not box._ktMailFieldHooked then
+            box:HookScript("OnTextChanged", UpdateSendMailFieldState)
+            box:HookScript("OnEditFocusLost", UpdateSendMailFieldState)
+            box._ktMailFieldHooked = true
+        end
+    end
+end
+
 local function SkinSendMailAttachments()
     local max = _G.ATTACHMENTS_MAX_SEND or 12
     for i = 1, max do
         local button = _G["SendMailAttachment"..i]
         if button then
             StyleIconButton(button, button.Icon or button.icon or _G["SendMailAttachment"..i.."IconTexture"])
+            UpdateAttachmentState(button, i)
         end
     end
+    UpdateSendMailFieldState()
 end
 
 local function SkinOpenMailAttachments()
@@ -288,15 +350,10 @@ local function SkinSendMail()
         if _G.SendMailScrollFrame.ScrollBar then S:HandleScrollBar(_G.SendMailScrollFrame.ScrollBar) end
     end
 
-    for _, box in ipairs({
-        _G.SendMailNameEditBox,
-        _G.SendMailSubjectEditBox,
-        _G.SendMailMoneyGold,
-        _G.SendMailMoneySilver,
-        _G.SendMailMoneyCopper,
-    }) do
-        S:HandleEditBox(box)
-    end
+    S:HandleEditBox(_G.SendMailNameEditBox)
+    S:HandleEditBox(_G.SendMailSubjectEditBox)
+    S:HandleMoneyInput(_G.SendMailMoney)
+    HookSendMailFields()
 
     StyleFont(_G.SendMailTitleText, TITLE)
     StyleFont(_G.SendMailBodyEditBox, TEXT)
@@ -344,28 +401,38 @@ local function SkinSendMail()
             _G.SendMailMailButton:SetPoint("RIGHT", _G.SendMailCancelButton, "LEFT", -2, 0)
         end
 
-        -- Keep money/COD checkboxes on the money row, above the action buttons.
-        local moneyAnchor = _G.SendMailMoney or _G.SendMailMoneyCopper
-            or _G.SendMailMoneySilver or _G.SendMailMoneyGold
+        -- Bottom stack (bottom -> top): [Send][Cancel] row, money boxes,
+        -- "Amount to send:" label, Send/C.O.D. radios (+ Cost on the right).
+        -- Everything is anchored to the panel so nothing overlaps the buttons.
+        local money = _G.SendMailMoney
+        local moneyText = _G.SendMailMoneyText
         local sendMoneyButton = _G.SendMailSendMoneyButton
         local codButton = _G.SendMailCODButton
+        if money then
+            money:ClearAllPoints()
+            money:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 38)
+        end
+        if moneyText and money then
+            moneyText:ClearAllPoints()
+            moneyText:SetPoint("BOTTOMLEFT", money, "TOPLEFT", 0, 4)
+        end
         if sendMoneyButton then
             sendMoneyButton:ClearAllPoints()
-            if moneyAnchor then
-                sendMoneyButton:SetPoint("LEFT", moneyAnchor, "RIGHT", 8, 0)
-            else
-                sendMoneyButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 34)
-            end
+            sendMoneyButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 80)
         end
         if codButton then
             codButton:ClearAllPoints()
             if sendMoneyButton then
-                codButton:SetPoint("LEFT", sendMoneyButton, "RIGHT", 8, 0)
-            elseif moneyAnchor then
-                codButton:SetPoint("LEFT", moneyAnchor, "RIGHT", 8, 0)
+                local label = _G.SendMailSendMoneyButtonText
+                local w = (label and label.GetStringWidth and label:GetStringWidth() or 30) + 14
+                codButton:SetPoint("LEFT", sendMoneyButton, "RIGHT", w, 0)
             else
-                codButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 34)
+                codButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 80, 80)
             end
+        end
+        if _G.SendMailCostMoneyFrame then
+            _G.SendMailCostMoneyFrame:ClearAllPoints()
+            _G.SendMailCostMoneyFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -8, 38)
         end
         SetPanelShown(panel, SendMailFrame.IsShown and SendMailFrame:IsShown())
     end

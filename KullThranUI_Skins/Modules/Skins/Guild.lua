@@ -492,17 +492,24 @@ local function CollectGuildInviteIconTextures(frame)
     return textures
 end
 
+local function IsGuildInviteTabardPart(icon)
+    local name = icon and icon.GetName and icon:GetName()
+    if type(name) ~= "string" then return false end
+    name = name:lower()
+    return name:find("tabard", 1, true) or name:find("emblem", 1, true)
+end
+
 local function RestoreGuildInviteIconTextures(textures)
     for _, icon in ipairs(textures or {}) do
-        -- GuildInviteFrameTabardEmblem uses a dynamically generated atlas
-        -- coordinate from SetLargeGuildTabardTextures. Replacing it with the
-        -- generic 0.08/0.92 crop displays the whole emblem sheet as a large
-        -- rectangle in the invite dialog. Other icon regions keep the shared
-        -- skin crop.
-        if icon ~= _G.GuildInviteFrameTabardEmblem and icon.SetTexCoord then
-            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        -- Tabard parts (TabardBackground/TabardBorder/TabardEmblem) get their
+        -- texcoords, colors, sizes and anchors from SetLargeGuildTabardTextures
+        -- and the Blizzard XML. Touching texcoord/layer/size/points of any of
+        -- them (the old generic 0.08/0.92 crop and re-anchor) shows cut-off
+        -- black pieces. Only undo the StripTextures alpha for them.
+        if not IsGuildInviteTabardPart(icon) then
+            if icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+            if icon.SetDrawLayer then icon:SetDrawLayer("ARTWORK", 2) end
         end
-        if icon.SetDrawLayer then icon:SetDrawLayer("ARTWORK", 2) end
         if icon.SetAlpha then icon:SetAlpha(1) end
         if icon.Show then icon:Show() end
     end
@@ -520,19 +527,9 @@ local function SkinGuildInvite()
     end
     RestoreGuildInviteIconTextures(iconTextures)
 
-    local tabard = _G.GuildInviteFrameTabardEmblem
-    local tabardBackground = _G.GuildInviteFrameTabardBackground
-    if tabard then
-        tabard:ClearAllPoints()
-        tabard:SetSize(56, 64)
-        if tabardBackground then
-            tabard:SetPoint("CENTER", tabardBackground, "CENTER", 0, 0)
-        else
-            tabard:SetPoint("CENTER", GuildInviteFrame, "CENTER", 0, -48)
-        end
-        tabard:SetDrawLayer("ARTWORK", 2)
-        tabard:SetAlpha(1)
-        tabard:Show()
+    for _, suffix in ipairs({ "TabardBackground", "TabardBorder", "TabardEmblem" }) do
+        local part = _G["GuildInviteFrame" .. suffix]
+        if part and part.SetAlpha then part:SetAlpha(1); part:Show() end
     end
 
     S:CreateBackdrop(GuildInviteFrame, true)

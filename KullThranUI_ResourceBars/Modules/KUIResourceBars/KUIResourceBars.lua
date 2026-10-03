@@ -1105,13 +1105,13 @@ local function GetSafeDB()
     -- textSize reaching SetFont). Fill any missing scalar here, once, so the
     -- saved profile converges instead of relying on per-call Site guards.
     local SECTION_SCALAR_DEFAULTS = {
-        { db.health,    { enabled = false, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30 } },
+        { db.health,    { enabled = false, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.15, fillG = 0.75, fillB = 0.30, textFormat = "both" } },
         -- VisualThemes can seed these section tables before Resource Bars
         -- initializes them. Backfill only missing enable flags so a profile
         -- reset starts with the module on, while an explicit false remains
         -- untouched.
-        { db.primary,   { enabled = true, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00 } },
-        { db.secondary, { enabled = true, pipHeight = 14, pipSpacing = 2, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.95, fillG = 0.90, fillB = 0.60 } },
+        { db.primary,   { enabled = true, height = 25, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.00, fillG = 0.55, fillB = 1.00, textFormat = "curpp" } },
+        { db.secondary, { enabled = true, pipHeight = 14, pipSpacing = 2, borderSize = 1, textSize = 13, barAlpha = 1, fillA = 1, fillR = 0.95, fillG = 0.90, fillB = 0.60, showText = true } },
     }
     for _, entry in ipairs(SECTION_SCALAR_DEFAULTS) do
         local section, defaults = entry[1], entry[2]
@@ -1354,10 +1354,19 @@ local function CreateStatusBar(parent, name)
 
     bar._border = MakePixelBorder(bar, 0, 0, 0, 1, 1)
 
-    local text = bar:CreateFontString(nil, "OVERLAY")
+    -- Texto en un frame propio por encima de todo (borde, arte de tema, fills de
+    -- otros modulos): como OVERLAY de la barra podia quedar tapado.
+    local textFrame = CreateFrame("Frame", nil, bar)
+    textFrame:SetAllPoints(bar)
+    textFrame:SetFrameLevel(bar:GetFrameLevel() + 20)
+    textFrame:EnableMouse(false)
+    local text = textFrame:CreateFontString(nil, "OVERLAY", nil, 7)
     text:SetFont(GetRBFont(), 13, "OUTLINE")
-    text:SetPoint("CENTER")
+    text:SetPoint("CENTER", bar, "CENTER", 0, 0)
+    text:SetTextColor(1, 1, 1, 1)
+    text:SetDrawLayer("OVERLAY", 7)
     bar._text = text
+    bar._textFrame = textFrame
 
     return bar
 end
@@ -2048,6 +2057,24 @@ end
 -------------------------------------------------------------------------------
 --  UpdateBars
 -------------------------------------------------------------------------------
+SLASH_KTRBTEXT1 = "/ktrbtext"
+SlashCmdList["KTRBTEXT"] = function()
+    for _, pair in ipairs({ { "health", healthBar }, { "primary", primaryBar }, { "secondary", secondaryBar } }) do
+        local bar = pair[2]
+        local d = GetSafeDB()[pair[1]]
+        if not bar then
+            print("KUI RB " .. pair[1] .. ": no bar")
+        else
+            local t = bar._text
+            local f, sz = t:GetFont()
+            print(("KUI RB %s: fmt=%s showText=%s shown=%s alpha=%.2f text='%s' font=%s/%s textShown=%s lvl=%s"):format(
+                pair[1], tostring(d and d.textFormat), tostring(d and d.showText), tostring(bar:IsShown()),
+                bar:GetEffectiveAlpha(), tostring(t:GetText()), tostring(f), tostring(sz), tostring(t:IsShown()),
+                tostring(bar._textFrame and bar._textFrame:GetFrameLevel())))
+        end
+    end
+end
+
 function KRB:UpdateBars(event, unit)
     -- UNIT_* handlers pass a unit token; rune handlers pass a numeric rune
     -- index in the same argument position and must not be filtered out.

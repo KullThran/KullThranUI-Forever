@@ -8427,7 +8427,7 @@ ApplyShapeToCDMIcon = function(icon, shape, barData)
         -- Restore square borders
         if icon._edges then
             for i = 1, 4 do icon._edges[i]:Show() end
-            if icon._bg then icon._bg:Show() end
+            if icon._bg then icon._bg:SetAlpha(1); icon._bg:Show() end
             icon._edges[1]:SetHeight(borderSz)
             icon._edges[2]:SetHeight(borderSz)
             icon._edges[3]:SetWidth(borderSz)
@@ -8527,7 +8527,8 @@ ApplyShapeToCDMIcon = function(icon, shape, barData)
     if icon._edges then
         for i = 1, 4 do icon._edges[i]:Hide() end
     end
-    if icon._bg then icon._bg:Hide() end
+    -- alpha 0 ademas de Hide: otros refrescos llaman a Show() y dejaban ver el fondo cuadrado tras la forma
+    if icon._bg then icon._bg:Hide(); icon._bg:SetAlpha(0) end
     if icon.__KUIShapeBorderFrame then icon.__KUIShapeBorderFrame:Hide() end
 
     -- Shape border texture (on a dedicated frame above the cooldown swipe)
@@ -9665,7 +9666,7 @@ function ns.EnsureNativeCDMFrame(frame, barKey, barData)
     local baseLevel = frame:GetFrameLevel()
     if frame._bg then
         local hasCustomShape = frame._shapeApplied and frame._shapeName and frame._shapeName ~= 'none'
-        if hasCustomShape then frame._bg:Hide() else frame._bg:Show() end
+        if hasCustomShape then frame._bg:Hide(); frame._bg:SetAlpha(0) else frame._bg:SetAlpha(1); frame._bg:Show() end
     end
     if frame._edges then
         local hasCustomShape = frame._shapeApplied and frame._shapeName and frame._shapeName ~= 'none'

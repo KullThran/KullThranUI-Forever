@@ -3074,8 +3074,10 @@ ns.PF_Portrait.strataAbove = {
 }
 
 ns.PF_Portrait.GetStrataAbove = function(frame)
+    -- Keep the portrait in the SAME strata as Health (ordered via frame level).
+    -- Bumping to HIGH made party frames draw over spellbook/map/bags.
     local strata = frame and frame.GetFrameStrata and frame:GetFrameStrata() or "MEDIUM"
-    return ns.PF_Portrait.strataAbove[strata] or "HIGH"
+    return strata
 end
 
 ns.PF_Portrait.GetBorderColor = function(frame, fakeData, db)

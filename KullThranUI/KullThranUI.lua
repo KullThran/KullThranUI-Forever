@@ -31,7 +31,12 @@ local kuiForeverProject = _G.WOW_PROJECT_FOREVER
     or _G.WOW_PROJECT_FOREVER_BETA
     or _G.WOW_PROJECT_WOW_FOREVER_BETA
 KT.FOREVER_INTERFACE = 16001
-KT.IS_FOREVER = tonumber(kuiInterface) == KT.FOREVER_INTERFACE
+-- The real client reports 160001 (see KTForeverProbe), the TOC says 16001: accept
+-- both and the whole 16xxx / 16xxxx band. Retail is 12xxxx, so no clash.
+local kuiIfaceNum = tonumber(kuiInterface)
+KT.IS_FOREVER = kuiIfaceNum == KT.FOREVER_INTERFACE
+    or (kuiIfaceNum ~= nil and ((kuiIfaceNum >= 16000 and kuiIfaceNum < 20000)
+        or (kuiIfaceNum >= 160000 and kuiIfaceNum < 170000)))
     or (_G.WOW_PROJECT_ID ~= nil and kuiForeverProject ~= nil
         and _G.WOW_PROJECT_ID == kuiForeverProject)
 function KT:IsForever()
@@ -93,6 +98,40 @@ function KT:GetProfileFlavorFromName(name)
     if name:sub(1, #"KullThranUI Forever - ") == "KullThranUI Forever - " then return "forever" end
     if name:sub(1, #"KullThranUI Retail - ") == "KullThranUI Retail - " then return "retail" end
     return nil
+end
+
+-- Profiles created by older builds that mis-detected Forever as Retail carry the
+-- "Retail" prefix but were stamped with a Forever interface in _flavorMeta.
+-- Rename them to the Forever prefix (never touches real Retail profiles).
+function KT:MigrateMisflavoredProfiles(sv)
+    if not self.IS_FOREVER or type(sv) ~= "table" or type(sv.profiles) ~= "table" then return end
+    local retailPrefix, foreverPrefix = "KullThranUI Retail - ", "KullThranUI Forever - "
+    local moves
+    for name, prof in pairs(sv.profiles) do
+        if type(name) == "string" and name:sub(1, #retailPrefix) == retailPrefix and type(prof) == "table" then
+            local iface = type(prof._flavorMeta) == "table" and tonumber(prof._flavorMeta.interface) or nil
+            if iface and ((iface >= 16000 and iface < 20000) or (iface >= 160000 and iface < 170000)) then
+                local target = foreverPrefix .. name:sub(#retailPrefix + 1)
+                if sv.profiles[target] == nil then
+                    moves = moves or {}
+                    moves[#moves + 1] = { name, target }
+                end
+            end
+        end
+    end
+    if not moves then return end
+    for _, m in ipairs(moves) do
+        local old, new = m[1], m[2]
+        local prof = sv.profiles[old]
+        prof._flavorMeta.flavor = "forever"
+        sv.profiles[new] = prof
+        sv.profiles[old] = nil
+        if type(sv.profileKeys) == "table" then
+            for k, v in pairs(sv.profileKeys) do
+                if v == old then sv.profileKeys[k] = new end
+            end
+        end
+    end
 end
 
 -- Display name for UI lists: "[Forever] MyProfile" instead of the raw namespaced key.

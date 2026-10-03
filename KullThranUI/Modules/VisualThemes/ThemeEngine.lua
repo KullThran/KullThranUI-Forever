@@ -403,6 +403,76 @@ function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
     return true
 end
 
+-- Re-selecting a theme (same or different) resets the combo point choices to the
+-- theme's defaults, even if the user had picked a style in Unit Frames.
+function KT.VisualThemes:ResetComboDefaults()
+    -- Nameplates: selecting a theme drops a manually picked nameplate style preset (so the plates
+    -- follow the theme again) and the enemy-plate sizes/dimensions saved under the previous one,
+    -- exactly like clicking a preset tile in Nameplates > General. The adapter seed already set
+    -- the theme's textures/border/colors.
+    do
+        local ad = self.GetModuleAdapter and self:GetModuleAdapter("nameplates")
+        local P = ad and ad.getProfile and ad.getProfile()
+        local tables = { _G.KullThranUINameplatesDB, _G.KullThranUINameplatesDB_Forever, P }
+        local PREFIX = { "healthBar", "castBar", "cast", "enemyName", "level", "name", "classPower",
+            "textSlot", "raidMarker", "rareElite", "targetArrow", "focusCast" }
+        local seen = {}
+        for _, tbl in ipairs(tables) do
+            if type(tbl) == "table" and not seen[tbl] then
+                seen[tbl] = true
+                tbl.nameplateStyle = nil
+                for k in pairs(tbl) do
+                    if type(k) == "string" and not k:find("^friendly") then
+                        for _, pre in ipairs(PREFIX) do
+                            if k:sub(1, #pre) == pre then tbl[k] = nil; break end
+                        end
+                    end
+                end
+                tbl.classPowerPos = "bottom"
+            end
+        end
+        -- re-seed the theme's own plate look (also covers re-selecting the active theme)
+        local _, nst = self:EnsureInitialized()
+        local nth = nst and nst.active
+        if ad and ad.seed and P and nth then
+            pcall(ad.seed, P, nth)
+            if ad.validate then pcall(ad.validate, P) end
+        end
+        if type(KT.RefreshNameplateTheme) == "function" then pcall(KT.RefreshNameplateTheme) end
+    end
+    -- Minimap: selecting a theme overwrites any manual ring choice (auto = the theme's
+    -- own ring: kui none, forever, retail, classic) and puts the round shape the ring needs.
+    local mm = KT.db and KT.db.profile and KT.db.profile.minimap
+    if type(mm) == "table" then
+        local _, mst = self:EnsureInitialized()
+        local mth = mst and mst.active
+        mm.ringStyle = nil
+        if mth == "forever" or mth == "retail" or mth == "classic" then mm.shape = "ROUND" end
+        local MM = KT.GetModule and KT:GetModule("Minimap", true)
+        if MM and MM.Refresh then pcall(MM.Refresh, MM) end
+    end
+    local uf = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if type(uf) ~= "table" then return end
+    uf.comboUnderFrame = nil
+    uf.comboTargetStyle = nil
+    -- Forever/Retail: health bar fill back to the theme's reference green.
+    local _, st = self:EnsureInitialized()
+    local th = st and st.active
+    if th == "forever" or th == "retail" then
+        -- modern PvP icon is the default here: drop any stored player/target style
+        uf.pvpIconStyle = nil
+        uf.pvpIconStyleTarget = nil
+        for _, key in ipairs({ "player", "target" }) do
+            uf[key] = type(uf[key]) == "table" and uf[key] or {}
+            uf[key].customFillColor = { r = 0.57, g = 1.00, b = 0.235 }
+            uf[key].healthClassColored = false
+        end
+        local root = KT.db.profile
+        if type(root.visualThemeHealth) == "table" then root.visualThemeHealth[th] = nil end
+    end
+    if type(KT.RefreshComboUnderFrame) == "function" then pcall(KT.RefreshComboUnderFrame) end
+end
+
 function KT.VisualThemes:ApplyAll(targetTheme)
     if not self:IsKnownTheme(targetTheme) then
         if KT.Print then KT:Print("Unknown visual theme: " .. tostring(targetTheme)) end
@@ -481,6 +551,7 @@ function KT.VisualThemes:ApplyAll(targetTheme)
     state.requested = targetTheme
     state.active = targetTheme
     state.schemaVersion = self.SCHEMA_VERSION
+    self:ResetComboDefaults()
 
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()
@@ -490,7 +561,11 @@ end
 
 function KT.VisualThemes:RequestApply(themeKey)
     if not self:IsKnownTheme(themeKey) then return false end
-    if themeKey == self:GetRenderedTheme() then return true end
+    if themeKey == self:GetRenderedTheme() then
+        self:ResetComboDefaults()
+        if KT.Print then KT:Print("Combo points restored to this theme's defaults.") end
+        return true
+    end
 
     local catalog = self:GetThemeCatalog()
     local theme = catalog[themeKey]

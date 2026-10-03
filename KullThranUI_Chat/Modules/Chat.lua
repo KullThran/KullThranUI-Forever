@@ -5318,11 +5318,34 @@ function Mod:OpenDirectWhisperTarget(target, bnetIDAccount, forceWoWWhisper)
     if _G.ChatEdit_SetLastTellTarget then
         pcall(_G.ChatEdit_SetLastTellTarget, fullWowTarget or target, "WHISPER")
     end
-    if _G.ChatFrame_ReplyTell then
-        pcall(_G.ChatFrame_ReplyTell, chatFrame or _G.DEFAULT_CHAT_FRAME)
+
+    -- Blizzard behaviour for a player-link click: put "/w Name " in the edit
+    -- box (ChatFrame_SendTell -> ChatFrame_OpenChat). ReplyTell alone depended
+    -- on the last-tell state and left the edit box empty.
+    local tellName = fullWowTarget or target
+    local replyFrame = chatFrame or _G.DEFAULT_CHAT_FRAME
+    local sendTell = _G.ChatFrame_SendTell or (ChatFrameUtil and ChatFrameUtil.SendTell)
+    if sendTell then
+        pcall(sendTell, tellName, replyFrame)
     end
 
     editBox = _G.ChatFrame1EditBox or (chatFrame and chatFrame.editBox) or nil
+    local currentText = editBox and editBox.GetText and editBox:GetText() or ""
+    if type(currentText) ~= "string" or not currentText:find("^/[wWtT]") then
+        local command = "/w " .. tostring(tellName) .. " "
+        if _G.ChatFrame_OpenChat and replyFrame then
+            local ok, opened = pcall(_G.ChatFrame_OpenChat, command, replyFrame)
+            if ok and opened then
+                editBox = opened
+            end
+        elseif editBox and editBox.SetText then
+            if _G.ChatEdit_ActivateChat then
+                pcall(_G.ChatEdit_ActivateChat, editBox)
+            end
+            editBox:SetText(command)
+        end
+    end
+
     if editBox then
         if editBox.SetFocus then
             pcall(editBox.SetFocus, editBox)
@@ -6238,6 +6261,10 @@ function Mod:RegisterChatEvents()
     -- payload before Blizzard's MessageEventHandler can taint HistoryKeeper's
     -- protected access-ID tables.
     self.chatEventsRegistered = true
+
+    -- /played prints through ChatFrame1:AddMessage (hidden by the KUI window)
+    -- and never fires CHAT_MSG_*, so render it into the KUI frames ourselves.
+    self:RegisterEvent("TIME_PLAYED_MSG", "OnTimePlayedEvent")
 
     if KT_IsSecureChatSafeMode() then
         if KT_IS_FOREVER_BUILD then
@@ -8299,6 +8326,67 @@ function Mod:OnCombatLogEvent()
         self:AddEntryToFrames(pushed)
         self:ScheduleWindowFade()
         self:UpdateScrollButtonVisibility()
+    end
+end
+
+function Mod:OnTimePlayedEvent(_, totalTime, levelTime)
+    if not self.runtimeInitialized or not self.chatEventsRegistered then
+        return
+    end
+    if type(totalTime) ~= "number" or not KT_CanAccessValue(totalTime) then
+        return
+    end
+
+    local function fmt(seconds)
+        if type(seconds) ~= "number" then
+            return nil
+        end
+        if _G.SecondsToTime then
+            return SecondsToTime(seconds)
+        end
+        local d = math.floor(seconds / 86400)
+        local h = math.floor((seconds % 86400) / 3600)
+        local m = math.floor((seconds % 3600) / 60)
+        local sec = math.floor(seconds % 60)
+        return string.format("%d d %d h %d min %d s", d, h, m, sec)
+    end
+
+    local lines = {}
+    local totalText = fmt(totalTime)
+    if totalText then
+        lines[#lines + 1] = string.format(_G.TIME_PLAYED_TOTAL or "Total time played: %s", totalText)
+    end
+    local levelText = fmt(levelTime)
+    if levelText and type(levelTime) == "number" and levelTime > 0 then
+        lines[#lines + 1] = string.format(_G.TIME_PLAYED_LEVEL or "Time played this level: %s", levelText)
+    end
+
+    local info = (ChatTypeInfo and ChatTypeInfo.SYSTEM) or {}
+    for _, text in ipairs(lines) do
+        local entry = {
+            message = text,
+            rawMessage = text,
+            r = info.r or 1,
+            g = info.g or 1,
+            b = info.b or 0,
+            event = "CHAT_MSG_SYSTEM",
+            chatType = "SYSTEM",
+            timestamp = date("%H:%M"),
+            label = KT_GetDisplayChatLabel("SYSTEM") or "SYSTEM",
+            persist = false,
+            searchText = self:BuildSearchText({ text }),
+        }
+        local handleIncomingEntry = rawget(self, "HandleIncomingEntry") or rawget(Mod, "HandleIncomingEntry")
+        if type(handleIncomingEntry) == "function" then
+            handleIncomingEntry(self, entry)
+        else
+            local pushed = self:PushHistory(entry)
+            if pushed then
+                self:ShowWindowForActivity(false)
+                self:AddEntryToFrames(pushed)
+                self:ScheduleWindowFade()
+            end
+        end
     end
 end
 

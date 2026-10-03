@@ -2609,6 +2609,7 @@ function KT:InitializeCore()
             return profileName
         end
 
+        if self.MigrateMisflavoredProfiles then self:MigrateMisflavoredProfiles(sv) end
         local scoped = self:ScopeProfileName(profileName or "Default")
         if type(sv.profiles[scoped]) ~= "table" then
             sv.profiles[scoped] = {}
@@ -2634,6 +2635,7 @@ function KT:InitializeCore()
         local sv = rawget(self.db, "sv")
         if not (sv and sv.profileKeys and sv.profiles and self.db.keys) then return end
         local charKey = self.db.keys.char
+        if self.MigrateMisflavoredProfiles then self:MigrateMisflavoredProfiles(sv) end
         local storedName = charKey and sv.profileKeys[charKey] or nil
         if profileBelongsToFlavor(storedName) and sv.profiles[storedName] then
             self.db.keys.profile = storedName

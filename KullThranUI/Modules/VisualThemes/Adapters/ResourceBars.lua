@@ -18,6 +18,7 @@ KT.VisualThemes:RegisterModule("resourcebars", {
             "health.fillR", "health.fillG", "health.fillB",
             "primary.texture", "primary.borderSize",
             "secondary.texture", "secondary.borderSize",
+            "health.textFormat", "primary.textFormat", "secondary.showText",
         }
     end,
     seed = function(profile, themeKey)
@@ -81,6 +82,10 @@ KT.VisualThemes:RegisterModule("resourcebars", {
                 profile[key].height = profile[key].height or heightDefaults[key]
             end
         end
+        -- every theme shows the resource / power texts by default
+        profile.health.textFormat = "both"
+        profile.primary.textFormat = "curpp"
+        profile.secondary.showText = true
         if healthR then
             profile.health.fillR, profile.health.fillG, profile.health.fillB = healthR, healthG, healthB
         end

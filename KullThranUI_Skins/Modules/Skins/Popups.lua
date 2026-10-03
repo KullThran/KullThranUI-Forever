@@ -1182,6 +1182,18 @@ local function SkinStaticPopup(frame)
 
 
     StylePopupButtons(frame)
+    -- AlphaStripTextures(deep) hides the coin icons of the buyout/bid
+    -- MoneyFrame and the art of the bid MoneyInputFrame; restore + skin them.
+    do
+        local fname = frame.GetName and frame:GetName()
+        local moneyFrame = frame.MoneyFrame or frame.moneyFrame or (fname and _G[fname .. "MoneyFrame"])
+        local moneyInput = frame.MoneyInputFrame or frame.moneyInputFrame or (fname and _G[fname .. "MoneyInputFrame"])
+        if moneyFrame then S:RestoreMoneyArt(moneyFrame) end
+        if moneyInput then
+            S:HandleMoneyInput(moneyInput)
+            S:RestoreMoneyArt(moneyInput)
+        end
+    end
     if frame.EditBox then
 
         S:StripTextures(frame.EditBox)

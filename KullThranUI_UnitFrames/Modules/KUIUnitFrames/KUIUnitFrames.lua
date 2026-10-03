@@ -1400,12 +1400,121 @@ local function UnitToSettingsKey(unit) return UCtx.ResolveKey(unit) end
 local function GetSettingsForUnit(unit) return UCtx.ResolveSettings(unit) end
 local function GetMiniDonorSettings() return UCtx.ResolveMiniDonor() end
 
+-- Forever/Retail: use Blizzard's own pre-coloured bar atlases as the fill of the
+-- Player/Target health and power bars (same atlases EllesmereUI/BetterBlizzFrames
+-- reference). Only when the user kept the default texture AND the default health
+-- colour; every atlas is validated with GetAtlasInfo and falls back to the flat fill.
+-- The atlas is already coloured, so the bar's vertex colour is forced back to white.
+ns.AtlasFill = {}
+ns.AtlasFill.POWER = {
+    MANA = "Mana", RAGE = "Rage", FOCUS = "Focus", ENERGY = "Energy",
+    RUNIC_POWER = "RunicPower", LUNAR_POWER = "AstralPower", MAELSTROM = "Maelstrom",
+    INSANITY = "Insanity", FURY = "Fury", PAIN = "Pain",
+}
+function ns.AtlasFill.Exists(name)
+    return name and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) and true or false
+end
+function ns.AtlasFill.SeatMask(bar)
+    local m, fill = bar._ktForeverMask, bar:GetStatusBarTexture()
+    if m and m.IsShown and not m:IsShown() then return end   -- mask deliberately dropped (Rare/Elite power bar)
+    if m and fill and fill.AddMaskTexture then
+        pcall(fill.RemoveMaskTexture, fill, m)
+        pcall(fill.AddMaskTexture, fill, m)
+    end
+end
+function ns.AtlasFill.KeepWhite(bar)
+    if bar._kuiWhiteHook then return end
+    bar._kuiWhiteHook = true
+    hooksecurefunc(bar, "SetStatusBarColor", function(self)
+        if self._kuiAtlasFill then
+            local f = self:GetStatusBarTexture()
+            if f then f:SetVertexColor(1, 1, 1, 1) end
+        end
+    end)
+end
+-- Theme default greens (Classic 0.10/0.90/0.10, Forever/Retail 0.57/1/0.235): only these are
+-- "the theme default", a colour the user picked is never overridden.
+function ns.AtlasFill.IsDefaultGreen(c)
+    if type(c) ~= "table" or type(c.r) ~= "number" then return false end
+    local function near(a, b) return math.abs(a - b) < 0.02 end
+    return (near(c.r, 0.57) and near(c.g, 1.0) and near(c.b, 0.235))
+        or (near(c.r, 0.10) and near(c.g, 0.90) and near(c.b, 0.10))
+end
+-- Hostile units must not wear the friendly green: class colour for enemy players, reaction
+-- colour (tapped = grey) for NPCs, same rule EllesmereUI's oUF health uses.
+function ns.AtlasFill.EnemyColor(unit)
+    if not unit or not UnitExists(unit) then return end
+    local ok, can = pcall(UnitCanAttack, "player", unit)
+    if not ok or (issecretvalue and issecretvalue(can)) or not can then return end
+    local okP, isPlayer = pcall(UnitIsPlayer, unit)
+    if okP and isPlayer and not (issecretvalue and issecretvalue(isPlayer)) then
+        local _, cls = UnitClass(unit)
+        if cls and not (issecretvalue and issecretvalue(cls)) then
+            local c = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[cls]
+            if c then return c.r, c.g, c.b end
+        end
+        return
+    end
+    if UnitIsTapDenied and UnitIsTapDenied(unit) then return 0.6, 0.6, 0.6 end
+    local reaction = UnitReaction(unit, "player")
+    if reaction and not (issecretvalue and issecretvalue(reaction)) then
+        local c = FACTION_BAR_COLORS[reaction]
+        if c then return c.r, c.g, c.b end
+    end
+end
+function ns.AtlasFill.Apply(health, power, unitKey, settings)
+    local AtlasExists, SeatForeverMask, KeepWhite, POWER_ATLAS_SUFFIX = ns.AtlasFill.Exists, ns.AtlasFill.SeatMask, ns.AtlasFill.KeepWhite, ns.AtlasFill.POWER
+    local side = (unitKey == "target") and "Target" or "Player"
+    local c = settings and settings.customFillColor
+    local defaultColor = settings and settings.healthClassColored == false and type(c) == "table"
+        and math.abs((c.r or 0) - 0.57) < 0.02 and math.abs((c.g or 0) - 1.0) < 0.02
+        and math.abs((c.b or 0) - 0.235) < 0.02
+    local hAtlas = "UI-HUD-UnitFrame-" .. side .. "-PortraitOn-Bar-Health"
+    if health then
+        if defaultColor and not health._kuiEnemyTint and AtlasExists(hAtlas) then
+            health:SetStatusBarTexture(hAtlas)
+            health._kuiAtlasFill = true
+            KeepWhite(health)
+            SeatForeverMask(health)
+            local f = health:GetStatusBarTexture()
+            if f then f:SetVertexColor(1, 1, 1, 1) end
+        else
+            health._kuiAtlasFill = nil
+        end
+    end
+    if power then
+        local _, token = UnitPowerType(unitKey)
+        local suffix = token and POWER_ATLAS_SUFFIX[token]
+        local pAtlas = suffix and ("UI-HUD-UnitFrame-" .. side .. "-PortraitOn-Bar-" .. suffix)
+        if pAtlas and not AtlasExists(pAtlas) then pAtlas = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-" .. suffix end
+        if pAtlas and AtlasExists(pAtlas) then
+            power:SetStatusBarTexture(pAtlas)
+            power._kuiAtlasFill = true
+            KeepWhite(power)
+            SeatForeverMask(power)
+            local f = power:GetStatusBarTexture()
+            if f then f:SetVertexColor(1, 1, 1, 1) end
+        else
+            power._kuiAtlasFill = nil
+        end
+    end
+end
+
 local function ApplyHealthBarTexture(health, unitKey)
     if not health then return end
     local s = unitKey and db.profile[unitKey]
     local texKey = (s and s.healthBarTexture) or db.profile.healthBarTexture or "none"
     local path   = ResolveSharedTexturePath(texKey, "Melli Reforged")
     local bgPath = healthBarTextures["Melli Dark"]
+
+    -- Forever/Retail: Blizzard's bars are a flat colour with a glossy tube
+    -- highlight (KUI_BarGloss), not the patterned default LSM texture. Only
+    -- when the user kept the default texture.
+    if (unitKey == "player" or unitKey == "target")
+        and (texKey == "Melli Reforged" or texKey == "none")
+        and ns.BarGloss and ns.BarGloss.IsBlizzardStyle and ns.BarGloss.IsBlizzardStyle() then
+        path = nil
+    end
 
     -- Apply texture directly to the StatusBar fill
     if path then
@@ -1435,6 +1544,15 @@ local function ApplyHealthBarTexture(health, unitKey)
             power.bg:SetTexture(bgPath)
             power.bg:SetVertexColor(1, 1, 1, 1)
         end
+    end
+
+    if (unitKey == "player" or unitKey == "target")
+        and (texKey == "Melli Reforged" or texKey == "none")
+        and ns.BarGloss and ns.BarGloss.IsBlizzardStyle and ns.BarGloss.IsBlizzardStyle() then
+        pcall(ns.AtlasFill.Apply, health, power, unitKey, s)
+    else
+        health._kuiAtlasFill = nil
+        if power then power._kuiAtlasFill = nil end
     end
 end
 
@@ -1556,6 +1674,24 @@ local function ApplyDarkTheme(health)
                     end
                     return
                 end
+            end
+            -- hostile target/focus: reaction/class colour instead of the theme's friendly green
+            local er, eg, eb
+            if (uKey == "target" or uKey == "focus") and cFill and not classColored
+                and ns.AtlasFill.IsDefaultGreen(cFill) then
+                er, eg, eb = ns.AtlasFill.EnemyColor(unit)
+            end
+            if (self._kuiEnemyTint and true or false) ~= (er ~= nil) then
+                self._kuiEnemyTint = (er ~= nil) or nil
+                pcall(ApplyHealthBarTexture, self, uKey)   -- atlas fill is green: swap to flat fill and back
+            end
+            if er then
+                self:SetStatusBarColor(er, eg, eb)
+                if self.bg then
+                    self.bg:SetTexture(healthBarTextures["Melli Dark"] or "Interface\\Buttons\\WHITE8X8")
+                    self.bg:SetVertexColor(er * 0.2, eg * 0.2, eb * 0.2, 1)
+                end
+                return
             end
             if cFill and not classColored then
                 self:SetStatusBarColor(cFill.r, cFill.g, cFill.b)
@@ -2317,6 +2453,23 @@ local function ApplyPortraitFacing(tex, unit, settings, fullTexture)
     else
         tex:SetTexCoord(0.15, 0.85, 0.15, 0.85)
     end
+end
+
+
+-- Re-resolve class token + sprite coords + facing for the class-art portrait.
+-- Needed on every unit change (PLAYER_TARGET_CHANGED etc): the class texture is
+-- static and was only refreshed on creation / full reload, so it kept the
+-- previous unit's class (e.g. own rogue icon) after retargeting.
+ns.RefreshClassPortrait = function(unit, backdrop)
+    if not (backdrop and backdrop._class) then return end
+    local uKey = UnitToSettingsKey(unit) or unit
+    local uSettings = uKey and db and db.profile and db.profile[uKey]
+    if ResolveActivePortraitMode(unit, uSettings) ~= "class" then return end
+    local ct = ResolvePortraitClassToken(unit)
+    if not ct then backdrop._class:Hide(); return end
+    ApplyClassIconTexture(backdrop._class, ct, (uSettings and uSettings.classThemeStyle) or "modern")
+    ApplyPortraitFacing(backdrop._class, unit, uSettings, true)
+    backdrop._class:Show()
 end
 
 
@@ -3802,6 +3955,7 @@ local function CreatePortrait(frame, side, frameHeight, unit)
     tex2D.PostUpdate = function(self)
         UnsnapTex(self)
         ApplyPortraitFacing(self, unit, uSettings)
+        if self.isClass and ns.RefreshClassPortrait then ns.RefreshClassPortrait(unit, backdrop) end
         self:ClearAllPoints()
         -- When detached, ApplyDetachedPortraitShape sets expanded offsets for mask fill.
         -- Re-apply those offsets instead of resetting to default.
@@ -5482,6 +5636,11 @@ local function SetupUnitIndicators(frame, unit)
                 local pc = profile.playerClassificationBorder
                 if pc == "elite" or pc == "classicelite" then cr, cg, cb = 0.96, 0.76, 0.22 end
             end
+            -- Retail/Forever with the player's RARE border selected: dark grey circle.
+            if (renderedTheme == "retail" or renderedTheme == "forever") and u == "player" and profile then
+                local pc = profile.playerClassificationBorder
+                if pc == "rare" or pc == "classicrare" then cr, cg, cb = 0.42, 0.43, 0.46 end
+            end
             frame._kuiPvPCircleBorder:SetVertexColor(cr, cg, cb, 1)
         end
         local levelText = showLevel and SafeUnitLevelText(u) or nil
@@ -5593,6 +5752,10 @@ local function SetupUnitIndicators(frame, unit)
             if frame._ktForeverPortraitArtFill then frame._ktForeverPortraitArtFill:SetShown(showBaseRing) end
             if frame._ktForeverPortraitCornerPatch then frame._ktForeverPortraitCornerPatch:SetShown(showBaseRing) end
             if frame._ktForeverPortraitCornerPatch2 then frame._ktForeverPortraitCornerPatch2:SetShown(showBaseRing) end
+        end
+        -- Rare/Elite hides the whole stock atlas: keep the frame around the bars.
+        if (u == "player" or u == "target") and ns.BarFrameArt and ns.BarFrameArt.Update then
+            pcall(ns.BarFrameArt.Update, frame, u)
         end
         local pvpFaction = (profile and profile.showPvPIcon ~= false
             and (u == "player" or u == "target"))
@@ -7453,9 +7616,17 @@ function ns.KTTargetCombo:Refresh(frame)
     -- exactly on top of the PvP faction shield whenever the target is a PvP
     -- ally NPC. Raised so the arc clears that corner instead of ending in it.
     local arcStartDeg, arcEndDeg = 95, 15
+    -- comboPosTarget / comboXTarget / comboYTarget (Combo Points Position + X/Y)
+    -- were ignored by the ring. "above" centres the arc over the top of the
+    -- portrait; "below" keeps the legacy badge-safe arc. X/Y offset the ring.
+    local comboPos, comboX, comboY = "below", 0, 0
+    if ns.ComboUnderFrame and ns.ComboUnderFrame.GetPlacement then
+        comboPos, comboX, comboY = ns.ComboUnderFrame.GetPlacement("target")
+    end
+    if comboPos == "above" then arcStartDeg, arcEndDeg = 140, 40 end
     ring:SetSize((radius + pipSize) * 2, (radius + pipSize) * 2)
     ring:ClearAllPoints()
-    ring:SetPoint("CENTER", portrait, "CENTER", 0, 0)
+    ring:SetPoint("CENTER", portrait, "CENTER", comboX, comboY)
 
     local r, g, b = 1.0, 0.05, 0.05
     local okCurrent, current = pcall(UnitPower, "player", comboType)
@@ -10218,6 +10389,7 @@ function InitializeFrames()
                         ApplyDetachedPortraitShape(backdrop, uSettings, unitKey)
                     end
                     SwapPortraitMode(frame)
+                    ns.RefreshClassPortrait(unitKey, backdrop)
                     if frame:IsElementEnabled("Portrait") and frame.Portrait and frame.Portrait.ForceUpdate then
                         frame.Portrait:ForceUpdate()
                     end
@@ -10999,6 +11171,40 @@ function KT:MigrateKuiHealthClassColorDefault()
     end
 end
 
+-- One-time repair: replace the too-dark green (0.07, 0.35, 0.03) written by an
+-- earlier build -- in the live profile AND in every saved theme slot -- with
+-- the lighter reference green.
+function KT:MigrateDarkHealthGreen()
+    local profile = db and db.profile
+    if not profile or profile._darkGreenFix20261002b then return end
+    profile._darkGreenFix20261002b = true
+    local seen = {}
+    local function Walk(t, depth)
+        if type(t) ~= "table" or seen[t] or depth > 8 then return end
+        seen[t] = true
+        for k, v in pairs(t) do
+            if type(v) == "table" then
+                if type(v.r) == "number" and type(v.g) == "number" and type(v.b) == "number"
+                    and ((math.abs(v.r - 0.07) < 0.005 and math.abs(v.g - 0.35) < 0.005
+                        and math.abs(v.b - 0.03) < 0.005)
+                      or (math.abs(v.r - 0.62) < 0.005 and math.abs(v.g - 1.00) < 0.005
+                        and math.abs(v.b - 0.27) < 0.005)) then
+                    v.r, v.g, v.b = 0.57, 1.00, 0.235
+                elseif #v >= 3 and type(v[1]) == "number"
+                    and ((math.abs(v[1] - 0.07) < 0.005 and math.abs((v[2] or 0) - 0.35) < 0.005
+                        and math.abs((v[3] or 0) - 0.03) < 0.005)
+                      or (math.abs(v[1] - 0.62) < 0.005 and math.abs((v[2] or 0) - 1.00) < 0.005
+                        and math.abs((v[3] or 0) - 0.27) < 0.005)) then
+                    v[1], v[2], v[3] = 0.57, 1.00, 0.235
+                else
+                    Walk(v, depth + 1)
+                end
+            end
+        end
+    end
+    Walk(profile, 0)
+end
+
 function KT:MigrateRetailHealthGreen()
     local profile = db.profile
     if not profile or profile._retailHealthGreen20261001 then return end
@@ -11010,7 +11216,7 @@ function KT:MigrateRetailHealthGreen()
     for _, key in ipairs({ "player", "target" }) do
         profile[key] = type(profile[key]) == "table" and profile[key] or {}
         if profile[key].customFillColor == nil then
-            profile[key].customFillColor = { r = 0.10, g = 0.90, b = 0.10 }
+            profile[key].customFillColor = { r = 0.57, g = 1.00, b = 0.235 }
         end
         if profile[key].healthClassColored == nil then
             profile[key].healthClassColored = false
@@ -11317,6 +11523,7 @@ function Mod:OnInitialize()
     KT:MigrateClassicPortraitCircular()
     KT:MigrateRetailPortraitCircular()
     KT:MigrateRetailHealthGreen()
+    KT:MigrateDarkHealthGreen()
     KT:MigrateForeverHealthColorSelector()
     KT:MigrateKuiPvPCircleDefault()
     KT:MigrateKuiHealthClassColorDefault()
