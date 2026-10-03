@@ -2275,7 +2275,8 @@ end
 -- unless the user picked a facing. Humanoid models start out turned to the
 -- right and shapeshifted forms (druid, ghost wolf) to the left, so each needs a
 -- different turn, and a closer camera so the tail stays out of the frame.
--- Positive rotation turns toward the right. Returns the yaw and a zoom factor.
+-- Positive rotation turns toward the right. Returns the yaw, a zoom factor and a sideways camera shift
+-- that brings the head into view.
 function KT.Portrait3DYaw(unit, side, facingMode, invert, rotation)
     local lookRight
     if facingMode == "normal" then
@@ -2301,7 +2302,8 @@ function KT.Portrait3DYaw(unit, side, facingMode, invert, rotation)
     else
         yaw = lookRight and 0 or -0.9
     end
-    return yaw + math.rad(tonumber(rotation) or 0), shifted and 2 or 1
+    return yaw + math.rad(tonumber(rotation) or 0), shifted and 2 or 1,
+        shifted and (lookRight and -0.3 or 0.3) or 0
 end
 
 local function GetDefaultPortraitFacing(unit)
@@ -3949,14 +3951,14 @@ local function CreatePortrait(frame, side, frameHeight, unit)
             local s3 = key and db.profile[key]
             local zoom = math.max(0.25, ((s3 and s3.portrait3DZoom) or 125) / 100)
             local backdropFrame = self:GetParent()
-            local rot, formZoom = KT.Portrait3DYaw(updatedUnit, backdropFrame and backdropFrame._portraitSide,
+            local rot, formZoom, formShift = KT.Portrait3DYaw(updatedUnit, backdropFrame and backdropFrame._portraitSide,
                 s3 and s3.portraitFacingMode,
                 false,
                 s3 and s3.portrait3DRotation)
             local offX = ((s3 and s3.portrait3DX) or 0) / 100
             local offY = ((s3 and s3.portrait3DY) or 0) / 100
             if self.SetCamDistanceScale then self:SetCamDistanceScale(1 / (zoom * formZoom)) end
-            if self.SetPosition then self:SetPosition(0, offX, offY) end
+            if self.SetPosition then self:SetPosition(0, offX + formShift, offY) end
             if self.SetFacing then self:SetFacing(rot) end
         end
         backdrop._3d = model3D
