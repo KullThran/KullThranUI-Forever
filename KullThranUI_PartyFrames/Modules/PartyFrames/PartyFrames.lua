@@ -1458,8 +1458,9 @@ local function ApplyTextStyle(text, db, sizeKey, fallbackSize, maxSize)
     text:SetTextColor(1, 1, 1, 1)
 end
 
-local function ApplyCharacterLevelTextStyle(text, db)
+local function ApplyCharacterLevelTextStyle(text, db, anchorFrame)
     if not (text and text.SetFont) then return end
+    anchorFrame = anchorFrame or text:GetParent()
     db = db or {}
     local outline = db.levelFontOutline
     if outline == "NONE" then outline = "" end
@@ -1475,10 +1476,10 @@ local function ApplyCharacterLevelTextStyle(text, db)
     text:ClearAllPoints()
     local anchor = db.levelAnchor
     if anchor and anchor ~= "AUTO" then
-        text:SetPoint(anchor, text:GetParent(), anchor,
+        text:SetPoint(anchor, anchorFrame, anchor,
             tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     else
-        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT",
+        text:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT",
             tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     end
 end
@@ -3361,6 +3362,57 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData, forceModel)
     end
 end
 
+ns.PF_Portrait.SyncLevels = function(frame)
+    local health = frame and frame.health
+    local portrait = frame and frame.portraitFrame
+    if not (health and portrait and frame.GetFrameLevel) then return end
+    -- Same strata as Health; frame levels are re-derived on every refresh
+    -- because raising the parent can collapse child levels onto one value.
+    local strata = health:GetFrameStrata()
+    local base = math.max(health:GetFrameLevel() or 0, (frame:GetFrameLevel() or 0) + 1)
+    if frame.absorb and frame.absorb.GetFrameLevel then
+        base = math.max(base, frame.absorb:GetFrameLevel() or 0)
+    end
+    portrait:SetFrameStrata(strata)
+    portrait:SetFrameLevel(base + 4)
+    if frame.portraitModel then frame.portraitModel:SetFrameLevel(base + 5) end
+    if frame.portraitBorderFrame then frame.portraitBorderFrame:SetFrameLevel(base + 7) end
+    if frame.overlayFrame then
+        frame.overlayFrame:SetFrameStrata(strata)
+        frame.overlayFrame:SetFrameLevel(base + 8)
+    end
+    if frame.auraFrame and frame.auraFrame.GetFrameLevel then
+        frame.auraFrame:SetFrameLevel(math.max(frame.auraFrame:GetFrameLevel() or 0, base + 10))
+    end
+end
+
+-- With a portrait shown, the level sits on the portrait's lower edge and the
+-- PvP badge moves outside the portrait instead of covering it.
+ns.PF_Portrait.PlaceBadges = function(frame, opts)
+    local portrait = frame and frame.portraitFrame
+    if not portrait then return end
+    opts = opts or {}
+    local shown = frame._portraitShown
+    if shown == nil then shown = portrait:IsShown() end
+    local level = frame.levelText
+    local levelAuto = opts.levelAnchor == nil or opts.levelAnchor == "AUTO"
+    if level then
+        level:SetJustifyH(shown and levelAuto and "CENTER" or "LEFT")
+    end
+    if not shown then return end
+    if level and levelAuto then
+        level:ClearAllPoints()
+        level:SetPoint("BOTTOM", portrait, "BOTTOM",
+            (tonumber(opts.levelX) or 3) - 3, (tonumber(opts.levelY) or 1) - 1)
+    end
+    local pvp = frame.pvpIcon
+    local side = opts.side or frame._portraitSide
+    if pvp and side ~= "right" and (opts.pvpAnchor == nil or opts.pvpAnchor == "AUTO") then
+        pvp:ClearAllPoints()
+        pvp:SetPoint("RIGHT", portrait, "LEFT", tonumber(opts.pvpX) or -2, tonumber(opts.pvpY) or 0)
+    end
+end
+
 ns.PF_Portrait.ApplyLayout = function(frame, db, width, height, padding)
     local metrics = ns.PF_Portrait.GetMetrics(db, height)
     frame._portraitLeftInset = metrics.show and metrics.side == "left" and metrics.inset or 0
@@ -3391,21 +3443,8 @@ ns.PF_Portrait.ApplyLayout = function(frame, db, width, height, padding)
     else
         ns.PF_Portrait.Point(frame.portraitFrame, "RIGHT", frame.health, "LEFT", -4 + metrics.x, metrics.y)
     end
-    -- Match Unit Frames' relationship: the portrait lives one full strata
-    -- above Health. Frame levels alone cannot cross a strata boundary.
-    local portraitStrata = ns.PF_Portrait.GetStrataAbove(frame.health)
-    frame.portraitFrame:SetFrameStrata(portraitStrata)
-    frame.portraitFrame:SetFrameLevel(frame.health:GetFrameLevel() + 3)
-    if frame.portraitModel then
-        frame.portraitModel:SetFrameLevel(frame.portraitFrame:GetFrameLevel() + 1)
-    end
-    if frame.portraitBorderFrame then
-        frame.portraitBorderFrame:SetFrameLevel(frame.portraitFrame:GetFrameLevel() + 3)
-    end
-    if frame.overlayFrame then
-        frame.overlayFrame:SetFrameStrata(portraitStrata)
-        frame.overlayFrame:SetFrameLevel(frame.portraitFrame:GetFrameLevel() + 4)
-    end
+    frame._portraitSide = metrics.side
+    ns.PF_Portrait.SyncLevels(frame)
 end
 
 function Mod:CreateUnitButton(parent, name)
@@ -3522,11 +3561,11 @@ function Mod:CreateUnitButton(parent, name)
     if button.nameText.SetNonSpaceWrap then button.nameText:SetNonSpaceWrap(false) end
     ApplyTextStyle(button.nameText, DEFAULTS.party, "nameFontSize", 15)
 
-    button.levelText = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    button.levelText = button.overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     button.levelText:SetJustifyH("LEFT")
     button.levelText:SetWordWrap(false)
     if button.levelText.SetNonSpaceWrap then button.levelText:SetNonSpaceWrap(false) end
-    ApplyCharacterLevelTextStyle(button.levelText, DEFAULTS)
+    ApplyCharacterLevelTextStyle(button.levelText, DEFAULTS, button)
     button.levelText:SetPoint("BOTTOMLEFT", button, "TOPLEFT", 3, 1)
     button.levelText:SetWidth(32)
     button.levelText:SetHeight(14)
@@ -6254,6 +6293,7 @@ function Mod:PositionFrame(frame, parent, index, count, mode, visibleCount, layo
             tonumber(self:GetRootConfigValue("pvpX", -2)) or -2,
             tonumber(self:GetRootConfigValue("pvpY", 0)) or 0)
     end
+    ns.PF_Portrait.PlaceBadges(frame, self.db)
 
     frame.absorb:ClearAllPoints()
     frame.absorb:SetPoint("TOPRIGHT", frame.health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
@@ -6330,7 +6370,9 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
     local portraitDB = self:GetModeDB(frame.mode or "party")
     local portraitData = frame.fakeUnit and GetTestUnitData(frame.fakeUnit, frame.mode or "party") or nil
     self:UpdatePartyPortrait(frame, portraitDB, portraitData)
-    ApplyCharacterLevelTextStyle(frame.levelText, self.db)
+    ApplyCharacterLevelTextStyle(frame.levelText, self.db, frame)
+    ns.PF_Portrait.SyncLevels(frame)
+    ns.PF_Portrait.PlaceBadges(frame, self.db)
     local levelText
     if showPartyLevel and frame.mode == "party" then
         if frame.fakeUnit then

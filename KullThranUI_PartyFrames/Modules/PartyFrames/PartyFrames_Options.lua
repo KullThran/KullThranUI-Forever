@@ -143,8 +143,9 @@ local INDICATOR_ANCHOR_ORDER = { "AUTO", "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "
 
 local ResolveFontPath
 
-local function ApplyPreviewCharacterLevelTextStyle(text, db)
+local function ApplyPreviewCharacterLevelTextStyle(text, db, anchorFrame)
     if not (text and text.SetFont) then return end
+    anchorFrame = anchorFrame or text:GetParent()
     db = db or {}
     local outline = db.levelFontOutline
     if outline == "NONE" then outline = "" end
@@ -156,9 +157,9 @@ local function ApplyPreviewCharacterLevelTextStyle(text, db)
     text:ClearAllPoints()
     local anchor = db.levelAnchor
     if anchor and anchor ~= "AUTO" then
-        text:SetPoint(anchor, text:GetParent(), anchor, tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+        text:SetPoint(anchor, anchorFrame, anchor, tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     else
-        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT", tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+        text:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     end
 end
 
@@ -925,7 +926,7 @@ local function EnsureUnit(preview, index)
     unit.value:SetJustifyH("RIGHT")
     unit.value:SetWordWrap(false)
 
-    unit.levelText = unit:CreateFontString(nil, "OVERLAY")
+    unit.levelText = unit.overlayFrame:CreateFontString(nil, "OVERLAY")
     unit.levelText:SetJustifyH("LEFT")
     unit.levelText:SetWordWrap(false)
     unit.levelText:SetWidth(34)
@@ -1203,9 +1204,10 @@ local function RefreshLivePreview(preview)
         else
             unit.portraitFrame:SetPoint("RIGHT", unit.health, "LEFT", -4 + portraitX, portraitY)
         end
-        local previewStrata = unit.health:GetFrameStrata()
-        unit.portraitFrame:SetFrameStrata(previewStrata)
-        unit.portraitFrame:SetFrameLevel(unit.health:GetFrameLevel() + 3)
+        unit._portraitSide = portraitSide
+        if ns.PF_Portrait and ns.PF_Portrait.SyncLevels then
+            ns.PF_Portrait.SyncLevels(unit)
+        end
         local classCoords = PREVIEW_CLASS_COORDS[sample.class or "WARRIOR"]
         if portraitShow and classCoords then
             unit.portrait:SetTexture(PREVIEW_CLASS_TEXTURE)
@@ -1421,7 +1423,7 @@ local function RefreshLivePreview(preview)
             levelColor = GetRootValue("levelColor", { r = 1, g = 0.82, b = 0.20, a = 1 }),
             levelX = GetRootValue("levelX", 3),
             levelY = GetRootValue("levelY", 1),
-        })
+        }, unit)
         unit.levelText:SetText(sample.isPlayer and "80" or "70")
         unit.levelText:SetShown(rootShowLevel and not sample.status)
         unit.pvpIcon:ClearAllPoints()
@@ -1433,6 +1435,16 @@ local function RefreshLivePreview(preview)
         else
             unit.pvpIcon:SetPoint("RIGHT", unit, "LEFT",
                 tonumber(GetRootValue("pvpX", -2)) or -2, tonumber(GetRootValue("pvpY", 0)) or 0)
+        end
+        if ns.PF_Portrait and ns.PF_Portrait.PlaceBadges then
+            ns.PF_Portrait.PlaceBadges(unit, {
+                side = portraitSide,
+                levelX = GetRootValue("levelX", 3),
+                levelY = GetRootValue("levelY", 1),
+                pvpAnchor = pvpAnchor,
+                pvpX = GetRootValue("pvpX", -2),
+                pvpY = GetRootValue("pvpY", 0),
+            })
         end
         if rootShowPvP and not sample.status then
             unit.pvpIcon.texture:SetTexture(PREVIEW_PVP_ICON_PATH .. (sample.isPlayer and "Alliance.png" or "Horde.png"))
