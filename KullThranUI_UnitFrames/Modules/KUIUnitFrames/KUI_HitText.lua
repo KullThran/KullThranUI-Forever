@@ -22,7 +22,11 @@ local MISS_EVENTS = {
 
 local function Enabled()
     local db = KT and KT.db and KT.db.profile and KT.db.profile.unitFrames
-    return not (db and db.hitText == false)
+    if db and db.hitText ~= nil then return db.hitText ~= false end
+    -- Unset: on only for the Classic look; the other styles opt in from the options.
+    local VT = KT and KT.VisualThemes
+    local theme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+    return theme == "classic"
 end
 
 local function Build(frame)
