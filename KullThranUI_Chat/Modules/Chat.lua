@@ -4177,6 +4177,10 @@ function Mod:HandlePositionDebugCommand(input)
         self:PrintBNetWhisperDebug()
         return
     end
+    if strlower(strtrim(tostring(input or ''))) == 'channel dump' then
+        self:OpenChannelClickDebugLog()
+        return
+    end
     if strlower(strtrim(tostring(input or ''))) == 'channel' then
         self.channelClickDebug = not self.channelClickDebug
         if KT and KT.Print then
@@ -5491,11 +5495,39 @@ function Mod:ChannelClickDebug(message, ...)
     end
     local ok, text = pcall(string.format, tostring(message), ...)
     local line = "Channel click: " .. (ok and text or tostring(message))
+    self.channelClickLog = self.channelClickLog or {}
+    tinsert(self.channelClickLog, date("%H:%M:%S") .. " " .. line)
+    while #self.channelClickLog > 80 do
+        tremove(self.channelClickLog, 1)
+    end
     if KT and KT.Print then
         KT:Print(line)
     else
         print(line)
     end
+end
+
+function Mod:OpenChannelClickDebugLog()
+    local dialog = self:EnsureCopyDialog()
+    local textBox = dialog and dialog.KT_TextBox
+    local editBox = textBox and textBox.GetEditBox and textBox:GetEditBox()
+    if not (dialog and textBox and editBox) then return end
+
+    if dialog.TitleText then
+        dialog.TitleText:SetText(LText("KT Chat Channel Click Debug"))
+    elseif dialog.SetTitle then
+        dialog:SetTitle(LText("KT Chat Channel Click Debug"))
+    end
+
+    local lines = { "Entries: " .. tostring(self.channelClickLog and #self.channelClickLog or 0), "" }
+    for _, entry in ipairs(self.channelClickLog or {}) do
+        tinsert(lines, entry)
+    end
+    textBox:SetText(table.concat(lines, "\n"))
+    editBox:SetCursorPosition(0)
+    editBox:HighlightText(0, #editBox:GetText())
+    if textBox.ScrollToBegin then textBox:ScrollToBegin() end
+    dialog:Show()
 end
 
 function Mod:ReportChannelClickState(editBox, label)
@@ -5525,14 +5557,11 @@ function Mod:OpenDirectChannelTarget(command, isNumberedChannel, chatType, chann
 
     -- Opening the box fires KUI's own activation hooks, which would otherwise
     -- re-target the input to the active tab and undo the clicked channel.
+    -- The tab the player clicked in stays selected; only the input target
+    -- changes.
     self.suppressEditBoxActivateSync = true
+    self:ChannelClickDebug("opening input with %s", command)
     self:ShowWindowForActivity()
-    if isNumberedChannel then
-        local channelTabIndex = self:GetTabIndexForLiveChatType("CHANNEL")
-        if channelTabIndex then
-            self:SelectTab(channelTabIndex)
-        end
-    end
     self:AttachBlizzardEditBox()
 
     -- The trailing space lets Blizzard's own parser switch the input to the
@@ -5543,6 +5572,7 @@ function Mod:OpenDirectChannelTarget(command, isNumberedChannel, chatType, chann
         local ok, openedEditBox = pcall(openChat, command, chatFrame)
         if ok then
             editBox = openedEditBox
+            self:ReportChannelClickState(_G.ChatFrame1EditBox, "after open chat")
         else
             self:ChannelClickDebug("open chat failed: %s", tostring(openedEditBox))
         end
@@ -5609,7 +5639,16 @@ function Mod:HandleChannelHyperlink(link, linkData)
 
     self.lastChannelLink = link
     self.lastChannelLinkTime = now
-    return self:OpenDirectChannelTarget(command, isNumberedChannel, chatType, channelNumber)
+    local ok, opened = pcall(self.OpenDirectChannelTarget, self, command, isNumberedChannel, chatType, channelNumber)
+    if not ok then
+        self.suppressEditBoxActivateSync = nil
+        self:ChannelClickDebug("error: %s", tostring(opened))
+        return false
+    end
+    if not opened then
+        self:ChannelClickDebug("input was not opened")
+    end
+    return opened
 end
 
 function Mod:HandleWhisperHyperlink(link)
