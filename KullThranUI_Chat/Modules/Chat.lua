@@ -2953,6 +2953,7 @@ function Mod:SanitizeHistoryEntry(entry)
         timestamp = KT_GetAccessibleString(entry.timestamp, ""),
         label = KT_GetAccessibleString(entry.label, ""),
         channelName = KT_GetAccessibleString(entry.channelName, nil),
+        channelNumber = KT_GetAccessibleNumber(entry.channelNumber, nil),
         author = KT_GetAccessibleString(entry.author, nil),
         authorRaw = KT_GetAccessibleString(entry.authorRaw, nil),
         authorFull = KT_GetAccessibleString(entry.authorFull, nil),
@@ -6775,6 +6776,7 @@ function Mod:BuildPreformattedEntryFromMonitor(event, renderedMessage, r, g, b, 
         timestamp = timestamp,
         label = normalizedLabel or KT_GetDisplayChatLabel(normalizedType) or normalizedType,
         channelName = normalizedChannel,
+        channelNumber = (normalizedType == "CHANNEL") and KT_GetAccessibleNumber(arg8) or nil,
         author = normalizedAuthor,
         authorRaw = sender,
         authorFull = (senderFull and not tostring(normalizedType):find("^BN_")) and senderFull or nil,
@@ -6966,6 +6968,31 @@ function Mod:CreateMessageFrame(parent, globalName)
     return frame
 end
 
+local KT_LINKABLE_CHAT_LABEL_TYPES = {
+    SAY = true, YELL = true, GUILD = true, OFFICER = true,
+    PARTY = true, PARTY_LEADER = true, PARTY_GUIDE = true,
+    RAID = true, RAID_LEADER = true, RAID_WARNING = true,
+    INSTANCE_CHAT = true, INSTANCE_CHAT_LEADER = true,
+}
+
+-- Wraps the bracketed chat-type label in a channel hyperlink, like Blizzard's
+-- own chat frames do, so the tag can be clicked to type in that channel.
+local function KT_BuildChatLabelText(entry, chatType, label)
+    local text = "[" .. label .. "]"
+    if chatType == "CHANNEL" then
+        local channelNumber = KT_GetAccessibleNumber(entry.channelNumber)
+            or tonumber((KT_GetAccessibleString(entry.channelName, "") or ""):match("^%s*(%d+)%."))
+        if channelNumber and channelNumber > 0 then
+            return "|Hchannel:channel:" .. channelNumber .. "|h" .. text .. "|h"
+        end
+        return text
+    end
+    if KT_LINKABLE_CHAT_LABEL_TYPES[chatType] then
+        return "|Hchannel:" .. chatType .. "|h" .. text .. "|h"
+    end
+    return text
+end
+
 function Mod:GetEntryMessage(entry, includeTimestamp)
     if type(entry) ~= "table" then
         return ""
@@ -7013,7 +7040,7 @@ function Mod:GetEntryMessage(entry, includeTimestamp)
         parts[#parts + 1] = "[" .. timestamp .. "]"
     end
     if type(label) == "string" and label ~= "" then
-        parts[#parts + 1] = "[" .. label .. "]"
+        parts[#parts + 1] = KT_BuildChatLabelText(entry, chatType, label)
     end
     if type(author) == "string" and author ~= "" then
         parts[#parts + 1] = author .. ":"
