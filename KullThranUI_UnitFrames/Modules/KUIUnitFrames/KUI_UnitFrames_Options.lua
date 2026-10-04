@@ -276,6 +276,73 @@ local function ApplyStockArtTexture(tex, atlasName, mirror)
     return false
 end
 
+-- 3D portrait in the live preview. Stock-art styles draw their own ring, so only
+-- the model is seated there.
+function ns.ApplyPreview3D(frame, unitKey, settings, isCircular, size, show, stockArt)
+    if not (show and settings.portraitMode == "3d") then
+        if frame.model3D then
+            frame.model3D:Hide()
+            frame.ringFrame:Hide()
+        end
+        return false
+    end
+    if not frame.model3D then
+        frame.model3D = CreateFrame("PlayerModel", nil, frame.portraitFrame)
+        frame.ringFrame = CreateFrame("Frame", nil, frame.portraitFrame)
+        frame.ringFrame:SetAllPoints(frame.portraitFrame)
+        frame.ringTexture = frame.ringFrame:CreateTexture(nil, "OVERLAY")
+        frame.ringTexture:SetTexture(PREVIEW_CIRCLE_BORDER)
+        frame.ringTexture:SetPoint("TOPLEFT", frame.ringFrame, "TOPLEFT", -1, 1)
+        frame.ringTexture:SetPoint("BOTTOMRIGHT", frame.ringFrame, "BOTTOMRIGHT", 1, -1)
+        frame.model3D:SetScript("OnModelLoaded", function(self)
+            if self._apply then self._apply() end
+        end)
+    end
+    local model = frame.model3D
+    local level = frame.portraitFrame:GetFrameLevel()
+    model:SetFrameLevel(level + 1)
+    frame.ringFrame:SetFrameLevel(level + 3)
+    local inset = (isCircular or stockArt) and math.floor(size * 0.15 + 0.5) or 0
+    model:ClearAllPoints()
+    model:SetPoint("TOPLEFT", frame.portraitFrame, "TOPLEFT", inset, -inset)
+    model:SetPoint("BOTTOMRIGHT", frame.portraitFrame, "BOTTOMRIGHT", -inset, inset)
+    local modelUnit = ({ pet = "pet", target = "target", focus = "focus",
+        totPet = "targettarget", focustarget = "focustarget" })[unitKey]
+    if not (modelUnit and UnitExists(modelUnit)) then modelUnit = "player" end
+    local function applyCamera()
+        local zoom = math.max(0.25, (tonumber(settings.portrait3DZoom) or 125) / 100)
+        local rot, formZoom, formShift = KT.Portrait3DYaw(modelUnit,
+            settings.portraitSide or ((unitKey == "player" or unitKey == "pet") and "left" or "right"),
+            settings.portraitFacingMode, false, settings.portrait3DRotation)
+        if model.SetPortraitZoom then model:SetPortraitZoom(1) end
+        if model.SetCamDistanceScale then model:SetCamDistanceScale(1 / (zoom * formZoom)) end
+        if model.SetPosition then
+            model:SetPosition(0, (tonumber(settings.portrait3DX) or 0) / 100 + formShift, (tonumber(settings.portrait3DY) or 0) / 100)
+        end
+        if model.SetFacing then model:SetFacing(rot) end
+    end
+    model._apply = applyCamera
+    if model._previewUnit ~= modelUnit then
+        model:SetUnit(modelUnit)
+        model._previewUnit = modelUnit
+    end
+    applyCamera()
+    model:Show()
+    frame.portrait:SetColorTexture(0.1, 0.1, 0.1, 1)
+    if not stockArt then
+        frame.portraitBorder:Hide()
+        if isCircular then
+            frame.ringTexture:SetVertexColor(frame.portraitBorder:GetVertexColor())
+            frame.ringFrame:Show()
+        else
+            frame.ringFrame:Hide()
+        end
+    else
+        frame.ringFrame:Hide()
+    end
+    return true
+end
+
 --- Reseats a preview unit onto the real stock 232x100 layout: genuine atlas
 --- artwork, the stock portrait cutout, and the stock bar rectangles. Returns
 --- false when the unit has no verified stock geometry, so the caller falls
@@ -387,6 +454,7 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
             or settings.portraitFacing or (unitKey == "target" and "flipped" or "normal")
         applyPortraitTexture(frame.portrait, unitKey, facing)
     end
+    ns.ApplyPreview3D(frame, unitKey, settings, true, portraitSize, settings.showPortrait ~= false, true)
 
     local function SeatBar(bar, rect)
         bar:ClearAllPoints()
@@ -508,7 +576,14 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
     -- which masks the whole circle to fully invisible instead of a circle.
     frame.levelCircleMask:ClearAllPoints()
     frame.levelCircleMask:SetAllPoints(frame.levelCircle)
-    frame.levelText:SetFont(PREVIEW_FONT, math.max(7, math.floor(11 * scale)), "OUTLINE")
+    local ufDB = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if ns.StockStyleToggle and ns.StockStyleToggle(ufDB, "levelBlizzardStyle") then
+        local path, size, flags = ns.BlizzardFont("GameNormalNumberFont", PREVIEW_FONT, 10, "OUTLINE")
+        frame.levelText:SetFont(path, math.max(6, size * scale), flags)
+        frame.levelText:SetTextColor(1, 0.82, 0, 1)
+    else
+        frame.levelText:SetFont(PREVIEW_FONT, math.max(7, math.floor(11 * scale)), "OUTLINE")
+    end
     frame.levelText:ClearAllPoints()
     frame.levelText:SetSize(18 * scale, 14 * scale)
     if unitKey == "target" then
@@ -571,7 +646,14 @@ local function ApplyStockPreviewColors(frame, settings, globalDB, unitKey, nameT
     frame.power.bg:SetTexture(PREVIEW_BG)
 
     local textSize = settings.textSize or 14
-    frame.name:SetFont(PREVIEW_FONT, settings.leftTextSize or textSize, "OUTLINE")
+    if globalDB.blizzardNameStyle ~= false and ns.BlizzardFont then
+        -- Blizzard name text: GameFontNormalSmall in yellow, sized with the frame art.
+        local path, size, flags = ns.BlizzardFont("GameFontNormalSmall", PREVIEW_FONT, 10, "")
+        frame.name:SetFont(path, math.max(6, size * (settings.frameScale or 100) / 100), flags)
+        frame.name:SetTextColor(1, 0.82, 0, 1)
+    else
+        frame.name:SetFont(PREVIEW_FONT, settings.leftTextSize or textSize, "OUTLINE")
+    end
     frame.value:SetFont(PREVIEW_FONT, settings.rightTextSize or textSize, "OUTLINE")
     frame.name:SetText(nameText or "")
     if showAbsorbPreview then
@@ -1235,6 +1317,8 @@ local function ApplyPreviewUnitBase(frame, unitKey, settings, globalDB, nameText
             frame.portraitBorder:SetVertexColor(fillR, fillG, fillB, 1)
         end
     end
+
+    ns.ApplyPreview3D(frame, unitKey, settings, isCircular, portraitWidth, showPortrait, false)
     frame.health.bg:SetTexture(PREVIEW_BG)
     frame.health.bg:SetVertexColor(bgR, bgG, bgB, 1)
     frame.power:SetStatusBarTexture(ResolvePreviewBarTexture(settings.powerBarTexture or settings.healthBarTexture, PREVIEW_FILL))
@@ -1282,6 +1366,12 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
     local choice = (unitKey == "player" and globalDB and globalDB.playerClassificationBorder) or "none"
     local portraitShown = frame.portraitFrame
         and (frame.portraitFrame:IsShown() or (frame.portrait and frame.portrait:IsShown()))
+    -- Retail/Forever native overlay: Blizzard's atlas drawn over the normal frame.
+    local nativeKind = (choice == "nativerare" and "rare") or (choice == "nativeelite" and "elite") or nil
+    if ns.ShowNativeClassificationRing then
+        ns.ShowNativeClassificationRing(frame, frame.portraitFrame,
+            portraitShown and nativeKind or nil, true, frame.levelFrame)
+    end
     if (choice ~= "rare" and choice ~= "elite" and choice ~= "classicrare" and choice ~= "classicelite")
         or not portraitShown then
         if ring then ring:Hide() end
@@ -1638,10 +1728,6 @@ local PORTRAIT_MODES = {
     ["3d"] = "3D Portrait",
     ["class"] = "Class Theme",
 }
-local CIRCULAR_PORTRAIT_MODES = {
-    ["2d"] = "2D Portrait",
-    ["class"] = "Class Theme",
-}
 
 local PORTRAIT_FACING = {
     normal = "Normal",
@@ -1797,13 +1883,21 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
         function(v) SetAndRefresh(function() db.portraitStyle = v end) end)
     LockIfThemeOwned(widget, "portraitStyle")
     y = y + h
-    local portraitModes = db.portraitStyle == "circular" and CIRCULAR_PORTRAIT_MODES or PORTRAIT_MODES
-    _, h = W:Dropdown(sc, "Portrait Mode", -y, portraitModes,
-        function()
-            local mode = s.portraitMode or "2d"
-            return (db.portraitStyle == "circular" and mode == "3d") and "2d" or mode
-        end,
+    _, h = W:Dropdown(sc, "Portrait Mode", -y, PORTRAIT_MODES,
+        function() return s.portraitMode or "2d" end,
         function(v) SetAndRefresh(function() s.portraitMode = v end) end); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Zoom", -y,
+        function() return s.portrait3DZoom or 125 end,
+        function(v) SetAndRefresh(function() s.portrait3DZoom = v end) end, 50, 250, 1, "%d%%"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Rotation", -y,
+        function() return s.portrait3DRotation or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DRotation = v end) end, -90, 90, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait X Offset", -y,
+        function() return s.portrait3DX or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DX = v end) end, -50, 50, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Y Offset", -y,
+        function() return s.portrait3DY or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DY = v end) end, -50, 50, 1, "%d"); y = y + h
 
     -- Portrait Side (for attached and circular portraits)
     if db.portraitStyle ~= "none" then
@@ -1862,7 +1956,12 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
 
     if opts.showDispelOverlayKey then
         _, h = W:Toggle(sc, opts.showDispelOverlayLabel or "Dispel Overlay", -y,
-            function() return s[opts.showDispelOverlayKey] ~= false end,
+            function()
+                if opts.showDispelOverlayKey == 'dispelOverlay' and ns.IsDispelOverlayOn then
+                    return ns.IsDispelOverlayOn(s)
+                end
+                return s[opts.showDispelOverlayKey] ~= false
+            end,
             function(v) SetAndRefresh(function() s[opts.showDispelOverlayKey] = v end) end); y = y + h
 
         local function AddColorSwatch(key, label, defR, defG, defB)
@@ -2072,15 +2171,29 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
             _, h = W:Toggle(container, 'Show Character Level', -by,
                 function() return db.showCharacterLevel ~= false end,
                 function(v) SetAndRefresh(function() db.showCharacterLevel = v and true or false end) end); by = by + h
+            -- Classic / Forever / Retail only (KUI Style keeps its own text).
+            _, h = W:Toggle(container, 'Blizzard Level Text and Colors (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'levelBlizzardStyle') end,
+                function(v) SetAndRefresh(function() db.levelBlizzardStyle = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Combat Icon in the Level Circle (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'levelCombatIcon') end,
+                function(v) SetAndRefresh(function() db.levelCombatIcon = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Blizzard Name Text (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'blizzardNameStyle') end,
+                function(v) SetAndRefresh(function() db.blizzardNameStyle = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, 'Show Elite / Rare Indicator', -by,
                 function() return db.showClassification ~= false end,
                 function(v) SetAndRefresh(function() db.showClassification = v and true or false end) end); by = by + h
+            _, h = W:Dropdown(container, 'Target Rare / Elite Overlay', -by,
+                { auto = 'Visual Style Default', native = 'Retail / Forever (Blizzard)' },
+                function() return db.targetClassificationArt == 'native' and 'native' or 'auto' end,
+                function(v) SetAndRefresh(function() db.targetClassificationArt = (v == 'native') and 'native' or nil end) end); by = by + h
             do
                 local _, lh = W:Label(container, 'Player Rare / Elite Border', -by, 12)
                 by = by + lh
                 local holder = CreateFrame("Frame", nil, container)
                 holder:SetPoint("TOPLEFT", 10, -by)
-                holder:SetSize(300, 204)
+                holder:SetSize(300, 308)
                 local buttons = {}
                 local function PaintButtons()
                     local current = db.playerClassificationBorder or 'none'
@@ -2095,7 +2208,9 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                                { key = 'rare', file = 'RARE.png', label = 'Rare' },
                                { key = 'elite', file = 'ELITE.png', label = 'Elite' },
                                { key = 'classicrare', sheet = 'rare', label = 'Classic Rare' },
-                               { key = 'classicelite', sheet = 'elite', label = 'Classic Elite' } }
+                               { key = 'classicelite', sheet = 'elite', label = 'Classic Elite' },
+                               { key = 'nativerare', native = 'rare', label = 'Retail Rare', hint = 'Retail art' },
+                               { key = 'nativeelite', native = 'elite', label = 'Retail Elite', hint = 'Retail art' } }
                 for index, def in ipairs(defs) do
                     local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
                     btn:SetSize(92, 96)
@@ -2112,6 +2227,13 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                         tex:SetTexture(CR.sheets[def.sheet])
                         tex:SetTexCoord(CR.uLeft, CR.uRight, CR.vTop, CR.vBottom)
                         tex:SetSize(68, 50)
+                    elseif def.native and ns.HasNativeClassificationArt
+                        and ns.HasNativeClassificationArt(def.native) then
+                        local info = C_Texture.GetAtlasInfo(ns.NATIVE_CLASSIFICATION[def.native].atlas)
+                        tex:SetAtlas(ns.NATIVE_CLASSIFICATION[def.native].atlas, false)
+                        local w, hh = info.width or 64, info.height or 64
+                        local k = 64 / math.max(w, hh)
+                        tex:SetSize(w * k, hh * k)
                     else
                         local hint = btn:CreateFontString(nil, "OVERLAY")
                         hint:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
@@ -2148,13 +2270,17 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                     end
                 end)
                 UpdateEnabled()
-                by = by + 212
+                by = by + 316
             end
             _, h = W:Toggle(container, 'Smooth Health/Power Bars', -by,
                 function() return db.smoothBars ~= false end,
                 function(v) SetAndRefresh(function() db.smoothBars = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, 'Combat Text on Portrait (Dodge / Miss / damage)', -by,
-                function() return db.hitText ~= false end,
+                function()
+                    if db.hitText ~= nil then return db.hitText ~= false end
+                    local th = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme and KT.VisualThemes:GetRenderedTheme()
+                    return th == "classic"
+                end,
                 function(v) SetAndRefresh(function() db.hitText = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, '    Numbers in White (damage and healing)', -by,
                 function() return db.hitTextWhiteNumbers == true end,
@@ -2353,8 +2479,7 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 hasPower = true,
                 hasCastbar = true,
                 allowPortraitFacing = true,
-                showBuffsKey = 'showBuffs',
-                showBuffsLabel = 'Show Buffs',
+                -- Target buffs are always shown above the frame.
                 showDebuffsKey = 'onlyPlayerDebuffs',
                 showDebuffsLabel = 'Only Player Debuffs',
                 showDispelOverlayKey = 'dispelOverlay',

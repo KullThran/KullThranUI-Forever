@@ -22,14 +22,18 @@ local MISS_EVENTS = {
 
 local function Enabled()
     local db = KT and KT.db and KT.db.profile and KT.db.profile.unitFrames
-    return not (db and db.hitText == false)
+    if db and db.hitText ~= nil then return db.hitText ~= false end
+    -- Unset: on only for the Classic look; the other styles opt in from the options.
+    local VT = KT and KT.VisualThemes
+    local theme = VT and VT.GetRenderedTheme and VT:GetRenderedTheme()
+    return theme == "classic"
 end
 
 local function Build(frame)
     local host = CreateFrame("Frame", nil, frame)
     host:SetAllPoints(frame.Portrait and frame.Portrait.SetAllPoints and frame.Portrait or frame)
-    host:SetFrameStrata("HIGH")
     host:SetFrameLevel((frame:GetFrameLevel() or 1) + 40)
+    if ns.ApplyOverlayStrata then ns.ApplyOverlayStrata(host, frame) else host:SetFrameStrata("MEDIUM") end
     local fs = host:CreateFontString(nil, "OVERLAY")
     fs:SetFont(FONT, 20, "THICKOUTLINE")
     fs:SetPoint("CENTER", host, "CENTER", 0, 0)
