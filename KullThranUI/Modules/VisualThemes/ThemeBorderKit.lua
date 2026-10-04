@@ -17,10 +17,8 @@ KT.VisualThemes = KT.VisualThemes or {}
     own bar/background fill and this kit only frames it.
 
     Texture-coordinate derivation (PROVISIONAL -- see note below):
-    This environment has no running WoW client, so the crop below could not be
-    confirmed by eye. The rectangles were chosen by reasoning about the sheet's
-    own 256x64 proportions only (never by reusing another addon's previously
-    reverse-engineered pixel values for this file):
+    The crop below is derived from the sheet's own 256x64 proportions only
+    and has not been checked visually against the rendered border:
       - The sheet is split into a 3x3 grid and the 4 corner cells are used
         as-is; the 4 edge-cells are used as the thin strips between corners;
         the center cell is unused (callers supply their own fill).

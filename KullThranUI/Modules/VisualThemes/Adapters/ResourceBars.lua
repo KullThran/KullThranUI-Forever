@@ -22,16 +22,15 @@ KT.VisualThemes:RegisterModule("resourcebars", {
         }
     end,
     seed = function(profile, themeKey)
-        -- health/primary/secondary share one texture+borderSize seed (already
-        -- true before this task) and now one shared classic-border toggle
-        -- (general.frameArtKit): the three sub-bars stack into a single
-        -- resource-bar identity, not three independent widgets, so one
-        -- switch framing all three is the honest choice -- see audit notes
-        -- in ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md section 30.
+        -- health/primary/secondary share one texture+borderSize seed and one
+        -- shared classic-border toggle (general.frameArtKit): the three
+        -- sub-bars stack into a single resource-bar identity, not three
+        -- independent widgets, so one switch framing all three is the
+        -- right granularity.
         --
         -- Only health gets a per-theme accent color: it is the one section
         -- with a real, always-rendered static color field (fillR/fillG/fillB,
-        -- confirmed at KUIResourceBars.lua:1770) with no gameplay meaning
+        -- see KUIResourceBars.lua:1770) with no gameplay meaning
         -- attached. primary/secondary default to colorMode == "power" (a
         -- real, currently-accurate class/power-type color -- e.g. mana blue,
         -- rage red) and are left untouched so re-theming doesn't strip that
@@ -55,7 +54,7 @@ KT.VisualThemes:RegisterModule("resourcebars", {
         profile.general = profile.general or {}
         profile.general.texture = texture
         if frameArtKit then profile.general.frameArtKit = frameArtKit end
-        -- Real crash, confirmed by the user's error log: `profile[key] =
+        -- Real crash: `profile[key] =
         -- profile[key] or {}` below, when a key was genuinely nil (this
         -- adapter running before KUIResourceBars.lua's own OnInitialize
         -- populates its complete defaults), created a SPARSE table with

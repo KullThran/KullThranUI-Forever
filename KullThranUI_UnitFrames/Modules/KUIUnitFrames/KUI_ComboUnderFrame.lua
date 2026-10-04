@@ -2,8 +2,8 @@
 --  Combo points under the Player unit frame (Target keeps its portrait ring).
 --
 --  Setting: KT.db.profile.unitFrames.comboUnderFrame = "off" | "modern" | "classic"
---    * nil (never touched) resolves to "classic" when the Classic visual style
---      is rendered and to "off" for every other style/preset.
+--    * nil (never touched) follows the visual style: Forever "modern",
+--      Classic "classic", Retail and KUI Style "off".
 --    * "modern"  : atlas pips (uf-roguecp-*).
 --    * "classic" : slim ornament plate with round slots (Classic look).
 --
@@ -42,22 +42,42 @@ CUF.ATLAS = ATLAS
 -------------------------------------------------------------------------------
 -- unit = "player" (default) or "target".
 --   player: off | modern | classic      (key comboUnderFrame)
---   target: off | ring | modern | classic (key comboTargetStyle; "ring" = the
---           circular arc around the portrait; default off)
+--   target: off | ring | both | modern | classic (key comboTargetStyle;
+--           "ring" = the circular arc around the portrait, "both" = the ring
+--           plus modern pips under the target frame)
+-- Defaults (only while the key is unset):
+--   Forever : target ring + modern points under the Player frame
+--   Retail  : target ring + modern pips under the Target frame
+--   Classic : target ring (classic art) + classic points under the Player frame
+--   KUI     : target ring around the portrait
 function CUF.GetStyle(unit)
     local uf = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+        and KT.VisualThemes:GetRenderedTheme()
     if unit == "target" then
         local v = uf and uf.comboTargetStyle
-        if v == "off" or v == "ring" or v == "modern" or v == "classic" then return v end
-        return "off"
+        if v == "off" or v == "ring" or v == "both" or v == "modern" or v == "classic" then return v end
+        return theme == "retail" and "both" or "ring"
     end
     local v = uf and uf.comboUnderFrame
     if v == "off" or v == "modern" or v == "classic" then return v end
-    local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
-        and KT.VisualThemes:GetRenderedTheme()
-    if theme == "classic" then return "classic" end
     if theme == "forever" then return "modern" end
-    return "off" -- retail and kui
+    if theme == "classic" then return "classic" end
+    return "off"
+end
+
+-- True when the Target shows the ring around its portrait.
+function CUF.ShowsRing(unit)
+    local style = CUF.GetStyle(unit)
+    return style == "ring" or style == "both"
+end
+
+-- Style of the points drawn as a bar under / over the frame ("off" when none).
+function CUF.GetBarStyle(unit)
+    local style = CUF.GetStyle(unit)
+    if style == "ring" then return "off" end -- ring is drawn by KTTargetCombo
+    if style == "both" then return "modern" end
+    return style
 end
 -- Exposed on the core addon so other modules (Resource Bars) can query it.
 KT.GetComboUnderFrameStyle = CUF.GetStyle
@@ -318,8 +338,7 @@ function CUF:UpdateUnit(unit)
     local frame = ns.frames and ns.frames[unit]
     local obj = self.live[unit]
     if not frame then return end
-    local style = CUF.GetStyle(unit)
-    if style == "ring" then style = "off" end -- ring is drawn by KTTargetCombo
+    local style = CUF.GetBarStyle(unit)
     local show = style ~= "off" and frame:IsShown() and CUF.PlayerHasCombo()
     if show and unit == "target" then
         show = UnitExists("target") and not (UnitIsFriend and UnitIsFriend("player", "target"))
@@ -371,45 +390,42 @@ function CUF.ApplyPreview(frame, unitKey)
     local obj = frame._ktComboPreview
     local style = (unitKey == "player" or unitKey == "target") and CUF.GetStyle(unitKey) or "off"
 
-    -- Circular ring (Target): small arc around the preview portrait.
+    -- Circular ring (Target): Blizzard's combo arc around the preview portrait.
     local ringPips = frame._ktComboRingPreview
-    if style == "ring" and frame.portraitFrame and frame.portraitFrame:IsShown() then
+    local O = ns.KUIOrnaments
+    if (style == "ring" or style == "both") and O and frame.portraitFrame and frame.portraitFrame:IsShown() then
         if not ringPips then
             ringPips = {}
             for i = 1, 5 do
                 local holder = CreateFrame("Frame", nil, frame)
                 holder:SetFrameLevel((frame:GetFrameLevel() or 1) + 8)
-                local bg = holder:CreateTexture(nil, "ARTWORK", nil, 0)
-                bg:SetAllPoints()
-                bg:SetTexture(FALLBACK_EMPTY)
-                bg:SetVertexColor(0.05, 0.05, 0.05, 1)
-                local fill = holder:CreateTexture(nil, "ARTWORK", nil, 1)
-                fill:SetAllPoints()
-                fill:SetTexture(FALLBACK_FILL)
-                holder.fill = fill
                 ringPips[i] = holder
             end
             frame._ktComboRingPreview = ringPips
         end
         local pw = frame.portraitFrame:GetWidth() or 40
-        local size = math.max(7, math.min(12, pw * 0.21))
-        local radius = pw * 0.5 + 12
+        local size = math.max(7, pw * 12 / 64)
         local rPos, rX, rY = CUF.GetPlacement("target")
-        local a0, a1 = 95, 15
-        if rPos == "above" then a0, a1 = 140, 40 end
+        local layout = O.LayoutRing(frame, frame.portraitFrame, 5, size, rPos == "above") or {}
+        local art = O.GetComboArt()
         for i, holder in ipairs(ringPips) do
-            local angle = math.rad(a0 + (a1 - a0) * ((i - 1) / 4))
-            holder:SetSize(size, size)
-            holder:ClearAllPoints()
-            holder:SetPoint("CENTER", frame.portraitFrame, "CENTER",
-                math.cos(angle) * radius + rX, math.sin(angle) * radius + rY)
-            holder.fill:SetShown(i <= 2)
-            holder:Show()
+            local spot = layout[i]
+            if spot then
+                holder:SetSize(size, size)
+                holder:ClearAllPoints()
+                holder:SetPoint("CENTER", frame.portraitFrame, "CENTER", spot[1] + rX, spot[2] + rY)
+                O.StylePip(holder, art, size)
+                holder._lit:SetShown(i <= 2)
+                holder:Show()
+            else
+                holder:Hide()
+            end
         end
     elseif ringPips then
         for _, holder in ipairs(ringPips) do holder:Hide() end
     end
 
+    if style == "both" then style = "modern" end
     if style == "off" or style == "ring" then
         if obj then obj.frame:Hide() end
         return
@@ -434,7 +450,7 @@ function CUF.ApplyPreview(frame, unitKey)
     obj.frame:Show()
 end
 
--- /ktcombodebug: where the combo widget really is and what the placement code sees.
+-- Debug command: shows where the combo widget really is and what the placement code sees.
 SLASH_KTCOMBODEBUG1 = "/ktcombodebug"
 SlashCmdList["KTCOMBODEBUG"] = function()
     local function T(r) return r and r.GetTop and r:GetTop() and string.format("%.1f", r:GetTop()) or "nil" end

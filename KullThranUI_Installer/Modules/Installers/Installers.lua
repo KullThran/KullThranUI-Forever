@@ -2768,6 +2768,18 @@ function Mod:OnEnable()
     end
 end
 
+-- Called right before a Visual Style change reloads the UI. Resume data is
+-- created only while the Visual Style page is on screen and the player has
+-- not chosen "Don't show again".
+function Mod:PrepareStyleReload()
+    local db = KT and KT.db and KT.db.profile and KT.db.profile.installer
+    local content = self._themeStepContent
+    if not db or db.dontShowAgain == true then return end
+    if not (self.frame and self.frame:IsShown() and content and content:IsVisible()) then return end
+    db.step = 3
+    db.reopenStep, db.resumeStep, db.reopenOnReload, db.isOpen = 3, 3, true, true
+end
+
 function Mod:GetInstallerCharacterKey()
     if KT and KT.GetInstallerCharacterKey then
         return KT:GetInstallerCharacterKey()
@@ -3601,14 +3613,14 @@ function Mod:ShowThemeStep()
     content:SetAllPoints()
     self.content = content
 
-    -- Applying a Visual Style reloads the UI: come back to this very page.
+    -- Applying a Visual Style reloads the UI: PrepareStyleReload() asks the
+    -- Installer to come back to this page, and only at that moment.
     local idb = KT.db.profile.installer
     local function ClearResume()
         if idb then idb.reopenStep, idb.resumeStep, idb.reopenOnReload = nil, nil, nil end
     end
-    if idb and idb.dontShowAgain ~= true then
-        idb.reopenStep, idb.resumeStep, idb.reopenOnReload, idb.isOpen = 3, 3, true, true
-    end
+    ClearResume()
+    self._themeStepContent = content
 
     local title = content:CreateFontString(nil, "OVERLAY")
     content.titleFS = title
@@ -6553,10 +6565,7 @@ function Mod:ShowModuleSelectionStep()
     btnDiscord:SetScript("OnClick", function()
         StaticPopup_Show("KT_INSTALLER_URL", nil, nil, DISCORD_INVITE_URL)
     end)
-
-
 end
-
 
 function Mod:ApplyScaleOnly(resolution, opts)
     local res = tostring(resolution or "AUTO"):upper()
@@ -6586,6 +6595,8 @@ function Mod:ApplyScaleOnly(resolution, opts)
     end
 
     if scale then
+        -- Every caller is a user action (installer button, scale preset).
+        if KT.MarkUIScaleUserSet then KT:MarkUIScaleUserSet() end
         if KT.db and KT.db.profile and KT.db.profile.useBlizzardUIScale and KT.SetBlizzardUIScale then
             KT:SetBlizzardUIScale(scale)
         else

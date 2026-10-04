@@ -1466,7 +1466,14 @@ local function ApplyResourcePipShape(pip, round, combo)
             pip._circleBorder:SetTexture(RESOURCE_CIRCLE_BORDER)
             pip._circleBorder:SetAllPoints(pip)
         end
-        pip._circleBorder:SetVertexColor(combo and 1 or 1, combo and 0.82 or 1, combo and 0.08 or 1, 1)
+        local theme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+            and KT.VisualThemes:GetRenderedTheme()
+        if theme == "forever" then
+            -- Forever's bronze (#DC8560) for every round pip's outer ring.
+            pip._circleBorder:SetVertexColor(0.862745, 0.521569, 0.376471, 1)
+        else
+            pip._circleBorder:SetVertexColor(1, combo and 0.82 or 1, combo and 0.08 or 1, 1)
+        end
         pip._circleBorder:Show()
         if pip._border then pip._border:SetShown(false) end
     else
@@ -1773,14 +1780,13 @@ function KRB:DebugDump()
 end
 
 -------------------------------------------------------------------------------
---  Fase 4 (VisualThemes): marco clasico opcional de 8 piezas
+--  Marco clasico opcional de 8 piezas
 -------------------------------------------------------------------------------
 -- Puramente decorativo: se ancla justo fuera del rect de cada barra/contenedor
 -- (sin tocar backdrop, pixel border, tamano o anclajes existentes). Un unico
 -- campo de perfil (db.general.frameArtKit) controla las tres barras a la vez
 -- -- salud/poder primario/recurso secundario forman una sola identidad visual
--- apilada, no tres widgets independientes (ver auditoria en la entrada
--- correspondiente de ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md seccion 30).
+-- apilada, no tres widgets independientes.
 --
 -- Grosor del anillo: ThemeBorderKit.lua dibuja 16px hacia FUERA del rect a
 -- scale = 1 (BASE_RING_SIZE, local privado alli; se refleja aqui a proposito,
@@ -1931,13 +1937,13 @@ function KRB:BuildBars()
             local pipSpacing = SafeNum(db.secondary.pipSpacing, 2)
             local pipW = (secW - (pipSpacing * (sec.max - 1))) / sec.max
             -- Round pips (Classic/Forever) must be square, or the circular
-            -- mask stretches into an oval -- confirmed live via screenshot,
+            -- mask stretches into an oval,
             -- pips visibly squashed sideways. pipW above divides the WHOLE
             -- bar width across every pip regardless of pipHeight, which is
             -- correct for the normal rectangular pip look but wrong for
             -- round ones. Clustering the now-smaller square pips together
             -- (centered) instead of spreading them across the full bar
-            -- width also matches the explicit request that themed pips sit
+            -- width also keeps themed pips sitting
             -- close together rather than spread edge-to-edge.
             local pipH = db.secondary.pipHeight or 14
             local clusterOffsetX = 0
@@ -1945,7 +1951,7 @@ function KRB:BuildBars()
                 -- Round pips switch off the theme's bar strip texture; see
                 -- ResolvePipTexture for why.
                 texSec = ResolvePipTexture(db, true)
-                -- Explicit user request: +15% pip size on top of the
+                -- +15% pip size on top of the
                 -- square/cluster fix. Both dimensions must stay equal, or
                 -- the circular mask goes back to stretching into an oval.
                 pipW = (db.secondary.pipHeight or 14) * 1.15
@@ -2040,7 +2046,7 @@ function KRB:BuildBars()
     anchorFrame:SetSize(refWidth, max(totalHeight - gap, 1))
     anchorFrame:SetShown(totalHeight > gap or (EditModeManagerFrame and EditModeManagerFrame:IsEditModeActive()))
 
-    -- Fase 4 (VisualThemes): un unico interruptor (db.general.frameArtKit)
+    -- Un unico interruptor (db.general.frameArtKit)
     -- decide el marco clasico de las tres barras. secondaryFrame es el
     -- contenedor tanto en modo barra como en modo pips, asi que un solo
     -- marco alrededor de el cubre ambos sin depender de cuantos pips haya.

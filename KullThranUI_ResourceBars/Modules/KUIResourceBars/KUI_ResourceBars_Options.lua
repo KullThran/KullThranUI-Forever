@@ -587,7 +587,7 @@ end
 local _animTimers = {}
 local function SmoothAnimate(frame, key, targetVal, applyFn)
     if not frame then return end
-    -- Real crash, confirmed by the user's error log: a caller passed a nil
+    -- A caller passed a nil
     -- targetVal (db.health.height was missing -- the VisualThemes
     -- resourcebars adapter's seed can create a sparse health/primary/
     -- secondary table via `profile[key] = profile[key] or {}`, which wins
@@ -628,7 +628,7 @@ local function SmoothAnimate(frame, key, targetVal, applyFn)
     _animTimers[frame][key] = ticker
 end
 
--- Real crash, confirmed by the user's error log: `bar:SetStatusBarColor(r,
+-- `bar:SetStatusBarColor(r,
 -- g, b, a)` on this client threw "bad argument #1 ... Usage:
 -- self:SetStatusBarColor(color [, a])" -- a different overload than the
 -- traditional 4-number-args signature. Try the normal form first (works on
@@ -1102,9 +1102,10 @@ KT:RegisterPage("resourcebars", LText("Resource Bars"), 13, function(sc, W)
 
     _, h = W:Toggle(sc, LText("Enable Module"), -y,
         function()
-            return (db.primary.enabled or db.secondary.enabled) and true or false
+            return db.enabled ~= false and (db.primary.enabled or db.secondary.enabled) and true or false
         end,
         function(v)
+            db.enabled = v and true or false
             db.primary.enabled = v and true or false
             db.secondary.enabled = v and true or false
             db.health.enabled = false

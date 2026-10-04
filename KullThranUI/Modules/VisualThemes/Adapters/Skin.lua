@@ -27,7 +27,7 @@ KT.VisualThemes:RegisterModule("skin", {
             profile.borderTheme = "CUSTOM"
             profile.borderThemeBeforeClass = "CUSTOM"
             profile.customBorderColor = { r = 0.862745, g = 0.521569, b = 0.376471, a = 1 } -- #DC8560
-            -- Explicit user request: Forever's accent should default to
+            -- Forever's accent should default to
             -- bronze. borderTheme="CUSTOM" already makes GetStylePalette()
             -- use customBorderColor for the effective accent, but the raw
             -- accentColor (the base value CUSTOM overrides, and what a

@@ -408,9 +408,9 @@ local function ResetButtonStyle(btn)
 
 end
 
--- Explicit user request: Classic theme should only decorate the ends of the
+-- Classic theme should only decorate the ends of the
 -- action bar (the gargoyle/gryphon end-caps below), never the individual
--- buttons -- confirmed live via screenshot, per-button texture swaps (the
+-- buttons: per-button texture swaps (the
 -- "normal"/border art) rendered as a diamond-shaped overlay obscuring many
 -- icons across the bar. Button styling for Classic is intentionally a
 -- no-op now; ApplyClassicActionBarCaps (below) is the only Classic-specific
@@ -465,7 +465,7 @@ end
 
 local function SetNativeActionBarCapTexture(texture, atlas)
     if not texture or not texture.SetAtlas or not atlas then return end
-    -- This workspace tests on a Forever-flavored client, which remaps this
+    -- The Forever client remaps this
     -- atlas name to its own art regardless of which visual theme is
     -- selected -- plain SetAtlas draws Forever's version even under Retail
     -- theme. KT.ResolveRetailAtlasOverride (ThemeClientAssets.lua, a
@@ -587,7 +587,7 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
         _kuiPagingFrame:SetParent(owner)
     end
     _kuiPagingFrame:SetFrameStrata(owner:GetFrameStrata())
-    -- Confirmed live via /kupdebug: the gargoyle end-cap (which occupies
+    -- The gargoyle end-cap (which occupies
     -- roughly the same screen region) uses
     -- owner:GetEndCapsFrameLevel() as ITS baseline, not plain
     -- GetFrameLevel() -- Blizzard's own end-caps level is much higher
@@ -599,10 +599,10 @@ local function EnsureKUIActionBarPaging(owner, microMenu, leftCapAnchor)
     local pagingBaseLevel = (owner.GetEndCapsFrameLevel and owner:GetEndCapsFrameLevel())
         or owner:GetFrameLevel() or 1
     _kuiPagingFrame:SetFrameLevel(pagingBaseLevel + 5)
-    -- Explicit user request: the page selector belongs next to Action Bar
-    -- 1's FIRST slot, not its last. Earlier attempts anchored to a custom
+    -- The page selector belongs next to Action Bar
+    -- 1's FIRST slot, not its last. Anchoring to a custom
     -- texture we created (host.left, nested under the real, protected
-    -- MainActionBar) and threw "Cannot anchor protected frames to
+    -- MainActionBar) throws "Cannot anchor protected frames to
     -- regions" -- owner/microMenu (pre-existing Blizzard frames) were safe
     -- anchor targets, so the caller now passes ActionButton1 itself here
     -- (also a pre-existing Blizzard frame, not one we created) instead of
@@ -703,7 +703,7 @@ local function ApplyClassicActionBarCaps(db)
     if not (microMenu and microMenu.GetWidth and microMenu:GetWidth() > 1) then
         microMenu = nil
     end
-    -- Confirmed live via screenshot: with bags positioned to the right of
+    -- With bags positioned to the right of
     -- the micro menu (a common default layout), stopping the cap at the
     -- micro menu left the bags outside the decorative frame entirely,
     -- looking disconnected from the bar. Reach the bags first when they
@@ -1729,11 +1729,9 @@ function Mod:ToggleHideMacroText(enabled)
     self:StyleAllBars()
 end
 
--- TEMPORARY debug tool: /kupdebug dumps the paging widget's live state.
--- /run doesn't work on this client, so reusing an addon-registered slash
--- command (the same pattern /ktpersistdebug and /ktforevertab already use
--- successfully this whole session) instead. Delete once the action-bar
--- page-selector visibility issue is resolved -- not meant to ship on.
+-- Temporary debug command: dumps the paging widget's live state through a
+-- registered slash command. Remove once the action-bar page-selector
+-- visibility issue is resolved.
 SLASH_KUIACTIONBARPAGINGDEBUG1 = "/kupdebug"
 SlashCmdList["KUIACTIONBARPAGINGDEBUG"] = function()
     local f = _kuiPagingFrame
@@ -1771,7 +1769,7 @@ SlashCmdList["KUIACTIONBARPAGINGDEBUG"] = function()
     end
 end
 
--- /ktabdebug: hover an action button and run it; prints how its cooldown swipe is configured.
+-- Debug command: hover an action button and run it to print how its cooldown swipe is configured.
 SLASH_KTABDEBUG1 = "/ktabdebug"
 SlashCmdList["KTABDEBUG"] = function(arg)
     local function run()

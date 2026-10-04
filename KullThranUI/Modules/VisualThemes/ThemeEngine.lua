@@ -2,6 +2,17 @@ local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
 
+-- Localized text; extra arguments are applied with string.format.
+local function Tr(text, ...)
+    local locale = KT.GetLocale and KT:GetLocale()
+    text = (locale and locale[text]) or text
+    if select("#", ...) > 0 then
+        local ok, formatted = pcall(string.format, text, ...)
+        if ok then return formatted end
+    end
+    return text
+end
+
 local NIL_MARKER_KEY = "__ktVisualThemeNil"
 
 local function DeepCopy(value, seen)
@@ -182,7 +193,7 @@ function KT.VisualThemes:MigrateAddedThemePaths(state, moduleKey)
 
         -- 1) Existing slots of the other themes: fill only the missing keys.
         --    Before schema 3 none of these paths was theme-owned, so the
-        --    live value is the user's own value, i.e. what kui showed.
+        --    live value is the player's own value, i.e. what kui showed.
         --    Other themes get their own seed() value.
         local moduleSlots = state.slots[moduleKey]
         if type(moduleSlots) == "table" then
@@ -213,7 +224,7 @@ function KT.VisualThemes:MigrateAddedThemePaths(state, moduleKey)
         end
     end)
     if not ok and KT.Print then
-        KT:Print("Visual theme migration failed in " .. moduleKey .. ": " .. tostring(err))
+        KT:Print(Tr("Visual theme migration failed in %s: %s", moduleKey, tostring(err)))
     end
     -- A failure is not retried forever: the module keeps its current data.
     return true
@@ -339,7 +350,7 @@ end
 
 -- Fixed chrome identity for the Damage Meter header/border. Classic and
 -- Retail share the same "Blizzard style" gold; kui keeps following the
--- user's own accent color (returns nil so callers fall back to it).
+-- player's own accent color (returns nil so callers fall back to it).
 local DAMAGE_METER_CHROME_COLORS = {
     classic = { 1.00, 0.82, 0.10 },
     retail = { 1.00, 0.82, 0.10 },
@@ -376,7 +387,7 @@ function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
     if state.applied[moduleKey] == activeTheme then
         -- Validate theme-owned fields even when the persisted applied marker
         -- says this module was already initialized. This repairs slots from
-        -- older builds without requiring the user to switch away and back.
+        -- older builds without requiring the player to switch away and back.
         if type(adapter.validate) == "function" then
             pcall(adapter.validate, moduleProfile, activeTheme, clientFlavor)
         end
@@ -395,7 +406,7 @@ function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
         end
     end)
     if not ok then
-        if KT.Print then KT:Print("Visual theme initialization failed in " .. moduleKey .. ": " .. tostring(err)) end
+        if KT.Print then KT:Print(Tr("Visual theme initialization failed in %s: %s", moduleKey, tostring(err))) end
         return false
     end
 
@@ -404,7 +415,7 @@ function KT.VisualThemes:ApplyCurrentThemeToModule(moduleKey)
 end
 
 -- Re-selecting a theme (same or different) resets the combo point choices to the
--- theme's defaults, even if the user had picked a style in Unit Frames.
+-- theme's defaults, even if a style had been picked in Unit Frames.
 function KT.VisualThemes:ResetComboDefaults()
     -- Nameplates: selecting a theme drops a manually picked nameplate style preset (so the plates
     -- follow the theme again) and the enemy-plate sizes/dimensions saved under the previous one,
@@ -455,6 +466,7 @@ function KT.VisualThemes:ResetComboDefaults()
     if type(uf) ~= "table" then return end
     uf.comboUnderFrame = nil
     uf.comboTargetStyle = nil
+    uf.comboRingArt = nil
     -- Forever/Retail: health bar fill back to the theme's reference green.
     local _, st = self:EnsureInitialized()
     local th = st and st.active
@@ -473,19 +485,92 @@ function KT.VisualThemes:ResetComboDefaults()
     if type(KT.RefreshComboUnderFrame) == "function" then pcall(KT.RefreshComboUnderFrame) end
 end
 
+-- Unit frame positions are offsets in the frame's own scaled space, so a
+-- theme that changes frameScale would move every saved position. Capture the
+-- live on-screen anchor before the switch and rewrite the saved offsets so
+-- each frame stays where the player put it.
+local UNIT_FRAME_GLOBALS = {
+    player = "KullThranUI_UF_Player",
+    target = "KullThranUI_UF_Target",
+    focus = "KullThranUI_UF_Focus",
+    pet = "KullThranUI_UF_Pet",
+}
+
+local function AnchorFactors(point)
+    point = point or "CENTER"
+    local ax = point:find("LEFT") and 0.5 or (point:find("RIGHT") and -0.5 or 0)
+    local ay = point:find("TOP") and -0.5 or (point:find("BOTTOM") and 0.5 or 0)
+    return ax, ay
+end
+
+local function CaptureUnitFramePlacement()
+    local uf = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if type(uf) ~= "table" or type(uf.positions) ~= "table" then return nil end
+    local snapshot = {}
+    for key, globalName in pairs(UNIT_FRAME_GLOBALS) do
+        local frame = _G[globalName]
+        local pos = uf.positions[key]
+        local settings = type(uf[key]) == "table" and uf[key] or nil
+        if type(pos) == "table" and pos.point then
+            local scale = ((settings and settings.frameScale) or 100) / 100
+            local x, y = pos.x or 0, pos.y or 0
+            local w, h = 0, 0
+            if frame and frame.GetPoint and frame.GetScale then
+                local pt, rel, _, fx, fy = frame:GetPoint(1)
+                if pt == pos.point and (rel == nil or rel == UIParent)
+                    and type(fx) == "number" and type(fy) == "number" then
+                    x, y = fx, fy
+                end
+                local live = frame:GetScale()
+                if type(live) == "number" and live > 0 then scale = live end
+                w, h = frame:GetWidth() or 0, frame:GetHeight() or 0
+            end
+            snapshot[key] = { point = pos.point, x = x, y = y, scale = scale, w = w, h = h }
+        end
+    end
+    return snapshot
+end
+
+local function RestoreUnitFramePlacement(snapshot)
+    local uf = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if type(snapshot) ~= "table" or type(uf) ~= "table" or type(uf.positions) ~= "table" then return end
+    local editFrames = KT.db.profile.editMode and KT.db.profile.editMode.frames
+    for key, old in pairs(snapshot) do
+        local settings = type(uf[key]) == "table" and uf[key] or nil
+        local newScale = ((settings and settings.frameScale) or 100) / 100
+        if newScale > 0 and math.abs(newScale - old.scale) > 0.0001 then
+            -- Keep the frame's centre on the same screen spot:
+            -- centre = scale * (offset + anchorFactor * size).
+            local ax, ay = AnchorFactors(old.point)
+            local nx = (old.x + ax * old.w) * old.scale / newScale - ax * old.w
+            local ny = (old.y + ay * old.h) * old.scale / newScale - ay * old.h
+            local pos = uf.positions[key]
+            if type(pos) == "table" then
+                pos.x, pos.y = nx, ny
+                if pos.scale then pos.scale = newScale end
+            end
+            local saved = type(editFrames) == "table" and editFrames["unitframes_" .. key]
+            if type(saved) == "table" and saved.point == old.point then
+                saved.x, saved.y = nx, ny
+                if saved.scale then saved.scale = newScale end
+            end
+        end
+    end
+end
+
 function KT.VisualThemes:ApplyAll(targetTheme)
     if not self:IsKnownTheme(targetTheme) then
-        if KT.Print then KT:Print("Unknown visual theme: " .. tostring(targetTheme)) end
+        if KT.Print then KT:Print(Tr("Unknown visual theme: %s", tostring(targetTheme))) end
         return false
     end
     if InCombatLockdown and InCombatLockdown() then
-        if KT.Print then KT:Print("Visual themes cannot be changed during combat.") end
+        if KT.Print then KT:Print(Tr("Visual themes cannot be changed during combat.")) end
         return false
     end
 
     local profile, state = self:EnsureInitialized()
     if not profile then
-        if KT.Print then KT:Print("The profile is not ready yet.") end
+        if KT.Print then KT:Print(Tr("The profile is not ready yet.")) end
         return false
     end
 
@@ -497,6 +582,7 @@ function KT.VisualThemes:ApplyAll(targetTheme)
     local slotBackup = DeepCopy(state.slots)
     local appliedBackup = DeepCopy(state.applied)
     local rollback = {}
+    local placement = CaptureUnitFramePlacement()
 
     for _, moduleKey in ipairs(order or {}) do
         local adapter = registry[moduleKey]
@@ -535,7 +621,7 @@ function KT.VisualThemes:ApplyAll(targetTheme)
                     state.applied = appliedBackup
                     state.requested = currentTheme
                     if KT.Print then
-                        KT:Print("Visual theme failed in " .. moduleKey .. ": " .. tostring(err))
+                        KT:Print(Tr("Visual theme failed in %s: %s", moduleKey, tostring(err)))
                     end
                     return false
                 end
@@ -551,7 +637,12 @@ function KT.VisualThemes:ApplyAll(targetTheme)
     state.requested = targetTheme
     state.active = targetTheme
     state.schemaVersion = self.SCHEMA_VERSION
+    RestoreUnitFramePlacement(placement)
     self:ResetComboDefaults()
+
+    -- The Installer resumes on its Visual Style page after this reload.
+    local installer = KT.GetModule and KT:GetModule("Installer", true)
+    if installer and installer.PrepareStyleReload then installer:PrepareStyleReload() end
 
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()
@@ -563,14 +654,14 @@ function KT.VisualThemes:RequestApply(themeKey)
     if not self:IsKnownTheme(themeKey) then return false end
     if themeKey == self:GetRenderedTheme() then
         self:ResetComboDefaults()
-        if KT.Print then KT:Print("Combo points restored to this theme's defaults.") end
+        if KT.Print then KT:Print(Tr("Combo points restored to this theme's defaults.")) end
         return true
     end
 
     local catalog = self:GetThemeCatalog()
     local theme = catalog[themeKey]
     StaticPopupDialogs.KT_VISUAL_THEME_CONFIRM = {
-        text = "Apply %s and reload the interface?",
+        text = Tr("Apply %s and reload the interface?"),
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function(_, data)

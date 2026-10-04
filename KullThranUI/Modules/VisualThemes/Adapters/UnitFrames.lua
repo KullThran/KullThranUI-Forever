@@ -7,7 +7,9 @@ local UNIT_KEYS = { "player", "target", "focus", "pet", "boss" }
 local function GetProfile()
     if not (KT.db and KT.db.profile) then return nil end
     KT.db.profile.unitFrames = KT.db.profile.unitFrames or {}
-    return KT.db.profile.unitFrames
+    local profile = KT.db.profile.unitFrames
+    KT.VisualThemes:PrepareModernNumberSlots(profile)
+    return profile
 end
 
 local function SetUnitValues(profile, showPortrait, texture)
@@ -27,7 +29,7 @@ local function SetUnitBorderColor(profile, colorR, colorG, colorB)
     end
 end
 
--- Explicit user request: player/target default frameScale under
+-- Player/target default frameScale under
 -- Retail/Classic/Forever (module's own baseline default is 100).
 local PLAYER_TARGET_FRAME_SCALE = 132
 local function SetPlayerTargetScale(profile, scale)
@@ -50,13 +52,53 @@ local function SetClassPowerDefaults(profile, enabled)
     profile.player.classPowerBarY = 0
 end
 
+local function SetModernNumbers(profile)
+    profile._ktModernNumbersV1 = true
+    for _, key in ipairs({ "player", "target" }) do
+        local unit = profile[key]
+        unit.leftTextContent = "perhp"
+        unit.rightTextContent = "curhp"
+        unit.centerTextContent = "name"
+        unit.powerPercentText = "right"
+        unit.powerTextFormat = "curpp"
+        unit.powerShowPercent = false
+        unit.leftTextX, unit.leftTextY = 0, 0
+        unit.rightTextX, unit.rightTextY = 0, 0
+        unit.powerPercentX, unit.powerPercentY = 0, 0
+    end
+end
+
+local NUMBER_FIELDS = { "leftTextContent", "rightTextContent", "centerTextContent",
+    "powerPercentText", "powerTextFormat", "powerShowPercent", "leftTextX", "leftTextY",
+    "rightTextX", "rightTextY", "powerPercentX", "powerPercentY" }
+function KT.VisualThemes:PrepareModernNumberSlots(profile)
+    if profile._ktNumberBaseline then return end
+    local baseline = {}
+    for _, key in ipairs({ "player", "target" }) do
+        local unit = profile[key] or {}
+        for _, field in ipairs(NUMBER_FIELDS) do
+            local value = unit[field]
+            baseline[key .. "." .. field] = value == nil and { __ktVisualThemeNil = true } or value
+        end
+    end
+    profile._ktNumberBaseline = baseline
+    local state = KT.db.profile.visualTheme
+    local slots = state and state.slots and state.slots.unitframes
+    for _, slot in pairs(slots or {}) do
+        for path, value in pairs(baseline) do
+            if slot[path] == nil then slot[path] = value end
+        end
+        if slot._ktModernNumbersV1 == nil then slot._ktModernNumbersV1 = false end
+    end
+end
+
 KT.VisualThemes:RegisterModule("unitframes", {
     isAvailable = function() return GetProfile() ~= nil end,
     getProfile = GetProfile,
     getOwnedPaths = function()
         local paths = {
             "portraitStyle", "darkTheme", "healthBarTexture", "frameArtKit",
-            "target.portraitSide",
+            "target.portraitSide", "_ktModernNumbersV1",
         }
         for _, key in ipairs(UNIT_KEYS) do
             paths[#paths + 1] = key .. ".showPortrait"
@@ -83,38 +125,59 @@ KT.VisualThemes:RegisterModule("unitframes", {
         paths[#paths + 1] = "target.customFillColor.b"
         paths[#paths + 1] = "target.healthClassColored"
         paths[#paths + 1] = "showPvPCircle"
+        for _, key in ipairs({ "player", "target" }) do
+            for _, field in ipairs({ "leftTextContent", "rightTextContent", "centerTextContent",
+                "powerPercentText", "powerTextFormat", "powerShowPercent", "leftTextX", "leftTextY",
+                "rightTextX", "rightTextY", "powerPercentX", "powerPercentY" }) do
+                paths[#paths + 1] = key .. "." .. field
+            end
+        end
         return paths
     end,
     seed = function(profile, themeKey, clientFlavor)
+        if themeKey == "retail" or themeKey == "forever" then
+            profile.player = profile.player or {}
+            profile.target = profile.target or {}
+            SetModernNumbers(profile)
+        elseif profile._ktModernNumbersV1 and profile._ktNumberBaseline then
+            for _, key in ipairs({ "player", "target" }) do
+                for _, field in ipairs(NUMBER_FIELDS) do
+                    local value = profile._ktNumberBaseline[key .. "." .. field]
+                    if type(value) == "table" and value.__ktVisualThemeNil then value = nil end
+                    profile[key][field] = value
+                end
+            end
+            profile._ktModernNumbersV1 = false
+        end
         if themeKey == "classic" then
             -- Classic's real stock box (ApplyClassicUnitFrameArt) assumes a
             -- round-clipped portrait, same as Forever's -- Blizzard's real
             -- TargetingFrame portrait is round too. "attached" takes
             -- ApplyDetachedPortraitShape's fast path, which explicitly
-            -- REMOVES any mask -- confirmed live: the portrait rendered
-            -- fully unmasked and bled outside the ring.
+            -- REMOVES any mask, so the portrait would render
+            -- fully unmasked and bleed outside the ring.
             profile.portraitStyle = "circular"
             profile.darkTheme = false
-            -- Explicit user request: the PvP icon's backdrop circle
+            -- The PvP icon's backdrop circle
             -- defaults ON for the 3 real-stock-art themes, OFF for kui
             -- (which has its own toggle to opt back in).
             profile.showPvPCircle = true
             profile.healthBarTexture = "Blizzard"
             SetUnitValues(profile, true, "Blizzard")
-            -- Explicit user request: Classic's default accent is #DCA300.
+            -- Classic's default accent is #DCA300.
             SetUnitBorderColor(profile, 0.862745, 0.639216, 0)
             profile.frameArtKit = "classic"
             if profile.target then profile.target.portraitSide = "right" end
-            -- showPlayerCastbar defaults to false module-wide -- explicit
-            -- user report: cast bars "don't appear" under Classic/Forever.
+            -- showPlayerCastbar defaults to false module-wide, so cast bars
+            -- don't appear under Classic/Forever.
             -- Real stock geometry anchors the cast bar below Power already
-            -- (CreateCastBar); it just never turns on unless the user
+            -- (CreateCastBar); it just never turns on unless the player
             -- opts in manually. Real per-client themes should show it.
             profile.player = profile.player or {}
             profile.player.showPlayerCastbar = true
             SetClassPowerDefaults(profile, true)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
-            -- Explicit user request: Classic's health bar defaults to green
+            -- Classic's health bar defaults to green
             -- too, same mechanism as Retail below.
             for _, key in ipairs({ "player", "target" }) do
                 profile[key] = type(profile[key]) == "table" and profile[key] or {}
@@ -128,11 +191,11 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- color update, so Forever always rendered black.
             profile.darkTheme = false
             profile.showPvPCircle = true
-            -- Explicit user request: Forever's bar texture should match
+            -- Forever's bar texture should match
             -- Retail's rather than keep its own separate LSM choice.
             profile.healthBarTexture = "Blizzard Raid Bar"
             SetUnitValues(profile, true, "Blizzard Raid Bar")
-            -- Explicit user request: Forever's default accent is #694836.
+            -- Forever's default accent is #694836.
             SetUnitBorderColor(profile, 0.411765, 0.282353, 0.211765)
             profile.frameArtKit = "default"
             if profile.target then profile.target.portraitSide = "right" end
@@ -140,7 +203,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.player.showPlayerCastbar = true
             SetClassPowerDefaults(profile, false)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
-            -- Explicit user request: Forever's health bar defaults to green
+            -- Forever's health bar defaults to green
             -- too, same mechanism as Retail below.
             for _, key in ipairs({ "player", "target" }) do
                 profile[key] = type(profile[key]) == "table" and profile[key] or {}
@@ -148,7 +211,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
                 profile[key].healthClassColored = false
             end
         elseif themeKey == "retail" then
-            -- Explicit user request: Retail is the same real per-client
+            -- Retail is the same real per-client
             -- stock geometry as Forever (same atlas name, ApplyForeverUnitFrameArt
             -- in ThemeClientAssets.lua is reused for both), NOT the bare
             -- fixed-accent-color ceiling kui already covers. The only real
@@ -162,7 +225,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.showPvPCircle = true
             profile.healthBarTexture = "Blizzard Raid Bar"
             SetUnitValues(profile, true, "Blizzard Raid Bar")
-            -- Explicit user request: Retail's default accent is the
+            -- Retail's default accent is the
             -- player's own class color -- a snapshot taken when the theme
             -- is applied (seed only runs on an explicit theme switch, same
             -- as every other seeded field in this module), not a live
@@ -181,7 +244,7 @@ KT.VisualThemes:RegisterModule("unitframes", {
             profile.player.showPlayerCastbar = true
             SetClassPowerDefaults(profile, false)
             SetPlayerTargetScale(profile, PLAYER_TARGET_FRAME_SCALE)
-            -- Explicit user request: Retail's health bar defaults to green
+            -- Retail's health bar defaults to green
             -- (KUIUnitFrames.lua's existing customFillColor/healthClassColored
             -- mechanism -- healthClassColored=false makes the custom fill win
             -- over class/reaction coloring).
@@ -201,18 +264,17 @@ KT.VisualThemes:RegisterModule("unitframes", {
             -- (KUIUnitFrames.lua defaults: frameArtKit = "default").
             profile.frameArtKit = "default"
             SetClassPowerDefaults(profile, false)
-            -- Explicit user request: kui must NOT get Retail/Forever/Classic's
-            -- bigger 132% default -- confirmed live, switching TO kui left a
+            -- kui must NOT get Retail/Forever/Classic's
+            -- bigger 132% default: switching TO kui would otherwise leave a
             -- stale 132 behind from whichever real-stock theme was active
             -- before, since this branch never touched frameScale at all.
-            -- Reset explicitly to the module's own baseline (100). A later
-            -- request to shrink this to 75 was reverted: a frameScale below
-            -- 100 exposed a real bug elsewhere (buffs rendering huge --
-            -- see KUIUnitFrames.lua), and the user's final, explicit call
-            -- was to keep kui at 100 regardless.
+            -- Reset explicitly to the module's own baseline (100). A baseline of 75
+            -- was rejected: a frameScale below
+            -- 100 exposed a bug elsewhere (buffs rendering huge --
+            -- see KUIUnitFrames.lua), so kui stays at 100.
             SetPlayerTargetScale(profile, 100)
-            -- Explicit user report: kui's health bar wasn't "just the class
-            -- color" -- root cause: this branch never reset
+            -- kui's health bar should be just the class color. Previously this
+            -- branch never reset
             -- healthClassColored/customFillColor, so switching to kui from
             -- Classic/Forever/Retail (all three force healthClassColored
             -- = false + a green customFillColor) left that green stuck in
@@ -226,6 +288,11 @@ KT.VisualThemes:RegisterModule("unitframes", {
         end
     end,
     validate = function(profile, themeKey)
+        if themeKey == "retail" or themeKey == "forever" then
+            profile.player = profile.player or {}
+            profile.target = profile.target or {}
+            SetModernNumbers(profile)
+        end
         local valid = { attached = true, detached = true, circular = true, none = true }
         if not valid[profile.portraitStyle] then profile.portraitStyle = "circular" end
         -- Repair existing Forever slots seeded with the obsolete dark-health

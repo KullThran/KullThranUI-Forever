@@ -56,8 +56,8 @@ KT.VisualThemes:RegisterModule("cooldownmanager", {
         for index = 1, 4 do
             profile.cdmBars.bars[index] = profile.cdmBars.bars[index] or {}
         end
-        -- Explicit user request: under Classic, Utility and Cooldowns
-        -- specifically should default to no icon shape/mask (plain square
+        -- Under Classic, Utility and Cooldowns
+        -- specifically default to no icon shape/mask (plain square
         -- icons), not the theme's general "square" masked shape used for
         -- other bars (e.g. Buffs).
         local noShapeBarKeys = { cooldowns = true, utility = true }
@@ -71,7 +71,7 @@ KT.VisualThemes:RegisterModule("cooldownmanager", {
         end
     end,
     validate = function(profile)
-        -- Icon borders, reskin and frame art are the user's to edit in every style (the theme
+        -- Icon borders, reskin and frame art are the player's to edit in every style (the theme
         -- only seeds them); here we just repair invalid shapes.
         local valid = { none = true, cropped = true, square = true, circle = true, csquare = true, diamond = true, hexagon = true, portrait = true, shield = true }
         for _, bar in ipairs(profile.cdmBars and profile.cdmBars.bars or {}) do

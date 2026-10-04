@@ -12,7 +12,7 @@ KT.VisualThemes = KT.VisualThemes or {}
     name) and KullThranUI's own textures for the kui theme.
 
     Rules this file follows on purpose:
-      - Nothing is a static screenshot: every piece is built live from art, so
+      - Nothing is a static image: every piece is built live from art, so
         it follows any future asset change.
       - Every atlas goes through C_Texture.GetAtlasInfo before it is drawn and
         every piece has its own fallback, so a client that does not expose one
@@ -24,15 +24,14 @@ KT.VisualThemes = KT.VisualThemes or {}
         not an unrelated mock-up.
 ]]
 
--- Explicit user report: every text in these cards (titles, captions, the
--- mini-preview's own name/level text) rendered in WoW's generic default
--- font instead of the addon's own Avant Garde. Root cause: this file loads
--- (per the TOC) BEFORE GlobalFont.lua resolves the real KT.FONT_PATH from
--- the player's profile/locale, so a plain `local FONT = KT.FONT_PATH or
--- fallback` captured at file-load time froze on the fallback permanently,
--- never seeing GlobalFont.lua's later, correct assignment. A function
--- re-reads the live value on every actual use instead of a one-time
--- snapshot.
+-- Text in these cards (titles, captions, the mini-preview's own name/level
+-- text) must use the addon's own Avant Garde font rather than WoW's generic
+-- default. This file loads (per the TOC) BEFORE GlobalFont.lua resolves the
+-- real KT.FONT_PATH from the player's profile/locale, so a plain
+-- `local FONT = KT.FONT_PATH or fallback` captured at file-load time would
+-- freeze on the fallback permanently, never seeing GlobalFont.lua's later,
+-- correct assignment. A function re-reads the live value on every actual
+-- use instead of a one-time snapshot.
 local function GetPreviewFont()
     return KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
 end
@@ -163,7 +162,11 @@ end
 -- own atlas. Returns the resolved pixel size, or nil when nothing is available
 -- (caller falls back to its plain shape).
 local function ApplyArt(tex, atlasName, useRetail, scale)
-    local pixels = useRetail and RetailPixels(atlasName) or nil
+    local vt = KT.VisualThemes
+    local foreverPixels = not useRetail and _G.WOW_PROJECT_MAINLINE
+        and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE and vt and vt.GetForeverAtlasPixels
+        and vt:GetForeverAtlasPixels(atlasName)
+    local pixels = (useRetail and RetailPixels(atlasName)) or foreverPixels
     if pixels then
         tex:SetTexture(pixels.file)
         tex:SetTexCoord(
@@ -215,13 +218,12 @@ local function ActionBarCapAtlases()
     return ATLAS_CAP_LEFT, ATLAS_CAP_RIGHT
 end
 
--- Explicit user request: the decorative action-bar end-cap art (not real
--- icon art -- kui has no real texture for icon slots, so it stays blank,
--- same "nothing real to show, don't fake it" rule as before) replaces the
--- per-theme caption text below each card's preview, with a small "mini
--- action bar" of slot squares filling the gap between the two caps --
--- matching the real layout (end caps flank the bar, they don't sit next
--- to each other with nothing between them).
+-- The decorative action-bar end-cap art (not real icon art -- kui has no
+-- real texture for icon slots, so it stays blank: nothing real to show,
+-- don't fake it) is shown in place of per-theme caption text below each
+-- card's preview, with a small "mini action bar" of slot squares filling
+-- the gap between the two caps -- matching the real layout (end caps flank
+-- the bar, they don't sit next to each other with nothing between them).
 local MINI_SLOT_COUNT = 3
 
 local KUI_SLOT_COUNT = 5
@@ -266,20 +268,15 @@ local function AddEndCapArt(card, kit, stage, y, capHeight)
         end
         return
     end
-    -- Explicit user report, confirmed by a zoomed screenshot: Retail's cap
-    -- was tiny, Forever's two caps touched in the middle, and Classic's was
-    -- giant and overlapping the button below it. Root causes, found by
-    -- re-reading this function: (1) the Classic branch never called
-    -- tex:SetSize() at all -- an un-sized texture renders at its source
-    -- FILE's own native pixel size, which for a real action-bar end-cap
-    -- graphic is much bigger than this card. (2) Forever/Retail used a
-    -- fixed `capHeight/100` scale guess instead of the atlas's own real
-    -- native height, so the rendered size (and therefore how wide it
-    -- actually is) never matched the `capWidth` the holders were spaced
-    -- apart by -- correct for one atlas's real proportions, wrong for
-    -- another's. Now every branch measures (or, for Classic, deliberately
-    -- caps) its own real size BEFORE positioning, and holders are spaced
-    -- using that real width, not a guess.
+    -- Each branch measures (or, for Classic, deliberately caps) its own real
+    -- size BEFORE positioning, and holders are spaced using that real width,
+    -- not a guess. Reasons: (1) an un-sized texture renders at its source
+    -- FILE's own native pixel size, which for a real action-bar end-cap graphic
+    -- is much bigger than this card, so the Classic branch must call
+    -- tex:SetSize(). (2) A fixed `capHeight/100` scale guess does not match
+    -- each atlas's own real native height, so the rendered width would not
+    -- match the `capWidth` the holders are spaced apart by -- correct for one
+    -- atlas's real proportions, wrong for another's.
     local slotSize = math.max(8, math.floor(capHeight * 0.65))
     local slotGap = 2
     local slotsWidth = (MINI_SLOT_COUNT * slotSize) + ((MINI_SLOT_COUNT - 1) * slotGap)
@@ -293,32 +290,26 @@ local function AddEndCapArt(card, kit, stage, y, capHeight)
         if kit.kind == "sheet" then
             tex:SetTexture(CLASSIC_END_CAP)
             if side == 2 then tex:SetTexCoord(1, 0, 0, 1) end
-            -- Explicit user report: still tiny at capHeight*0.85 x
-            -- capHeight, and raising the shared row height to compensate
-            -- also grew Forever's (already correct) end-cap, which wasn't
-            -- asked for. This Blizzard file almost certainly has real
-            -- transparent padding baked into its canvas (same category of
-            -- issue confirmed earlier for circle_border.tga/
-            -- circle_mask.tga), un-measurable the same way since it's
-            -- inside the game client's own archives, not a loose file.
-            -- Overshoots the row's nominal height now, but is anchored by
-            -- its CENTER on the row's own center point (see below) so the
-            -- extra size is split evenly above and below instead of all
-            -- landing on the button beneath it.
+            -- Sized at capHeight*0.85 x capHeight. Raising the shared row height to
+            -- enlarge this cap would also grow Forever's (already correct) end-cap.
+            -- This Blizzard file almost certainly has real transparent padding baked
+            -- into its canvas (same category of issue as circle_border.tga/
+            -- circle_mask.tga), un-measurable the same way since it's inside the game
+            -- client's own archives, not a loose file.
+            -- Overshoots the row's nominal height, but is anchored by its CENTER on the
+            -- row's own center point (see below) so the extra size is split evenly
+            -- above and below instead of all landing on the button beneath it.
             w, h = capHeight * 1.3, capHeight * 1.7
         else
             local capLeft, capRight = ActionBarCapAtlases()
             local atlasName = (side == 1) and capLeft or capRight
-            -- Reverted the earlier "force useRetail=false for both" choice:
-            -- explicit user report confirmed it made Retail's end-cap show
-            -- the exact same bronze art as Forever's, losing the real
-            -- distinction entirely. That choice was a speculative guess
-            -- at why Retail looked tiny -- the ACTUAL fix is the height
-            -- normalization right below (measure native size, then scale
-            -- to hit capHeight exactly), which works correctly regardless
-            -- of which source (RetailPixels or the plain atlas) the
-            -- dimensions came from, so there was no real need to disable
-            -- Retail's own pixel resolution to fix the sizing.
+            -- Retail keeps its own pixel resolution (useRetail is not forced to false
+            -- for both themes): forcing it would make Retail's end-cap show the same
+            -- bronze art as Forever's, losing the real distinction. The small size is
+            -- handled by the height normalization right below (measure native size,
+            -- then scale to hit capHeight exactly), which works correctly regardless
+            -- of which source (RetailPixels or the plain atlas) the dimensions came
+            -- from.
             local nativeW, nativeH = ApplyArt(tex, atlasName, kit.retail, 1)
             if nativeW and nativeH and nativeH > 0 then
                 local targetScale = capHeight / nativeH
@@ -423,13 +414,8 @@ local function PaintBorder(edges, color, size)
     end
 end
 
--- Explicit user report: card accents weren't accurate -- Classic, Forever
--- and Retail all rendered a near-identical muddy brown (AddPanel derived it
--- from kit.panel + a fixed offset, unrelated to any theme's real color),
--- and kui's ring/level-text used KT:GetStylePalette() (a generic "skin"
--- accent from Options, or whatever theme happens to be currently
--- rendered) instead of the color the real kui frame actually shows.
--- Each theme's REAL accent: Classic/Forever/Retail are seeded explicitly by
+-- Card accents: each theme uses its REAL accent rather than a derived
+-- color. Classic/Forever/Retail are seeded explicitly by
 -- Adapters/UnitFrames.lua's seed() (gold, bronze, live class color); kui's
 -- portrait ring has no such seeded field and instead follows the same
 -- resolution as its health fill by default (ResolveCircularPortraitColor
@@ -437,15 +423,12 @@ end
 -- circularPortraitBorderColor is nil, which is the default) -- so the
 -- already-resolved `healthColor` passed in here IS the accurate kui ring
 -- color, not a separate lookup.
--- Explicit user report: the preview never showed the user's real class
--- color at all (CLASS button fell back to a generic gold, health bars
--- never recolored) -- root cause found by comparing against the ALREADY
--- proven-working lookup in Adapters/UnitFrames.lua's own retail-accent
--- seed: this file's every class-color lookup went straight to
--- RAID_CLASS_COLORS, which isn't reliably populated/available on this
--- client, instead of trying C_ClassColor.GetClassColor first the way that
--- already-tested code does. One shared resolver, used everywhere a class
--- color is needed, so this can't silently diverge again.
+-- Class color lookups go through one shared resolver that tries
+-- C_ClassColor.GetClassColor first, as the proven lookup in
+-- Adapters/UnitFrames.lua's retail-accent seed does, and only then falls
+-- back to RAID_CLASS_COLORS, which isn't reliably populated/available on
+-- every client. It is used everywhere a class color is needed so lookups
+-- can't silently diverge.
 local function ResolveClassColorByToken(classToken, fallback)
     if not classToken then return fallback end
     local cc = (C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(classToken))
@@ -472,11 +455,10 @@ local function ResolveThemeAccent(kit, healthColor)
             local classToken = type(UnitClass) == "function" and select(2, UnitClass("player")) or nil
             return ResolveClassColorByToken(classToken, { 1.00, 0.82, 0.10, 1 })
         end
-        -- Explicit user request: Forever's preview accent should read as a
-        -- brown close to the Warrior class color, not the darker/muddier
-        -- #694836 the real theme seeds (Adapters/UnitFrames.lua) -- this
-        -- only changes how the preview TAB represents the color, not the
-        -- live in-game accent.
+        -- Forever's preview accent reads as a brown close to the Warrior
+        -- class color, not the darker/muddier #694836 the real theme seeds
+        -- (Adapters/UnitFrames.lua) -- this only changes how the preview
+        -- TAB represents the color, not the live in-game accent.
         return ResolveClassColorByToken("WARRIOR", { 0.780, 0.612, 0.431, 1 })
     end
     return healthColor
@@ -506,7 +488,7 @@ end
 --- The health color the live player frame will actually use, mirroring how
 --- KUIUnitFrames.lua resolves it (dark theme, then a custom fill when class
 --- coloring is off, then the player's class color). The preview must not show
---- a seeded color the user is not going to get.
+--- a seeded color the player is not going to get.
 -- Each card owns its own health choice (class vs custom color), stored per
 -- theme in profile.visualThemeHealth[themeKey] = { classColored, color }.
 -- The live unit frames only follow the card of the RENDERED theme; the others
@@ -561,7 +543,7 @@ local function ResolveLiveHealthColor(fallback)
         return { custom.r or 1, custom.g or 1, custom.b or 1, 1 }
     end
 
-    -- Real bug, confirmed: `and`/`or` always collapse a multi-return
+    -- Real bug: `and`/`or` always collapse a multi-return
     -- expression to one value. Wrapping UnitClass("player") in
     -- `UnitClass and ...` INSIDE select()'s own argument list silently
     -- truncated it to just the localized name before select(2, ...) ever
@@ -585,14 +567,14 @@ local function LivePlayerClassColor()
     return ResolveClassColorByToken(classToken, { 1.00, 0.82, 0.10, 1 })
 end
 
--- Explicit user request: each card's own chrome color (title, tag, "IN USE"
+-- Each card's own chrome color (title, tag, "IN USE"
 -- badge, top band, border) -- a different concept from the mini-preview's
 -- internal ring/health color above. kui defaults to Crimson (the exact
 -- {1, 0, 0.333} already established as "Crimson" by
 -- KUIUnitFrames.lua's MigrateLegacyCrimsonAccent, not a new guess), Retail
 -- to the player's live class color, Forever to a brown close to the
 -- Warrior class color (RAID_CLASS_COLORS.WARRIOR, #C79C6E), and Classic
--- keeps the catalog's own gold (unchanged -- not reported as wrong).
+-- keeps the catalog's own gold.
 local function ResolveCardBrandColor(themeKey, catalogColor)
     if themeKey == "kui" then
         return { 1, 0, 0.333, 1 }
@@ -680,17 +662,16 @@ end
 -- Flat, colored panel drawn first so a theme whose real art is unavailable on
 -- this client still reads as a complete frame instead of an empty hole.
 -- `drawBorder` defaults true; Classic's own real sheet art already draws a
--- decorative bordered frame (it's a screenshot of the actual Blizzard
+-- decorative bordered frame (it is the actual Blizzard
 -- TargetingFrame), so adding this generic accent-colored rectangle on top
--- of it double-bordered the card and never quite lined up with the sheet's
--- own (confirmed real-asset-dependent) edge -- same category of bug as the
--- portrait ring/mask padding found earlier, just not independently
--- measurable the same way since this one's a Blizzard file, not one of
--- ours. Forever/Retail's HUD atlas has no such baked-in border, so they
--- still need this one. `drawPanel` defaults true too; explicit user
--- request removed Classic's own brown fill entirely -- the real sheet art
--- is meant to be the only visible background, same "no extra container"
--- philosophy already applied to kui.
+-- of it double-borders the card and never quite lines up with the sheet's
+-- own edge -- same category of issue as the portrait ring/mask padding,
+-- just not independently measurable since this one's a Blizzard file, not
+-- one of ours. Forever/Retail's HUD atlas has no such baked-in border, so
+-- they still need this one. `drawPanel` defaults true too; Classic's own
+-- brown fill is removed entirely -- the real sheet art is meant to be the
+-- only visible background, same "no extra container" philosophy already
+-- applied to kui.
 local function AddPanel(box, kit, scale, accent, drawBorder, drawPanel)
     local panel
     if drawPanel ~= false then
@@ -707,7 +688,7 @@ end
 -- a WHITE8X8 texture tinted dark, masked round) with the gold level number
 -- on top. ox/oy and the two nudges are copied verbatim from that block's
 -- player-side anchor (CENTER, frame's BOTTOMLEFT, ox/oy) so this can never
--- drift from the real, screenshot-verified positions: 36/30.5 for Forever
+-- drift from the real positions: 36/30.5 for Forever
 -- and Retail, 60/33 for Classic. `box` here is sized exactly like the real
 -- `frame` (both are the 232x100 stock box at the same scale), so the same
 -- anchor math applies unchanged.
@@ -716,15 +697,14 @@ local function AddLevelBadge(box, scale, ox, oy)
     local levelXNudge = 4 * scale
     local circleSize = 30 * scale
 
-    -- Confirmed by pixel-sampling the user's screenshot: the badge was
-    -- invisible on Classic, hidden entirely behind the opaque sheet art.
-    -- Root cause: both were created on "OVERLAY" with no explicit sublevel,
-    -- and same-layer/same-sublevel draw order follows texture CREATION
-    -- order -- which is a convention, not a guarantee (this exact lesson
-    -- was already learned once this session, in KUIUnitFrames.lua's real
-    -- PvP-circle-vs-icon stacking bug). The real fix there was a genuinely
-    -- separate, higher-FrameLevel child frame, which always wins regardless
-    -- of either side's own sublevel usage -- same technique here.
+    -- Without a higher FrameLevel the badge is invisible on Classic, hidden
+    -- entirely behind the opaque sheet art. Both were created on "OVERLAY"
+    -- with no explicit sublevel, and same-layer/same-sublevel draw order
+    -- follows texture CREATION order -- which is a convention, not a
+    -- guarantee (the same issue affects the PvP-circle-vs-icon stacking in
+    -- KUIUnitFrames.lua). The fix there is a genuinely separate,
+    -- higher-FrameLevel child frame, which always wins regardless of either
+    -- side's own sublevel usage -- same technique here.
     local holder = CreateFrame("Frame", nil, box)
     holder:SetAllPoints(box)
     holder:SetFrameLevel(box:GetFrameLevel() + 1)
@@ -815,30 +795,26 @@ local function DrawHudFrame(box, kit, scale, healthColor, accent)
     AddPortrait(box, geom.portrait, scale, true)
     AddNameText(box, geom.name, scale, kit.retail and "PLAYER" or "KULLTHRAN", kit)
 
-    -- Explicit user report: the level circle was badly placed on Forever
-    -- (it used to center itself ON the portrait photo, via an atlas lookup
-    -- that doesn't match how the real ornament renders at all) and didn't
-    -- exist on Retail. Both now use the same real, screenshot-verified
-    -- ornament as Classic -- Forever and Retail share the same 36/30.5
-    -- anchor in KUIUnitFrames.lua, unconditionally, not gated behind an
-    -- atlas badge lookup.
+    -- The level circle uses the same real ornament as Classic on both
+    -- Forever and Retail. Centering it on the portrait photo via an atlas
+    -- lookup does not match how the real ornament renders. Forever and
+    -- Retail share the same 36/30.5 anchor in KUIUnitFrames.lua,
+    -- unconditionally, not gated behind an atlas badge lookup.
     AddLevelBadge(box, scale, 36, 30.5)
 end
 
--- KullThranUI's own flat renderer. Explicit user report: this looked
--- "nothing like" the real kui frame -- it drew a boxed mockup (a panel fill
--- plus a hairline border around the whole thing) when the real frame has
--- no such panel, it just floats portrait+bars directly with no container.
--- Also the portrait was far smaller than real: KUIUnitFrames.lua sizes an
+-- KullThranUI's own flat renderer. The real kui frame has no panel: it
+-- floats portrait+bars directly with no container, so this preview draws
+-- no boxed mockup (no panel fill or hairline border).
+-- Portrait size follows KUIUnitFrames.lua, which sizes an
 -- attached portrait as `playerTargetHeight + portraitSize` (the SAME
 -- height as the combined health+power bar stack, by default), not a
--- fraction of the card. Dropped the panel/border entirely for this kit and
--- tied portrait size directly to the real bar stack height so the two stay
--- in the same ratio the real frame uses. Name now sits above the bars
--- (the real frame's name text floats above, not overlaid on the health
--- fill) and the level is a small dark badge overlapping the portrait's
--- bottom-left corner, matching the real level-circle ornament instead of
--- a floating corner label.
+-- fraction of the card. Portrait size is therefore tied directly to the
+-- real bar stack height so the two stay in the same ratio the real frame
+-- uses. Name sits above the bars (the real frame's name text floats above,
+-- not overlaid on the health fill) and the level is a small dark badge
+-- overlapping the portrait's bottom-left corner, matching the real
+-- level-circle ornament instead of a floating corner label.
 local function DrawFlatFrame(box, kit, scale, w, h, healthColor, accent)
     -- Mirrors KullThranUI's real circular layout as the Unit Frames live
     -- preview draws it: a round portrait with an accent ring on the left,
@@ -959,14 +935,13 @@ local function DrawScene(stage, themeKey, width, height)
     stageBg:SetAllPoints()
     stageBg:SetColorTexture(0.035, 0.040, 0.050, 1)
 
-    -- Explicit user request: the slot row was superfluous ("los cuadrados de
-    -- las previews sobran") and its real-asset end caps barely read at this
-    -- size on Classic (two glyphs stuck together with nothing between them)
-    -- or Retail (end-cap art nearly invisible) -- removed entirely, and the
+    -- The slot row is omitted: it was superfluous and its real-asset end caps
+    -- barely read at this size on Classic (two glyphs stuck together with
+    -- nothing between them) or Retail (end-cap art nearly invisible). The
     -- reclaimed vertical space goes to a bigger, more accurate main preview.
     local padX, padTop, padBottom = 6, 6, 6
     local frameBand = height - padTop - padBottom
-    -- Explicit user request: kui's card is a reference sample of the
+    -- kui's card is a reference sample of the
     -- theme's own default look, not a mirror of whatever the live profile
     -- happens to be customized to right now (Classic/Forever/Retail's
     -- health color stays live-reflecting on purpose, since their cards
@@ -994,8 +969,7 @@ local function DrawScene(stage, themeKey, width, height)
         scale = math.max(Clamp(scale, 0.35, 1.2), 0.3)
         box = CreateFrame("Frame", nil, stage)
         box:SetSize(BOX_W * scale, BOX_H * scale)
-        -- Confirmed by pixel-sampling the screenshot: Classic's real,
-        -- screenshot-verified geometry (GEO.sheet) leaves a 42-unit margin
+        -- Classic's real geometry (GEO.sheet) leaves a 42-unit margin
         -- before the portrait but only 7 after the health bar (portrait at
         -- x=42, health ends at x=225, out of a 232-wide box) -- an
         -- asymmetric real layout that reads as "pushed to the right" once
@@ -1021,16 +995,14 @@ local function DrawScene(stage, themeKey, width, height)
         stage._ktPreviewBox = box
     end
 
-    -- Explicit user report: Classic's card showed a second, badly-fitted
-    -- rectangle below the real one ("cuadrado mal encajado"). Root cause:
-    -- this drew a SECOND border around the whole `stage` (the card's fixed
-    -- stageHeight area), while AddPanel already draws its own border
-    -- tightly around `box` (the content-fitted area) for sheet/hud kinds
-    -- -- `box` is shorter than `stage` whenever width, not height, is the
-    -- limiting factor in the scale calc, so the two borders never lined
-    -- up. AddPanel's box-level border already frames the miniature on its
-    -- own (and kui intentionally has none), so this second one was both
-    -- redundant and visibly broken. Removed entirely.
+    -- Classic's card must not draw a second, badly-fitted rectangle below the
+    -- real one. A border around the whole `stage` (the card's fixed
+    -- stageHeight area) would not line up with AddPanel's own border, which is
+    -- drawn tightly around `box` (the content-fitted area) for sheet/hud kinds
+    -- (`box` is shorter than `stage` whenever width, not height, is the
+    -- limiting factor in the scale calc). AddPanel's box-level border already
+    -- frames the miniature on its own (and kui intentionally has none), so a
+    -- second one would be both redundant and visibly broken, and is omitted.
 end
 
 --- Creates a live miniature of `themeKey` inside `parent`.
@@ -1113,24 +1085,23 @@ function KT.VisualThemes:ReleasePreview(preview)
     preview:ClearAllPoints()
 end
 
--- Explicit user request: bigger, more accurate previews and less caption
--- text. Every description here is one short sentence that never needed 3
--- wrapped lines, so that reserved line goes to stageHeight instead, on top
--- of the room already reclaimed by removing the slot row below.
--- Explicit user request: removed the per-theme caption description to make
+-- Bigger, more accurate previews with less caption text. Every description
+-- here is one short sentence that never needed 3 wrapped lines, so that
+-- reserved line goes to stageHeight instead, on top of the room already
+-- reclaimed by removing the slot row below.
+-- The per-theme caption description is removed to make
 -- room for the real action-bar end-cap art instead (capRowHeight replaces
 -- the old captionLines/captionSize-driven height).
--- Reverted to the original 22/26: raising this grew Forever's end-cap too
--- (explicit user report: it didn't need to change, it was already right)
+-- Kept at the original 22/26: raising this grew Forever's end-cap too
+-- (which was already right)
 -- since this height is shared by every theme's row. Classic's own
 -- padding compensation is handled inside AddEndCapArt's own sizing
 -- instead, not by inflating the row every theme shares.
--- Explicit user request: match the cleaner reference card layout (studied
--- for layout/typography technique only, nothing copied) -- its title/tag
--- hierarchy runs noticeably bigger (~17px/11px) and un-outlined, versus
--- the 12-14px/8-9px outlined pair this used before.
--- Explicit user request: the action-bar art (end caps + mini slots, both
--- driven by capRowHeight) 10% bigger across the board -- 22/26 -> 24/29.
+-- Title/tag hierarchy runs noticeably bigger (~17px/11px) and un-outlined,
+-- versus the 12-14px/8-9px outlined pair used before, for a cleaner card
+-- layout.
+-- The action-bar art (end caps + mini slots, both driven by capRowHeight)
+-- is 10% bigger across the board -- 22/26 -> 24/29.
 local CARD_METRICS = {
     compact = {
         titleSize = 14, tagSize = 10, capRowHeight = 27,
@@ -1150,14 +1121,14 @@ local function ComputeCardHeight(metrics)
         + metrics.capRowHeight + metrics.buttonPad + metrics.buttonHeight + metrics.buttonPad
 end
 
--- Explicit user request: a real health color selector for the stock-art
+-- A real health color selector for the stock-art
 -- themes, whose health color is otherwise fixed by the theme's own seed
 -- (healthClassColored=false, customFillColor=green). It is a CLASS toggle plus
 -- a swatch wired to the color picker, so any color can be picked. kui already
 -- exposes the same two fields through its own general unit frame options, so it
 -- doesn't need a duplicate control here.
 local HEALTH_COLOR_TOGGLE_THEMES = { kui = true, classic = true, forever = true, retail = true }
--- Explicit user request: thinner and more readable than the original 30/38.
+-- Thinner and more readable than the original 30/38.
 local HEALTH_TOGGLE_ROW_HEIGHT_COMPACT = 22
 local HEALTH_TOGGLE_ROW_HEIGHT_FULL = 26
 
@@ -1176,7 +1147,7 @@ function KT.VisualThemes:CreateThemeCard(parent, themeKey, options)
     local showHealthToggle = HEALTH_COLOR_TOGGLE_THEMES[themeKey] == true
     local healthToggleHeight = compact and HEALTH_TOGGLE_ROW_HEIGHT_COMPACT
         or HEALTH_TOGGLE_ROW_HEIGHT_FULL
-    -- Explicit user request: every card must be the same size. kui has no
+    -- Every card must be the same size. kui has no
     -- health-color toggle row, so it used to come out shorter than the
     -- other three by exactly healthToggleHeight -- reserve that same
     -- footer space on every card regardless of whether it draws the row,
@@ -1269,7 +1240,7 @@ function KT.VisualThemes:CreateThemeCard(parent, themeKey, options)
         height = metrics.stageHeight,
     })
 
-    -- Explicit user request: no more per-theme description text here --
+    -- No per-theme description text here --
     -- the real action-bar end-cap art goes in its place instead.
     -- Lifted a little (the card keeps its height, so the extra room opens
     -- up above the Apply button): Classic's oversized end caps used to touch it.
@@ -1372,14 +1343,13 @@ function KT.VisualThemes:CreateThemeCard(parent, themeKey, options)
             return KT.db and KT.db.profile and KT.db.profile.unitFrames
         end
 
-        -- Explicit user report: hovering these controls "activated them on
-        -- their own" -- root cause: this getter MUTATED profile.player
-        -- into a fresh empty table as a side effect of merely being read,
-        -- and it's called from IsClassColored()/GetCustomColor(), which
-        -- PaintToggle() (and therefore every OnEnter/OnLeave hover
-        -- handler) calls on every hover, not just on an actual click.
-        -- Read-only now; Commit() below already creates the table properly
-        -- when something is actually being written.
+        -- This getter must be read-only: mutating profile.player into a fresh
+        -- empty table as a side effect of merely being read made hovering these
+        -- controls activate them, since it is called from
+        -- IsClassColored()/GetCustomColor(), which PaintToggle() (and therefore
+        -- every OnEnter/OnLeave hover handler) calls on every hover, not just on
+        -- an actual click. Commit() below already creates the table properly when
+        -- something is actually being written.
         local function IsClassColored()
             return (GetThemeHealthChoice(themeKey))
         end
@@ -1420,7 +1390,7 @@ function KT.VisualThemes:CreateThemeCard(parent, themeKey, options)
             end
             -- Forever's former preset enabled darkTheme, whose renderer has
             -- higher priority than both class and custom health colors. Once
-            -- the user chooses either control, the selector must own the fill.
+            -- either control is chosen, the selector must own the fill.
             if self:GetRenderedTheme() == themeKey then
                 profile.darkTheme = false
             end

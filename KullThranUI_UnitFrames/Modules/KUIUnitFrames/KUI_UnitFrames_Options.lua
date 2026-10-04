@@ -40,7 +40,7 @@ local PREVIEW_DYNAMIC_UNITS = { "pet", "focus", "target", "totPet", "focustarget
 -- FOREVER_FRAME_GEOMETRY in ThemeClientAssets.lua so the preview can seat the
 -- genuine stock artwork on the preview units. Only player and target have
 -- verified geometry, so only those two ever get stock art.
--- Explicit user report: the preview didn't match the active theme and sat
+-- The preview didn't match the active theme and sat
 -- misaligned -- this single table was ALWAYS Forever/Retail's own geometry
 -- (atlas-based art), reused unconditionally even for Classic, which uses
 -- a completely different raw-texture-with-texcoord-fractions technique
@@ -178,7 +178,7 @@ end
 --- @param widget table|nil
 --- @param path string|nil db path, e.g. "player.frameScale"
 --- @return table|nil widget
--- Explicit user request: color fields stay editable on every theme, not
+-- Color fields stay editable on every theme, not
 -- just kui -- seed() still sets Classic/Forever/Retail's own default color
 -- on an explicit theme switch (gold/bronze/class color), but the user can
 -- change it afterward regardless of which theme owns the rest of the
@@ -224,7 +224,7 @@ end
 --- @param atlasName string
 --- @param mirror boolean|nil
 --- @return boolean applied
--- Explicit user report: Retail's preview art was still Forever's (the
+-- Retail's preview art was still Forever's (the
 -- bronze reskin). Root cause: KT.GetRetailAtlasPixels is a theme-agnostic
 -- lookup -- it only compares the CURRENT CLIENT's live atlas file against
 -- the known real-retail file, with no idea which theme is asking for it.
@@ -240,7 +240,11 @@ end
 local function ApplyStockArtTexture(tex, atlasName, mirror)
     if not (tex and atlasName) then return false end
 
-    local info = (type(KT.ResolveRetailAtlasOverride) == "function" and KT.ResolveRetailAtlasOverride(atlasName)) or nil
+    local vt = KT.VisualThemes
+    local foreverInfo = ActiveVisualTheme() == "forever" and _G.WOW_PROJECT_MAINLINE
+        and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE and vt and vt.GetForeverAtlasPixels
+        and vt:GetForeverAtlasPixels(atlasName)
+    local info = foreverInfo or (type(KT.ResolveRetailAtlasOverride) == "function" and KT.ResolveRetailAtlasOverride(atlasName)) or nil
     if info and (info.file or info.filename) and info.leftTexCoord and info.rightTexCoord
         and info.topTexCoord and info.bottomTexCoord then
         tex:SetTexture(info.file or info.filename)
@@ -254,7 +258,7 @@ local function ApplyStockArtTexture(tex, atlasName, mirror)
 
     if type(tex.SetAtlas) == "function" then
         tex:SetAtlas(atlasName, false)
-        -- Explicit user report, confirmed by screenshot: target's ring art
+        -- Target's ring art
         -- in the Live Preview was badly fitted -- the portrait icon poked
         -- out past an incomplete-looking ring. Root cause: this fallback
         -- path (taken for Forever specifically, since
@@ -274,6 +278,87 @@ local function ApplyStockArtTexture(tex, atlasName, mirror)
         return true, atlasInfo and atlasInfo.width, atlasInfo and atlasInfo.height
     end
     return false
+end
+
+-- 3D portrait in the live preview. Stock-art styles draw their own ring, so only
+-- the model is seated there.
+function ns.ApplyPreview3D(frame, unitKey, settings, isCircular, size, show, stockArt)
+    if not (show and settings.portraitMode == "3d") then
+        if frame.model3D then
+            frame.model3D:Hide()
+            frame.ringFrame:Hide()
+        end
+        return false
+    end
+    if not frame.model3D then
+        frame.model3D = CreateFrame("PlayerModel", nil, frame.portraitFrame)
+        frame.ringFrame = CreateFrame("Frame", nil, frame.portraitFrame)
+        frame.ringFrame:SetAllPoints(frame.portraitFrame)
+        frame.ringTexture = frame.ringFrame:CreateTexture(nil, "OVERLAY")
+        frame.ringTexture:SetTexture(PREVIEW_CIRCLE_BORDER)
+        frame.ringTexture:SetPoint("TOPLEFT", frame.ringFrame, "TOPLEFT", -1, 1)
+        frame.ringTexture:SetPoint("BOTTOMRIGHT", frame.ringFrame, "BOTTOMRIGHT", 1, -1)
+        frame.model3D:SetScript("OnModelLoaded", function(self)
+            if self._apply then self._apply() end
+        end)
+        frame.model3D:RegisterEvent("UNIT_MODEL_CHANGED")
+        frame.model3D:RegisterEvent("UNIT_PORTRAIT_UPDATE")
+        frame.model3D:SetScript("OnEvent", function(self, _, changedUnit)
+            local previewUnit = self._previewUnit
+            if self:IsShown() and previewUnit and changedUnit
+                and UnitIsUnit(previewUnit, changedUnit) then
+                self:SetUnit(previewUnit)
+                if self._apply then self._apply() end
+            end
+        end)
+    end
+    local model = frame.model3D
+    local level = frame.portraitFrame:GetFrameLevel()
+    model:SetFrameLevel(level + 1)
+    frame.ringFrame:SetFrameLevel(level + 3)
+    local inset = (isCircular or stockArt) and math.floor(size * 0.18 + 0.5) or 0
+    model:ClearAllPoints()
+    model:SetPoint("TOPLEFT", frame.portraitFrame, "TOPLEFT", inset, -inset)
+    model:SetPoint("BOTTOMRIGHT", frame.portraitFrame, "BOTTOMRIGHT", -inset, inset)
+    local modelUnit = ({ pet = "pet", target = "target", focus = "focus",
+        totPet = "targettarget", focustarget = "focustarget" })[unitKey]
+    if not (modelUnit and UnitExists(modelUnit)) then modelUnit = "player" end
+    local function applyCamera()
+        local zoom = math.max(0.25, (tonumber(settings.portrait3DZoom) or 125) / 100)
+        -- The frame decides the facing from its own unit; the preview shows the
+        -- player model when there is no target, so state that facing explicitly.
+        local facingMode = settings.portraitFacingMode
+        if not facingMode then
+            if unitKey == "player" then facingMode = "normal"
+            elseif unitKey == "target" then facingMode = "flipped" end
+        end
+        local rot, formZoom, formShift, viewShift = KT.Portrait3DYaw(modelUnit,
+            settings.portraitSide or ((unitKey == "player" or unitKey == "pet") and "left" or "right"),
+            facingMode, false, settings.portrait3DRotation, model)
+        KT.ApplyPortrait3DCamera(model, rot, zoom * formZoom,
+            (tonumber(settings.portrait3DX) or 0) / 100 + formShift,
+            (tonumber(settings.portrait3DY) or 0) / 100, viewShift)
+    end
+    model._apply = applyCamera
+    if model._previewUnit ~= modelUnit then
+        model:SetUnit(modelUnit)
+        model._previewUnit = modelUnit
+    end
+    applyCamera()
+    model:Show()
+    frame.portrait:SetColorTexture(0.1, 0.1, 0.1, 1)
+    if not stockArt then
+        frame.portraitBorder:Hide()
+        if isCircular then
+            frame.ringTexture:SetVertexColor(frame.portraitBorder:GetVertexColor())
+            frame.ringFrame:Show()
+        else
+            frame.ringFrame:Hide()
+        end
+    else
+        frame.ringFrame:Hide()
+    end
+    return true
 end
 
 --- Reseats a preview unit onto the real stock 232x100 layout: genuine atlas
@@ -335,10 +420,15 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
         portraitGeom.point, frame, portraitGeom.point,
         portraitGeom.x * scale, portraitGeom.y * scale)
     frame.portraitFrame:Show()
+    if ns.ApplyGroupLeaderStyle and frame.leaderIcon then
+        ns.ApplyGroupLeaderStyle({Health = frame.health}, frame.leaderIcon, unitKey,
+            themeKey, frame.portraitFrame, scale, ns.SafeCall(HasLFGRestrictions))
+        frame.leaderIcon:SetShown(ns.SafeCall(UnitLeadsAnyGroup, unitKey) and true or false)
+    end
 
-    -- Explicit user report: still a visible gap after the first 1.23x
+    -- Still a visible gap after the first 1.23x
     -- (circle_mask.tga's own measured padding) compensation. Re-measured
-    -- directly off the follow-up screenshot: the remaining gap is far
+    -- against the ring art: the remaining gap is far
     -- larger than that ratio alone accounts for. This ring's own silhouette
     -- is NOT a plain circle (it has a flat/pointed bottom corner, same
     -- dome shape as the real in-game ornament), which defeats a simple
@@ -348,14 +438,13 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
     -- frame's own), so overshoot would cover part of the ring's gold
     -- edge, while undershoot leaves the background gap -- still erring
     -- larger since the observed gap was still substantial, but not by as
-    -- much as a full re-guess. May need one more round of feedback to land
-    -- exactly.
+    -- much as a full re-measure.
     local MASK_PAD_RATIO = 1.55
     -- Classic's real frame (ThemeClientAssets.lua ApplyClassicUnitFrameArt)
     -- keeps the photo at exactly the stock 64px box, clipped to it, and only
     -- expands the circular MASK around it. Scaling the photo itself by 1.55
     -- here (as Forever/Retail's preview does) made Classic's preview portrait
-    -- spill outside the ring -- confirmed live via screenshot. Mirror the
+    -- spill outside the ring. Mirror the
     -- real frame for Classic instead.
     local isClassicPreview = themeKey == "classic"
     -- Forever/Retail too: the real frame keeps the photo at the stock size,
@@ -368,7 +457,7 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
     frame.portrait:SetSize(iconSize, iconSize)
     frame.portrait:SetPoint("CENTER", frame.portraitFrame, "CENTER")
 
-    -- Explicit user report, confirmed by screenshot: player's portrait showed
+    -- Player's portrait showed
     -- as a flat gray circle under a real-stock theme. Root cause: this whole
     -- function returns true to ApplyPreviewUnit's caller, which then RETURNS
     -- EARLY (see the `if ... and ApplyStockLayoutToPreview(...) then ... return
@@ -387,12 +476,13 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
             or settings.portraitFacing or (unitKey == "target" and "flipped" or "normal")
         applyPortraitTexture(frame.portrait, unitKey, facing)
     end
+    ns.ApplyPreview3D(frame, unitKey, settings, true, portraitSize, settings.showPortrait ~= false, true)
 
     local function SeatBar(bar, rect)
         bar:ClearAllPoints()
         bar:SetSize(rect.w * scale, rect.h * scale)
         bar:SetPoint("TOPLEFT", frame, "TOPLEFT", rect.x * scale, -rect.y * scale)
-        -- Explicit user report: the power bar "didn't fit" -- it was
+        -- The power bar "didn't fit" -- it was
         -- rendering under the stock atlas's own bar-track art once that
         -- art moved to stockArtFrame (19). Elevate the bars above it here,
         -- specifically for the stock-art path only (the generic/kui path
@@ -422,6 +512,10 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
         frame.value:SetPoint("CENTER", frame.health, "CENTER", 0, 0)
         frame.value:SetJustifyH("CENTER")
         frame.value:SetShown((settings.rightTextContent or "none") ~= "none")
+    elseif themeKey == "retail" or themeKey == "forever" then
+        frame.value:ClearAllPoints()
+        frame.value:SetPoint("RIGHT", frame.health, "RIGHT", -3 * scale, 0)
+        frame.value:SetJustifyH("RIGHT")
     elseif themeKey == "classic" then
         -- Classic: the health percentage sits in the middle of the health bar, not beside the name.
         frame.value:ClearAllPoints()
@@ -487,7 +581,7 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
         return true
     end
 
-    -- Real, screenshot-verified ox/oy pair from KUIUnitFrames.lua's
+    -- Ox/oy pair from KUIUnitFrames.lua's
     -- usingClassicLevelOrnament block: 36/30.5 for Forever/Retail, 60/33
     -- for Classic, anchored to the frame's own BOTTOMLEFT (mirrored to
     -- BOTTOMRIGHT for target, same as the real frame).
@@ -502,13 +596,20 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
     frame.levelFrame:SetAllPoints(frame)
     frame.levelCircle:ClearAllPoints()
     frame.levelCircle:SetSize(circleSize, circleSize)
-    -- Real bug, confirmed by screenshot: no dark circle showed at all behind
+    -- No dark circle showed at all behind
     -- either "60", just bare text -- levelCircleMask was created but never
     -- sized/positioned anywhere, so its mask shape was undefined/zero,
     -- which masks the whole circle to fully invisible instead of a circle.
     frame.levelCircleMask:ClearAllPoints()
     frame.levelCircleMask:SetAllPoints(frame.levelCircle)
-    frame.levelText:SetFont(PREVIEW_FONT, math.max(7, math.floor(11 * scale)), "OUTLINE")
+    local ufDB = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if themeKey == "retail" or themeKey == "forever" or (ns.StockStyleToggle and ns.StockStyleToggle(ufDB, "levelBlizzardStyle")) then
+        local path, size, flags = ns.BlizzardFont("GameNormalNumberFont", PREVIEW_FONT, 10, "OUTLINE")
+        frame.levelText:SetFont(path, math.max(6, size * scale), flags)
+        frame.levelText:SetTextColor(ns.BlizzardLevelColor(unitKey, themeKey))
+    else
+        frame.levelText:SetFont(PREVIEW_FONT, math.max(7, math.floor(11 * scale)), "OUTLINE")
+    end
     frame.levelText:ClearAllPoints()
     frame.levelText:SetSize(18 * scale, 14 * scale)
     if unitKey == "target" then
@@ -520,6 +621,7 @@ local function ApplyStockLayoutToPreview(frame, unitKey, settings)
         frame.levelText:SetPoint("CENTER", frame, "BOTTOMLEFT",
             ox * scale + levelTextXNudge - levelXNudge, oy * scale)
     end
+    ns.CenterStockLevelText(frame.levelText, frame.levelCircle, themeKey)
     frame.levelCircle:Show()
     frame.levelText:Show()
     return true
@@ -571,9 +673,30 @@ local function ApplyStockPreviewColors(frame, settings, globalDB, unitKey, nameT
     frame.power.bg:SetTexture(PREVIEW_BG)
 
     local textSize = settings.textSize or 14
-    frame.name:SetFont(PREVIEW_FONT, settings.leftTextSize or textSize, "OUTLINE")
+    if globalDB.blizzardNameStyle ~= false and ns.BlizzardFont then
+        -- Blizzard name text: GameFontNormalSmall in yellow, sized with the frame art.
+        local path, size, flags = ns.BlizzardFont("GameFontNormalSmall", PREVIEW_FONT, 10, "")
+        frame.name:SetFont(path, math.max(6, size * (settings.frameScale or 100) / 100), flags)
+        frame.name:SetTextColor(1, 0.82, 0, 1)
+    else
+        frame.name:SetFont(PREVIEW_FONT, settings.leftTextSize or textSize, "OUTLINE")
+    end
     frame.value:SetFont(PREVIEW_FONT, settings.rightTextSize or textSize, "OUTLINE")
     frame.name:SetText(nameText or "")
+    local theme = KT.VisualThemes:GetRenderedTheme()
+    if (theme == "retail" or theme == "forever") and (unitKey == "player" or unitKey == "target") then
+        local scale = (settings.frameScale or 100) / 100
+        local vt = KT.VisualThemes
+        vt:ApplyBlizzardBarText(frame.value, scale, frame.health:GetHeight())
+        vt:ApplyBlizzardBarText(frame.healthPercent, scale, frame.health:GetHeight())
+        vt:ApplyBlizzardBarText(frame.powerValue, scale, frame.power:GetHeight())
+        frame.healthPercent:SetText(string.format("%d%%", healthValue))
+        frame.healthPercent:Show()
+        frame.powerValue:SetText("100")
+        frame.powerValue:Show()
+        frame.value:SetText(BreakUpLargeNumbers and BreakUpLargeNumbers(1928 * healthValue / 100) or "1928")
+        return
+    end
     if showAbsorbPreview then
         frame.value:SetText(string.format("%d%%", healthValue))
     else
@@ -833,7 +956,7 @@ local function CreatePreviewUnit(parent)
     frame:EnableMouse(true)
     KT:AddBorder(frame, 0, 0, 0, 1)
 
-    -- Explicit user report: the portrait rendered ABOVE the ring art
+    -- The portrait rendered ABOVE the ring art
     -- instead of underneath it -- matches ThemeClientAssets.lua's own
     -- documented real stacking order (SyncArtLayers: "portrait -> frame
     -- art -> bars -> text"), which this preview had backwards. Full level
@@ -852,16 +975,18 @@ local function CreatePreviewUnit(parent)
     frame.portraitBorder:SetTexture(PREVIEW_CIRCLE_BORDER)
     frame.portraitBorder:Hide()
 
-    -- Explicit user report: the stock-art themes' level ornament never
+    -- The stock-art themes' level ornament never
     -- showed at all in this preview (not just Classic -- Forever/Retail
     -- never had one either, there simply was no level element anywhere in
-    -- this function before). Same real, screenshot-verified technique as
+    -- this function before). Same technique as
     -- KUIUnitFrames.lua's own usingClassicLevelOrnament block: a plain
     -- dark circle (not atlas art) with the gold level number on top, on
     -- its own higher-level frame so it reliably draws above the stock art
     -- regardless of either side's own layer/sublevel.
     frame.levelFrame = CreateFrame("Frame", nil, frame)
     frame.levelFrame:SetFrameLevel(frame:GetFrameLevel() + 21)
+    frame.leaderIcon = frame.levelFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+    frame.leaderIcon:Hide()
     frame.levelCircle = frame.levelFrame:CreateTexture(nil, "OVERLAY")
     frame.levelCircle:SetTexture("Interface\\Buttons\\WHITE8X8")
     frame.levelCircle:SetVertexColor(0.06, 0.06, 0.06, 1)
@@ -869,7 +994,7 @@ local function CreatePreviewUnit(parent)
     frame.levelCircleMask:SetTexture(PREVIEW_CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     frame.levelCircle:AddMaskTexture(frame.levelCircleMask)
     frame.levelCircle:Hide()
-    -- Real crash, confirmed by the user's error log: SetText() before any
+    -- SetText() before any
     -- SetFont() call ever ran on this FontString throws "Font not set" --
     -- ApplyStockLayoutToPreview's own SetFont call happens later (only
     -- when a stock theme is actually active), too late for this creation-
@@ -929,6 +1054,17 @@ local function CreatePreviewUnit(parent)
     frame.value:SetTextColor(1, 1, 1, 1)
     frame.value:SetPoint("RIGHT", -6, 0)
     frame.value:SetJustifyH("RIGHT")
+
+    frame.healthPercent = frame.health:CreateFontString(nil, "OVERLAY")
+    frame.healthPercent:SetFont(PREVIEW_FONT, 10, "OUTLINE")
+    frame.healthPercent:SetTextColor(1, 1, 1, 1)
+    frame.healthPercent:SetPoint("LEFT", frame.health, "LEFT", 3, 0)
+    frame.healthPercent:Hide()
+    frame.powerValue = frame.power:CreateFontString(nil, "OVERLAY")
+    frame.powerValue:SetFont(PREVIEW_FONT, 9, "OUTLINE")
+    frame.powerValue:SetTextColor(1, 1, 1, 1)
+    frame.powerValue:SetPoint("RIGHT", frame.power, "RIGHT", -3, 0)
+    frame.powerValue:Hide()
 
     frame.hover = frame:CreateTexture(nil, "HIGHLIGHT")
     frame.hover:SetAllPoints()
@@ -1092,6 +1228,9 @@ function ResolvePreviewBarTexture(textureKey, fallbackPath)
 end
 
 local function ApplyPreviewUnitBase(frame, unitKey, settings, globalDB, nameText, valueText)
+    if frame.leaderIcon then frame.leaderIcon:Hide() end
+    frame.healthPercent:Hide()
+    frame.powerValue:Hide()
     -- A stock-art theme (retail/forever/classic) renders Blizzard's own frames,
     -- not KUI's. Seat the real artwork instead of the Melli layout, otherwise
     -- the preview would lie about what the chosen theme actually looks like.
@@ -1235,6 +1374,8 @@ local function ApplyPreviewUnitBase(frame, unitKey, settings, globalDB, nameText
             frame.portraitBorder:SetVertexColor(fillR, fillG, fillB, 1)
         end
     end
+
+    ns.ApplyPreview3D(frame, unitKey, settings, isCircular, portraitWidth, showPortrait, false)
     frame.health.bg:SetTexture(PREVIEW_BG)
     frame.health.bg:SetVertexColor(bgR, bgG, bgB, 1)
     frame.power:SetStatusBarTexture(ResolvePreviewBarTexture(settings.powerBarTexture or settings.healthBarTexture, PREVIEW_FILL))
@@ -1275,6 +1416,13 @@ local RING_ICON_PATH = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\medi
 ns.RING_ICON_PATH = RING_ICON_PATH
 
 function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, valueText)
+    -- Restore the ordinary preview before drawing the newly selected style.
+    if frame._ktPreviewNativeArtClip then
+        frame.stockArt:SetParent(frame.stockArtFrame)
+        frame._ktPreviewNativeArtClip:Hide()
+    end
+    frame.portraitFrame:SetFrameLevel(frame:GetFrameLevel() + 18)
+    if frame.levelFrame then frame.levelFrame:SetFrameLevel(frame:GetFrameLevel() + 22) end
     ApplyPreviewUnitBase(frame, unitKey, settings, globalDB, nameText, valueText)
 
     local ring = frame.classificationRing
@@ -1282,6 +1430,21 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
     local choice = (unitKey == "player" and globalDB and globalDB.playerClassificationBorder) or "none"
     local portraitShown = frame.portraitFrame
         and (frame.portraitFrame:IsShown() or (frame.portrait and frame.portrait:IsShown()))
+    -- Retail/Forever native overlay: Blizzard's atlas drawn over the normal frame.
+    local nativeKind = (choice == "nativerare" and "rare") or (choice == "nativeelite" and "elite") or nil
+    frame.unit = unitKey
+    local nativeVisible = portraitShown and nativeKind and ns.HasNativeClassificationArt(nativeKind)
+    frame._ktNativeClassificationScale = 1
+    do
+        local previewTheme = ActiveVisualTheme and ActiveVisualTheme() or "kui"
+        frame._ktClassRingReach = ns.ClassificationRingReach(previewTheme)
+        frame._ktClassRingFit = ns.NativeRingFit(previewTheme)
+    end
+    if ns.ShowNativeClassificationRing then
+        ns.ShowNativeClassificationRing(frame, frame.portraitFrame,
+            nativeVisible and nativeKind or nil, true, frame.levelFrame)
+    end
+    if ns.KUIOrnaments then ns.KUIOrnaments.HideClassicDragon(ring) end
     if (choice ~= "rare" and choice ~= "elite" and choice ~= "classicrare" and choice ~= "classicelite")
         or not portraitShown then
         if ring then ring:Hide() end
@@ -1296,8 +1459,20 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
     local CR = ns.ClassicRing
     local classicKind = (choice == "classicrare" and "rare") or (choice == "classicelite" and "elite") or nil
     if CR and classicKind then
-        ring:SetTexture(CR.sheets[classicKind])
-        local sc = (frame.portraitFrame:GetWidth() or 40) * CR.scale / 64
+        if theme == "classic" and frame.stockArt then
+            -- Match the live Classic renderer: replace the whole stock sheet,
+            -- rather than placing a cropped dragon over the normal portrait rim.
+            frame.stockArt:SetTexture(CR.sheets[classicKind])
+            frame.stockArt:Show()
+            if frame.portraitBorder then frame.portraitBorder:Hide() end
+            ring:Hide()
+            return
+        end
+        ring:SetTexture(CR.dragons[classicKind] or CR.sheets[classicKind])
+        -- Same placement as the live frame: around the portrait's own border.
+        local sc = CR.ArtScale(frame.portraitFrame, ns.ClassificationRingReach(theme, false, true))
+        if ns.KUIOrnaments and ns.KUIOrnaments.FitClassicDragon(
+            ring, frame.portraitFrame, CR, classicKind, sc, theme) then return end
         ring:SetTexCoord(CR.uLeft, CR.uRight, CR.vTop, CR.vBottom)
         ring:ClearAllPoints()
         ring:SetSize(CR.cropW * sc, CR.cropH * sc)
@@ -1305,24 +1480,12 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
         -- Below the level text (OVERLAY) so the number stays readable over the sheet.
         if ring.SetDrawLayer then ring:SetDrawLayer("ARTWORK", 7) end
         ring:Show()
-        -- Seat the level in the sheet's own empty level circle (same offsets as the live frame).
-        if frame.levelText then
-            frame.levelText:ClearAllPoints()
-            frame.levelText:SetSize(40, 16)
-            frame.levelText:SetPoint("CENTER", frame.portraitFrame, "CENTER", CR.levelDX * sc + 1, CR.levelDY * sc)
-            frame.levelText:SetJustifyH("CENTER")
-            frame.levelText:Show()
-        end
-        if frame.levelCircle then frame.levelCircle:Hide() end
-        if (theme == "forever" or theme == "retail") and frame.stockArt then frame.stockArt:Hide() end
         return
     end
     if ring.SetDrawLayer then ring:SetDrawLayer("OVERLAY", 7) end
-    local scale = 1.18
-    if theme == "classic" then scale = 1.18 * 1.12
-    elseif theme == "forever" or theme == "retail" then scale = 1.18 * 1.10 * 1.10
-    else scale = 1.18 * 0.95 end
-    local size = math.max(24, (frame.portraitFrame:GetWidth() or 40) * scale)
+    local MR = ns.ModernClassificationRing
+    local size = math.max(24, (frame.portraitFrame:GetHeight() or 40)
+        * ns.ModernRingReach(theme) / MR.holeRadius)
     ring:SetTexture(RING_ICON_PATH .. (choice == "rare" and "RARE.png" or "ELITE.png"))
     -- Same rule as the live frame: the ring points the way the portrait looks.
     local facing = KT.ResolvePortraitFacing and KT.ResolvePortraitFacing("player") or "normal"
@@ -1338,12 +1501,10 @@ function ns.ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, value
     ring:ClearAllPoints()
     ring:SetSize(size, size)
     -- The art's opening is not centred in the PNG (measured ~0.44, 0.52): re-centre it.
-    ring:SetPoint("CENTER", frame.portraitFrame, "CENTER", (looksRight and -0.06 or 0.06) * size, 0.02 * size)
+    local nudgeX, nudgeY = ns.ModernRingNudge(theme)
+    ring:SetPoint("CENTER", frame.portraitFrame, "CENTER",
+        (looksRight and -(MR.centerX + nudgeX) or (MR.centerX + nudgeX)) * size, (MR.centerY + nudgeY) * size)
     ring:Show()
-    -- Forever/Retail hide their bronze/gold base art while the ring is shown.
-    if (theme == "forever" or theme == "retail") and frame.stockArt then
-        frame.stockArt:Hide()
-    end
 end
 
 -- Combo points under the frame (Player preview), drawn after the
@@ -1357,7 +1518,8 @@ do
 end
 
 -- Combo point style picker (tiles) for Player / Target.  Player: Off, Modern,
--- Classic.  Target: Off, Ring (circle around the portrait), Modern, Classic.
+-- Classic.  Target: Off, Ring (circle around the portrait), Ring + Pips,
+-- Modern, Classic.
 -- PvP icon style picker (graphic tiles): Modern = ours, Classic = stock banner.
 -- Independent for Player (pvpIconStyle) and Target (pvpIconStyleTarget).
 function ns.BuildPvPPicker(container, W, by, unitKey)
@@ -1443,11 +1605,14 @@ function ns.BuildComboPicker(container, W, by, unitKey)
         end
     end
     local defs = { { key = 'off', label = 'Off', hint = 'Hidden' } }
-    if isTarget then defs[#defs + 1] = { key = 'ring', label = 'Ring' } end
+    if isTarget then
+        defs[#defs + 1] = { key = 'ring', label = 'Ring' }
+        defs[#defs + 1] = { key = 'both', label = 'Ring + Pips' }
+    end
     defs[#defs + 1] = { key = 'modern', label = 'Modern' }
     defs[#defs + 1] = { key = 'classic', label = 'Classic' }
     local count = #defs
-    local tileW = (count > 3) and 72 or 92
+    local tileW = (count > 4) and 62 or (count > 3) and 72 or 92
     local step = tileW + 6
     for index, def in ipairs(defs) do
         local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
@@ -1471,14 +1636,20 @@ function ns.BuildComboPicker(container, W, by, unitKey)
             plate:SetPoint("TOP", 0, -20)
             if CUF.HasAtlas(CUF.ATLAS.plate) then plate:SetAtlas(CUF.ATLAS.plate, false)
             else plate:SetColorTexture(0.05, 0.05, 0.05, 1) end
-        elseif def.key == 'ring' then
+        elseif def.key == 'ring' or def.key == 'both' then
+            local ringY = (def.key == 'both') and -28 or -34
             for k = 1, 4 do
                 local a = math.rad(100 - (k - 1) * 28)
                 local t = btn:CreateTexture(nil, "ARTWORK")
                 t:SetSize(11, 11)
-                t:SetPoint("CENTER", btn, "TOP", math.cos(a) * 22 - 6, -34 + math.sin(a) * 16)
+                t:SetPoint("CENTER", btn, "TOP", math.cos(a) * 22 - 6, ringY + math.sin(a) * 16)
                 t:SetTexture(k <= 2 and "Interface\\COMMON\\Indicator-Red" or "Interface\\COMMON\\Indicator-Gray")
                 if k > 2 then t:SetVertexColor(0.1, 0.1, 0.1, 1) end
+            end
+            if def.key == 'both' and CUF then
+                Pip(CUF.ATLAS.modernFill, "Interface\\COMMON\\Indicator-Red", -10, -54, 12)
+                Pip(CUF.ATLAS.modernFill, "Interface\\COMMON\\Indicator-Red", 2, -54, 12)
+                Pip(CUF.ATLAS.modernEmpty, "Interface\\COMMON\\Indicator-Gray", 14, -54, 12)
             end
         else
             local hint = btn:CreateFontString(nil, "OVERLAY")
@@ -1488,7 +1659,7 @@ function ns.BuildComboPicker(container, W, by, unitKey)
             hint:SetText(LText(def.hint))
         end
         local fs = btn:CreateFontString(nil, "OVERLAY")
-        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", (#def.label > 8) and 10 or 12, "OUTLINE")
         fs:SetPoint("BOTTOM", 0, 8)
         fs:SetText(LText(def.label))
         btn:SetScript("OnClick", function()
@@ -1506,6 +1677,15 @@ function ns.BuildComboPicker(container, W, by, unitKey)
         function() return db['comboPos' .. suffix] == 'above' and 'above' or 'below' end,
         function(v) SetAndRefresh(function() db['comboPos' .. suffix] = v end) end)
     by = by + ph
+    if isTarget then
+        -- Art of the ring around the target portrait: the visual style's own
+        -- by default, or Classic / Retail-Forever points on any style.
+        local _, rh = W:Dropdown(container, 'Ring Combo Point Art', -by,
+            { auto = 'Visual Style Default', classic = 'Classic', modern = 'Retail / Forever' },
+            function() return db.comboRingArt or 'auto' end,
+            function(v) SetAndRefresh(function() db.comboRingArt = (v ~= 'auto') and v or nil end) end)
+        by = by + rh
+    end
     local _, xh = W:Slider(container, 'Combo Points X', -by,
         function() return db['comboX' .. suffix] or 0 end,
         function(v) SetAndRefresh(function() db['comboX' .. suffix] = v end) end,
@@ -1638,10 +1818,6 @@ local PORTRAIT_MODES = {
     ["3d"] = "3D Portrait",
     ["class"] = "Class Theme",
 }
-local CIRCULAR_PORTRAIT_MODES = {
-    ["2d"] = "2D Portrait",
-    ["class"] = "Class Theme",
-}
 
 local PORTRAIT_FACING = {
     normal = "Normal",
@@ -1737,12 +1913,11 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
         function() return s.healthHeight or 20 end,
         function(v) SetAndRefresh(function() s.healthHeight = v end) end, 12, 80, 1); y = y + h
     if opts.showFrameScale then
-        -- Explicit user request: a way to increase this specific frame's
+        -- A way to increase this specific frame's
         -- own size. frameScale is already a real, working setting (an
         -- overall percentage multiplier on top of Frame Width/Health
         -- Height, clamped 25-300 elsewhere) -- it just had no options
-        -- control before this. Scoped to player/target only (opts flag),
-        -- per the request.
+        -- control before this. Scoped to player/target only (opts flag).
         local scaleWidget
         scaleWidget, h = W:Slider(sc, "Frame Size", -y,
             function() return s.frameScale or 100 end,
@@ -1797,13 +1972,25 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
         function(v) SetAndRefresh(function() db.portraitStyle = v end) end)
     LockIfThemeOwned(widget, "portraitStyle")
     y = y + h
-    local portraitModes = db.portraitStyle == "circular" and CIRCULAR_PORTRAIT_MODES or PORTRAIT_MODES
-    _, h = W:Dropdown(sc, "Portrait Mode", -y, portraitModes,
-        function()
-            local mode = s.portraitMode or "2d"
-            return (db.portraitStyle == "circular" and mode == "3d") and "2d" or mode
-        end,
-        function(v) SetAndRefresh(function() s.portraitMode = v end) end); y = y + h
+    _, h = W:Dropdown(sc, "Portrait Mode", -y, PORTRAIT_MODES,
+        function() local live = GetDB(); return live[unitKey].portraitMode or "2d" end,
+        function(v) SetAndRefresh(function()
+            local live = GetDB()
+            live[unitKey].portraitMode = v
+            if unitKey == "target" then live._ktTarget3DInitialized = true end
+        end) end); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Zoom", -y,
+        function() return s.portrait3DZoom or 125 end,
+        function(v) SetAndRefresh(function() s.portrait3DZoom = v end) end, 50, 250, 1, "%d%%"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Rotation", -y,
+        function() return s.portrait3DRotation or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DRotation = v end) end, -90, 90, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait X Offset", -y,
+        function() return s.portrait3DX or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DX = v end) end, -50, 50, 1, "%d"); y = y + h
+    _, h = W:Slider(sc, "3D Portrait Y Offset", -y,
+        function() return s.portrait3DY or 0 end,
+        function(v) SetAndRefresh(function() s.portrait3DY = v end) end, -50, 50, 1, "%d"); y = y + h
 
     -- Portrait Side (for attached and circular portraits)
     if db.portraitStyle ~= "none" then
@@ -1862,7 +2049,12 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
 
     if opts.showDispelOverlayKey then
         _, h = W:Toggle(sc, opts.showDispelOverlayLabel or "Dispel Overlay", -y,
-            function() return s[opts.showDispelOverlayKey] ~= false end,
+            function()
+                if opts.showDispelOverlayKey == 'dispelOverlay' and ns.IsDispelOverlayOn then
+                    return ns.IsDispelOverlayOn(s)
+                end
+                return s[opts.showDispelOverlayKey] ~= false
+            end,
             function(v) SetAndRefresh(function() s[opts.showDispelOverlayKey] = v end) end); y = y + h
 
         local function AddColorSwatch(key, label, defR, defG, defB)
@@ -2067,20 +2259,37 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                     if module then
                         if v then module:Enable() else module:Disable() end
                     end
-                    ReloadUI()
+                    StaticPopup_Show("KULLTHRANUI_RELOAD")
                 end); by = by + h
             _, h = W:Toggle(container, 'Show Character Level', -by,
                 function() return db.showCharacterLevel ~= false end,
                 function(v) SetAndRefresh(function() db.showCharacterLevel = v and true or false end) end); by = by + h
+            -- Classic / Forever / Retail only (KUI Style keeps its own text).
+            _, h = W:Toggle(container, 'Blizzard Level Text and Colors (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'levelBlizzardStyle') end,
+                function(v) SetAndRefresh(function() db.levelBlizzardStyle = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Combat Icon in the Level Circle (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'levelCombatIcon') end,
+                function(v) SetAndRefresh(function() db.levelCombatIcon = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Blizzard Name Text (Classic / Forever / Retail)', -by,
+                function() return ns.StockStyleToggle(db, 'blizzardNameStyle') end,
+                function(v) SetAndRefresh(function() db.blizzardNameStyle = v and true or false end) end); by = by + h
+            _, h = W:Toggle(container, 'Classic Bar Text: 516/553 93% (Classic)', -by,
+                function() return ns.StockStyleToggle(db, 'classicStatusText', 'classic') end,
+                function(v) SetAndRefresh(function() db.classicStatusText = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, 'Show Elite / Rare Indicator', -by,
                 function() return db.showClassification ~= false end,
                 function(v) SetAndRefresh(function() db.showClassification = v and true or false end) end); by = by + h
+            _, h = W:Dropdown(container, 'Target Rare / Elite Overlay', -by,
+                { auto = 'Visual Style Default', native = 'Retail / Forever (Blizzard)' },
+                function() return db.targetClassificationArt == 'native' and 'native' or 'auto' end,
+                function(v) SetAndRefresh(function() db.targetClassificationArt = (v == 'native') and 'native' or nil end) end); by = by + h
             do
                 local _, lh = W:Label(container, 'Player Rare / Elite Border', -by, 12)
                 by = by + lh
                 local holder = CreateFrame("Frame", nil, container)
                 holder:SetPoint("TOPLEFT", 10, -by)
-                holder:SetSize(300, 204)
+                holder:SetSize(300, 308)
                 local buttons = {}
                 local function PaintButtons()
                     local current = db.playerClassificationBorder or 'none'
@@ -2095,7 +2304,9 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                                { key = 'rare', file = 'RARE.png', label = 'Rare' },
                                { key = 'elite', file = 'ELITE.png', label = 'Elite' },
                                { key = 'classicrare', sheet = 'rare', label = 'Classic Rare' },
-                               { key = 'classicelite', sheet = 'elite', label = 'Classic Elite' } }
+                               { key = 'classicelite', sheet = 'elite', label = 'Classic Elite' },
+                               { key = 'nativerare', native = 'rare', label = 'Retail Rare', hint = 'Retail art' },
+                               { key = 'nativeelite', native = 'elite', label = 'Retail Elite', hint = 'Retail art' } }
                 for index, def in ipairs(defs) do
                     local btn = CreateFrame("Button", nil, holder, "BackdropTemplate")
                     btn:SetSize(92, 96)
@@ -2109,9 +2320,16 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                         tex:SetTexture(ns.RING_ICON_PATH .. def.file)
                     elseif def.sheet and ns.ClassicRing then
                         local CR = ns.ClassicRing
-                        tex:SetTexture(CR.sheets[def.sheet])
+                        tex:SetTexture(CR.dragons[def.sheet] or CR.sheets[def.sheet])
                         tex:SetTexCoord(CR.uLeft, CR.uRight, CR.vTop, CR.vBottom)
                         tex:SetSize(68, 50)
+                    elseif def.native and ns.HasNativeClassificationArt
+                        and ns.HasNativeClassificationArt(def.native) then
+                        local info = C_Texture.GetAtlasInfo(ns.NATIVE_CLASSIFICATION[def.native].atlas)
+                        tex:SetAtlas(ns.NATIVE_CLASSIFICATION[def.native].atlas, false)
+                        local w, hh = info.width or 64, info.height or 64
+                        local k = 64 / math.max(w, hh)
+                        tex:SetSize(w * k, hh * k)
                     else
                         local hint = btn:CreateFontString(nil, "OVERLAY")
                         hint:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
@@ -2148,13 +2366,17 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                     end
                 end)
                 UpdateEnabled()
-                by = by + 212
+                by = by + 316
             end
             _, h = W:Toggle(container, 'Smooth Health/Power Bars', -by,
                 function() return db.smoothBars ~= false end,
                 function(v) SetAndRefresh(function() db.smoothBars = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, 'Combat Text on Portrait (Dodge / Miss / damage)', -by,
-                function() return db.hitText ~= false end,
+                function()
+                    if db.hitText ~= nil then return db.hitText ~= false end
+                    local th = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme and KT.VisualThemes:GetRenderedTheme()
+                    return th == "classic"
+                end,
                 function(v) SetAndRefresh(function() db.hitText = v and true or false end) end); by = by + h
             _, h = W:Toggle(container, '    Numbers in White (damage and healing)', -by,
                 function() return db.hitTextWhiteNumbers == true end,
@@ -2353,8 +2575,7 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 hasPower = true,
                 hasCastbar = true,
                 allowPortraitFacing = true,
-                showBuffsKey = 'showBuffs',
-                showBuffsLabel = 'Show Buffs',
+                -- Target buffs are always shown above the frame.
                 showDebuffsKey = 'onlyPlayerDebuffs',
                 showDebuffsLabel = 'Only Player Debuffs',
                 showDispelOverlayKey = 'dispelOverlay',

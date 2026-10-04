@@ -28,7 +28,7 @@ KT.VisualThemes:RegisterModule("partyframes", {
         -- healthTexture/absorbBarTexture are already one shared value written
         -- to all 6 modes (party/raid/raid40/arena/arenaEnemy/boss) -- see
         -- PartyFrames.lua:380 (ResolveStatusbarTexture) for the LSM resolve.
-        -- absorbBarColor is a real, always-rendered field too (confirmed at
+        -- absorbBarColor is a real, always-rendered field too (see
         -- PartyFrames.lua:6001-6003, frame.absorb:SetStatusBarColor with no
         -- gameplay meaning attached -- it is a static shield-overlay tint,
         -- not a class/power/spec color), so it gets the same shared-value
@@ -50,7 +50,7 @@ KT.VisualThemes:RegisterModule("partyframes", {
         else
             texture = "Melli Reforged"
         end
-        -- Explicit user request: party frame portraits are ON in every theme.
+        -- Party frame portraits are ON in every theme.
         profile.party = type(profile.party) == "table" and profile.party or {}
         profile.party.showPortrait = true
         for _, mode in ipairs(MODES) do

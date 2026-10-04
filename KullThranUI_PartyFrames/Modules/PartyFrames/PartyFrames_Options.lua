@@ -143,8 +143,9 @@ local INDICATOR_ANCHOR_ORDER = { "AUTO", "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "
 
 local ResolveFontPath
 
-local function ApplyPreviewCharacterLevelTextStyle(text, db)
+local function ApplyPreviewCharacterLevelTextStyle(text, db, anchorFrame)
     if not (text and text.SetFont) then return end
+    anchorFrame = anchorFrame or text:GetParent()
     db = db or {}
     local outline = db.levelFontOutline
     if outline == "NONE" then outline = "" end
@@ -156,9 +157,9 @@ local function ApplyPreviewCharacterLevelTextStyle(text, db)
     text:ClearAllPoints()
     local anchor = db.levelAnchor
     if anchor and anchor ~= "AUTO" then
-        text:SetPoint(anchor, text:GetParent(), anchor, tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+        text:SetPoint(anchor, anchorFrame, anchor, tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     else
-        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT", tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
+        text:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     end
 end
 
@@ -752,6 +753,27 @@ local function ApplyPreviewDispelGradient(texture, orientation, r, g, b, startAl
     texture:SetVertexColor(r, g, b, math.max(startAlpha or 0, endAlpha or 0))
 end
 
+local function LayoutPreviewDispelFrame(unit, portraitShow, portraitStyle, portraitSide, overlap, portraitX)
+    local host = unit.dispelBorderFrame
+    host:ClearAllPoints()
+    if portraitShow then
+        local left, right = 0, 0
+        if portraitStyle == "circular" then
+            if portraitSide == "right" then right = math.max(0, overlap - portraitX)
+            else left = math.max(0, overlap + portraitX) end
+        end
+        -- Only shade the exposed bar; the circular portrait overlaps its edge.
+        host:SetPoint("TOPLEFT", unit.health, "TOPLEFT", left, 0)
+        host:SetPoint("BOTTOMRIGHT", unit.health, "BOTTOMRIGHT", -right, 0)
+    else
+        host:SetAllPoints(unit)
+    end
+    host:SetFrameStrata(unit.health:GetFrameStrata())
+    host:SetFrameLevel(unit.health:GetFrameLevel() + 3)
+    unit.overlayFrame:SetFrameLevel(math.max(unit.overlayFrame:GetFrameLevel(), host:GetFrameLevel() + 1))
+    unit.statusIconFrame:SetFrameLevel(unit.overlayFrame:GetFrameLevel() + 1)
+end
+
 local function SetPreviewDispelBorder(unit, color, alpha, thickness, gradientAlpha, gradientSize)
     local border = unit and unit.dispelBorder
     if not border then return end
@@ -777,8 +799,8 @@ local function SetPreviewDispelBorder(unit, color, alpha, thickness, gradientAlp
         edge:SetColorTexture(color.r, color.g, color.b, alpha)
         edge:Show()
     end
-    local width = unit:GetWidth() or 1
-    local height = unit:GetHeight() or 1
+    local width = unit.dispelBorderFrame:GetWidth() or 1
+    local height = unit.dispelBorderFrame:GetHeight() or 1
     local edgeH = math.max(thickness + 3, math.floor(height * gradientSize))
     local edgeW = math.max(thickness + 3, math.floor(width * gradientSize))
     local fadeAlpha = math.min(tonumber(gradientAlpha) or 1.0, alpha * 0.9)
@@ -925,7 +947,7 @@ local function EnsureUnit(preview, index)
     unit.value:SetJustifyH("RIGHT")
     unit.value:SetWordWrap(false)
 
-    unit.levelText = unit:CreateFontString(nil, "OVERLAY")
+    unit.levelText = unit.overlayFrame:CreateFontString(nil, "OVERLAY")
     unit.levelText:SetJustifyH("LEFT")
     unit.levelText:SetWordWrap(false)
     unit.levelText:SetWidth(34)
@@ -1181,7 +1203,7 @@ local function RefreshLivePreview(preview)
             unit.power:SetHeight(powerHeight)
             unit.health:SetPoint("BOTTOMRIGHT", unit.power, "TOPRIGHT", 0, 1)
         else
-            unit.health:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -padding, padding)
+            unit.health:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -padding - portraitRightInset, padding)
             unit.power:SetHeight(powerHeight)
         end
         unit.portraitFrame:ClearAllPoints()
@@ -1203,9 +1225,12 @@ local function RefreshLivePreview(preview)
         else
             unit.portraitFrame:SetPoint("RIGHT", unit.health, "LEFT", -4 + portraitX, portraitY)
         end
-        local previewStrata = unit.health:GetFrameStrata()
-        unit.portraitFrame:SetFrameStrata(previewStrata)
-        unit.portraitFrame:SetFrameLevel(unit.health:GetFrameLevel() + 3)
+        unit._portraitSide = portraitSide
+        unit._portraitCircular = portraitShow and portraitStyle == "circular"
+        if ns.PF_Portrait and ns.PF_Portrait.SyncLevels then
+            ns.PF_Portrait.SyncLevels(unit)
+        end
+        LayoutPreviewDispelFrame(unit, portraitShow, portraitStyle, portraitSide, portraitOverlap, portraitX)
         local classCoords = PREVIEW_CLASS_COORDS[sample.class or "WARRIOR"]
         if portraitShow and classCoords then
             unit.portrait:SetTexture(PREVIEW_CLASS_TEXTURE)
@@ -1228,6 +1253,61 @@ local function RefreshLivePreview(preview)
             unit.portrait:Hide()
             unit.portraitBorder:Hide()
             unit.portraitFrame:Hide()
+        end
+        if portraitShow and cfg.portraitMode == "3d" then
+            if not unit.model3D then
+                unit.model3D = CreateFrame("PlayerModel", nil, unit.portraitFrame)
+                unit.ringFrame = CreateFrame("Frame", nil, unit.portraitFrame)
+                unit.ringFrame:SetAllPoints(unit.portraitFrame)
+                unit.ringTexture = unit.ringFrame:CreateTexture(nil, "OVERLAY")
+                unit.ringTexture:SetAllPoints(unit.ringFrame)
+            end
+            local level = unit.portraitFrame:GetFrameLevel()
+            unit.model3D:SetFrameLevel(level + 1)
+            unit.ringFrame:SetFrameLevel(level + 3)
+            local circular = portraitStyle == "circular"
+            local inset = circular and math.floor(portraitSize * 0.18 + 0.5) or 0
+            unit.model3D:ClearAllPoints()
+            unit.model3D:SetPoint("TOPLEFT", unit.portraitFrame, "TOPLEFT", inset, -inset)
+            unit.model3D:SetPoint("BOTTOMRIGHT", unit.portraitFrame, "BOTTOMRIGHT", -inset, inset)
+            if not unit.model3D._previewUnit then
+                unit.model3D:SetUnit("player")
+                unit.model3D._previewUnit = true
+                unit.model3D:SetScript("OnModelLoaded", function(self)
+                    if self._apply then self._apply() end
+                end)
+                unit.model3D:RegisterEvent("UNIT_MODEL_CHANGED")
+                unit.model3D:RegisterEvent("UNIT_PORTRAIT_UPDATE")
+                unit.model3D:SetScript("OnEvent", function(self, _, changedUnit)
+                    if self:IsShown() and changedUnit and UnitIsUnit("player", changedUnit) then
+                        self:SetUnit("player")
+                        if self._apply then self._apply() end
+                    end
+                end)
+            end
+            local function applyCamera()
+                local zoom = math.max(0.25, (tonumber(cfg.portrait3DZoom) or 125) / 100)
+                local rot, formZoom, formShift = KT.Portrait3DYaw("player", cfg.portraitSide == "right" and "right" or "left", nil,
+                    cfg.portraitFacing == "flipped", cfg.portrait3DRotation)
+                KT.ApplyPortrait3DCamera(unit.model3D, rot, zoom * formZoom,
+                    (tonumber(cfg.portrait3DX) or 0) / 100 + formShift,
+                    (tonumber(cfg.portrait3DY) or 0) / 100)
+            end
+            unit.model3D._apply = applyCamera
+            applyCamera()
+            unit.model3D:Show()
+            unit.portrait:SetColorTexture(0.1, 0.1, 0.1, 1)
+            unit.portraitBorder:Hide()
+            if circular and cfg.portraitBorder ~= false then
+                unit.ringTexture:SetTexture(PREVIEW_PORTRAIT_MEDIA .. "circle_border.tga")
+                unit.ringTexture:SetVertexColor(unit.portraitBorder:GetVertexColor())
+                unit.ringFrame:Show()
+            else
+                unit.ringFrame:Hide()
+            end
+        elseif unit.model3D then
+            unit.model3D:Hide()
+            unit.ringFrame:Hide()
         end
         unit.health:SetStatusBarTexture(ResolveStatusbarTexture(cfg.healthTexture, PREVIEW_FILL))
         unit.health:SetValue((sample.health or 0.75) * 100)
@@ -1371,7 +1451,7 @@ local function RefreshLivePreview(preview)
             levelColor = GetRootValue("levelColor", { r = 1, g = 0.82, b = 0.20, a = 1 }),
             levelX = GetRootValue("levelX", 3),
             levelY = GetRootValue("levelY", 1),
-        })
+        }, unit)
         unit.levelText:SetText(sample.isPlayer and "80" or "70")
         unit.levelText:SetShown(rootShowLevel and not sample.status)
         unit.pvpIcon:ClearAllPoints()
@@ -1383,6 +1463,16 @@ local function RefreshLivePreview(preview)
         else
             unit.pvpIcon:SetPoint("RIGHT", unit, "LEFT",
                 tonumber(GetRootValue("pvpX", -2)) or -2, tonumber(GetRootValue("pvpY", 0)) or 0)
+        end
+        if ns.PF_Portrait and ns.PF_Portrait.PlaceBadges then
+            ns.PF_Portrait.PlaceBadges(unit, {
+                side = portraitSide,
+                levelX = GetRootValue("levelX", 3),
+                levelY = GetRootValue("levelY", 1),
+                pvpAnchor = pvpAnchor,
+                pvpX = GetRootValue("pvpX", -2),
+                pvpY = GetRootValue("pvpY", 0),
+            })
         end
         if rootShowPvP and not sample.status then
             unit.pvpIcon.texture:SetTexture(PREVIEW_PVP_ICON_PATH .. (sample.isPlayer and "Alliance.png" or "Horde.png"))
@@ -1403,7 +1493,7 @@ local function RefreshLivePreview(preview)
         local hx = tonumber(cfg.healthOffsetX) or 0
         local hy = tonumber(cfg.healthOffsetY) or 0
 
-        local innerWidth = math.max(1, w - (padding * 2))
+        local innerWidth = math.max(1, w - (padding * 2) - portraitLeftInset - portraitRightInset)
         local roleIconAtRight = portraitShow
         local roleIconRightReserve = roleIconAtRight and 28 or 0
         local textInnerWidth = math.max(1, innerWidth - roleIconRightReserve)
@@ -2420,10 +2510,7 @@ local PORTRAIT_MODES = {
     ["3d"] = "3D Portrait",
     ["class"] = "Class Theme",
 }
-local CIRCULAR_PORTRAIT_MODES = {
-    ["2d"] = "2D Portrait",
-    ["class"] = "Class Theme",
-}
+local PORTRAIT_MODE_ORDER = { "2d", "3d", "class" }
 local PORTRAIT_FACING = {
     normal = "Normal",
     flipped = "Flipped",
@@ -2466,17 +2553,30 @@ local function AddFrameLayoutControls(container, W, mode)
             RefreshPage()
         end
     ); by = by + h
-    _, h = W:Dropdown(container, "Portrait Mode", -by,
-        function()
-            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
-            return style == "circular" and CIRCULAR_PORTRAIT_MODES or PORTRAIT_MODES
-        end,
-        function()
-            local style = GetValue(configMode, "portraitStyle", configMode == "party" and "circular" or "none")
-            local mode = GetValue(configMode, "portraitMode", "2d")
-            return style == "circular" and mode == "3d" and "2d" or mode
-        end,
-        function(v) ApplyValue(configMode, "portraitMode", v) end
+    _, h = W:Dropdown(container, "Portrait Mode", -by, PORTRAIT_MODES,
+        function() return GetValue(configMode, "portraitMode", "2d") end,
+        function(v) ApplyValue(configMode, "portraitMode", v) end,
+        PORTRAIT_MODE_ORDER
+    ); by = by + h
+    _, h = W:Slider(container, "3D Portrait Zoom", -by,
+        function() return GetValue(configMode, "portrait3DZoom", 125) end,
+        function(v) ApplyValue(configMode, "portrait3DZoom", v) end,
+        50, 250, 1, "%d%%"
+    ); by = by + h
+    _, h = W:Slider(container, "3D Portrait Rotation", -by,
+        function() return GetValue(configMode, "portrait3DRotation", 0) end,
+        function(v) ApplyValue(configMode, "portrait3DRotation", v) end,
+        -90, 90, 1, "%d"
+    ); by = by + h
+    _, h = W:Slider(container, "3D Portrait X Offset", -by,
+        function() return GetValue(configMode, "portrait3DX", 0) end,
+        function(v) ApplyValue(configMode, "portrait3DX", v) end,
+        -50, 50, 1, "%d"
+    ); by = by + h
+    _, h = W:Slider(container, "3D Portrait Y Offset", -by,
+        function() return GetValue(configMode, "portrait3DY", 0) end,
+        function(v) ApplyValue(configMode, "portrait3DY", v) end,
+        -50, 50, 1, "%d"
     ); by = by + h
     _, h = W:Dropdown(container, "Portrait Side", -by, PORTRAIT_SIDES,
         function() return GetValue(configMode, "portraitSide", "left") end,

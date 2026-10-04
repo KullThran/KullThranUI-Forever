@@ -3,7 +3,7 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.1.0
+## Version: 0.1.1
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
@@ -71,6 +71,7 @@ Modules\VisualThemes\Adapters\Minimap.lua
 Modules\VisualThemes\Adapters\Skin.lua
 Options.lua
 Core.lua                        
+Modules\PortraitCamera.lua
 Locales\Core.lua
 Locales\Languages\enUS.lua
 Locales\Languages\esES.lua

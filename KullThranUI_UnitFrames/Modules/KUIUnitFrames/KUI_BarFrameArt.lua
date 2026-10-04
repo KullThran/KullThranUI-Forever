@@ -48,13 +48,16 @@ function BA.Update(frame, unit)
         local w = frame:GetWidth() or 0
         if w <= 0 then error("nowidth") end
         local k = w / 232
+        local shift = tonumber(frame._ktRingHugShift) or 0
+        local extension = (unit == "player") and math.max(0, -shift) or math.max(0, shift)
+        local clipEdge = PORTRAIT_EDGE * k - extension
         clip:ClearAllPoints()
         if unit == "player" then
-            clip:SetPoint("TOPLEFT", frame, "TOPLEFT", PORTRAIT_EDGE * k, 0)
+            clip:SetPoint("TOPLEFT", frame, "TOPLEFT", clipEdge, 0)
             clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
         else
             clip:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-            clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PORTRAIT_EDGE * k, 0)
+            clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -clipEdge, 0)
         end
         local dst = clip.tex
         -- ApplyForeverUnitFrameArt paints `art` either with SetAtlas or, when the atlas
@@ -71,6 +74,33 @@ function BA.Update(frame, unit)
             dst:SetTexCoord(src:GetTexCoord())
         end
         dst:ClearAllPoints()
+        if extension > 0 then
+            -- Crop away the portrait before expanding the bar fragment. The
+            -- dragon and portrait keep their aspect ratio and the bar's outer
+            -- edge stays fixed; only the bar track bridges the seam.
+            local sw, sh = src:GetSize()
+            if not sw or sw <= 0 or not sh or sh <= 0 then error("nosize") end
+            local crop = (PORTRAIT_EDGE * k - (w - sw) / 2) / sw
+            crop = math.max(0, math.min(0.99, crop))
+            local first, last = (unit == "player") and crop or 0,
+                (unit == "player") and 1 or (1 - crop)
+            local ulx, uly, llx, lly, urx, ury, lrx, lry = src:GetTexCoord()
+            if urx == nil then
+                local left, right, top, bottom = ulx, uly, llx, lly
+                ulx, uly, llx, lly, urx, ury, lrx, lry =
+                    left, top, left, bottom, right, top, right, bottom
+            end
+            dst:SetTexCoord(
+                ulx + (urx - ulx) * first, uly + (ury - uly) * first,
+                llx + (lrx - llx) * first, lly + (lry - lly) * first,
+                ulx + (urx - ulx) * last, uly + (ury - uly) * last,
+                llx + (lrx - llx) * last, lly + (lry - lly) * last)
+            local edge = (unit == "player") and "RIGHT" or "LEFT"
+            dst:SetPoint(edge, src, edge, 0, 0)
+            dst:SetSize(sw * (last - first) + extension, sh)
+            dst:SetVertexColor(1, 1, 1, 1)
+            return
+        end
         local n = src:GetNumPoints()
         if n == 0 then error("nopoints") end
         for i = 1, n do

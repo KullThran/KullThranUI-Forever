@@ -51,7 +51,12 @@ local function IsSameUnit(frameUnit, eventUnit)
 end
 
 local function Update(self, event, unit)
+	-- These events have no unit argument. Refresh the frame's current unit.
+	if(event == 'PORTRAITS_UPDATED' or event == 'UPDATE_SHAPESHIFT_FORM') then unit = self.unit end
 	if(not IsSameUnit(self.unit, unit)) then return end
+	-- An event for Player can also match Target when targeting yourself.
+	-- Keep the frame token so PostUpdate selects Target's camera/profile.
+	unit = self.unit
 
 	local element = self.Portrait
 
@@ -70,8 +75,14 @@ local function Update(self, event, unit)
 		guidChanged = element.guid ~= guid
 	end
 	local hasStateChanged = event ~= 'OnUpdate' or guidChanged or element.state ~= isAvailable
+	if not hasStateChanged and element:IsObjectType('PlayerModel') and element.GetModelFileID then
+		local modelID = element:GetModelFileID()
+		if not (issecretvalue and issecretvalue(modelID)) and modelID == nil then hasStateChanged = true end
+	end
 	if(hasStateChanged) then
 		if(element:IsObjectType('PlayerModel')) then
+			local debug = _G.KullThranUI and _G.KullThranUI.Portrait3DDebug
+			if debug then debug.Record(element, event, unit, 'available=' .. debug.Value(isAvailable)) end
 			if(not isAvailable) then
 				element:SetCamDistanceScale(0.25)
 				element:SetPortraitZoom(0)
@@ -79,11 +90,11 @@ local function Update(self, event, unit)
 				element:ClearModel()
 				element:SetModel([[Interface\Buttons\TalkToMeQuestionMark.m2]])
 			else
-				element:SetCamDistanceScale(1)
-				element:SetPortraitZoom(1)
-				element:SetPosition(0, 0, 0)
 				element:ClearModel()
 				element:SetUnit(unit)
+				element:SetPortraitZoom(1)
+				element:SetPosition(0, 0, 0)
+				element:SetCamDistanceScale(1)
 			end
 		else
 			local class, _
@@ -144,6 +155,7 @@ local function Enable(self, unit)
 		self:RegisterEvent('UNIT_MODEL_CHANGED', Path)
 		self:RegisterEvent('UNIT_PORTRAIT_UPDATE', Path)
 		self:RegisterEvent('PORTRAITS_UPDATED', Path, true)
+		self:RegisterEvent('UPDATE_SHAPESHIFT_FORM', Path, true)
 		self:RegisterEvent('UNIT_CONNECTION', Path)
 
 		-- The quest log uses PARTY_MEMBER_{ENABLE,DISABLE} to handle updating of
@@ -168,6 +180,7 @@ local function Disable(self)
 		self:UnregisterEvent('UNIT_MODEL_CHANGED', Path)
 		self:UnregisterEvent('UNIT_PORTRAIT_UPDATE', Path)
 		self:UnregisterEvent('PORTRAITS_UPDATED', Path)
+		self:UnregisterEvent('UPDATE_SHAPESHIFT_FORM', Path)
 		self:UnregisterEvent('PARTY_MEMBER_ENABLE', Path)
 		self:UnregisterEvent('PARTY_MEMBER_DISABLE', Path)
 		self:UnregisterEvent('UNIT_CONNECTION', Path)

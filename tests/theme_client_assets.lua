@@ -50,6 +50,7 @@ local function NewRegion(parent)
     function region:AddMaskTexture(mask) self.masks[mask] = true end
     function region:RemoveMaskTexture(mask) self.masks[mask] = nil end
     function region:SetJustifyH(value) self.justify = value end
+    function region:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
     function region:GetFont() return self.fontPath, self.fontSize, self.fontFlags end
     function region:SetFont(path, size, flags)
         self.fontPath, self.fontSize, self.fontFlags = path, size, flags
@@ -200,7 +201,7 @@ near(player.Buffs:GetWidth(), 124 * playerScale, "player buffs width (health wid
 near(player.Buffs:GetHeight(), 20 * playerScale, "player buffs height (health height)")
 near(player.Buffs.size, 20 * playerScale, "player buffs icon size")
 local _, playerLeftFontSize = player.LeftText:GetFont()
-near(playerLeftFontSize, 14 * playerScale, "player LeftText font uncapped (20px-tall bar fits it fine)")
+near(playerLeftFontSize, 10 * playerScale, "player stock-art name uses Blizzard's scaled small font")
 expect(player.Health.fill.masks[player.Health._ktForeverMask], true, "health fill mask")
 expect(player.Health.bg.masks[player.Health._ktForeverMask], true, "health background mask")
 expect(player.HealthPrediction.damageAbsorb.fill.masks[player.Health._ktForeverMask], true, "absorb mask")
@@ -285,8 +286,41 @@ near(target.Health.points[1][4], targetBaseHealthX, "target Rare/Elite health ou
 near(target.Power.points[1][4], targetBasePowerX, "target Rare/Elite power outer edge stays fixed")
 near(target.Health:GetWidth(), 124 * targetScale + 6, "target Rare/Elite health width grows")
 near(target.Power:GetWidth(), 124 * targetScale + 6, "target Rare/Elite power width grows")
-near(target.Power._ktForeverMask:GetWidth(), 132 * targetScale + 6,
-    "target Rare/Elite power mask grows with bar")
+expect(target.Power._ktForeverMask.shown, false,
+    "target Rare/Elite power drops the stock mask across the extension")
+expect(target.Power.fill.masks[target.Power._ktForeverMask], nil,
+    "target Rare/Elite power fill no longer uses the clipped stock mask")
+
+-- Retail uses each unit's real native mask, seated exactly on the portrait
+for _, unit in ipairs({ "player", "target" }) do
+    local native = MakeUnitFrame()
+    native._ktNativeClassificationKind = "elite"
+    native._ktCircularPortrait = true
+    native._ktHideForeverPortraitArt = true
+    expect(KT.VisualThemes:ApplyForeverUnitFrameArt(native, native.Portrait.backdrop, unit), true,
+        "native portrait apply")
+    local s = native:GetWidth() / 232
+    local textLeft = native.LeftText.points[1][4]
+    local textRight = textLeft + native.LeftText:GetWidth()
+    if unit == "player" then
+        local headRight = (54 + 36 * 60 / 58) * s
+        expect(textLeft > headRight, true, "player name clears the mirrored dragon head")
+        near(textRight, (88 + 96) * s, "player name retains the far edge of its tab")
+    else
+        local headLeft = (178 - 36 * 60 / 58) * s
+        expect(textRight < headLeft, true, "target name clears the dragon head")
+        near(textLeft, 48 * s, "target name retains the left edge of its tab")
+    end
+    expect(native._ktForeverPortraitArt.shown, false, "native dragon replaces stock ornament")
+    near(native.Portrait.backdrop._ktStockPortraitMaskExpand, 0, "native aperture has no mask expansion")
+    expect(native.Portrait.backdrop._shapeMask.atlas, "CircleMask", "native aperture is circular")
+    native._ktNativeClassificationKind = nil
+    native._ktCircularPortrait = false
+    native._ktHideForeverPortraitArt = false
+    expect(KT.VisualThemes:ApplyForeverUnitFrameArt(native, native.Portrait.backdrop, unit), true,
+        "leaving native portrait apply")
+    near(native.LeftText:GetWidth(), 96 * s, "leaving native portrait restores name width")
+end
 
 -- Retail uses each unit's real native mask, seated exactly on the portrait
 -- with no generic 5px expansion. Neither MaskTexture is ever mirrored.
@@ -366,7 +400,7 @@ near(classic.Health.points[1][4], 106 * classicScale, "classic health x")
 near(classic.Health.points[1][5], -41 * classicScale, "classic health y")
 near(classic.Buffs.points[1][4], 116 * classicScale, "classic player buffs align with the name tab")
 local _, classicLeftFontSize = classic.LeftText:GetFont()
-near(classicLeftFontSize, 12 * classicScale * 0.65, "classic LeftText font capped to its real 12px-tall bar")
+near(classicLeftFontSize, 10 * classicScale, "classic stock-art name uses Blizzard's scaled small font")
 expect(classic.LeftText:GetParent(), classic._ktClassicArtHost, "classic name reparented off Health's clipped hierarchy")
 
 local classicTarget = MakeUnitFrame()
@@ -403,4 +437,18 @@ expect(player.Health._ktForeverMask.shown, false, "clear health mask")
 expect(player.Health.fill.masks[player.Health._ktForeverMask], nil, "detach health mask")
 expect(player.Portrait.backdrop._ktStockPortraitAnchor, nil, "clear stock portrait anchor")
 
+mockRenderedTheme="forever"
+_G.WOW_PROJECT_MAINLINE=1; _G.WOW_PROJECT_ID=1
+local nativeRetailPlayer=MakeUnitFrame()
+expect(KT.VisualThemes:ApplyForeverUnitFrameArt(nativeRetailPlayer,nativeRetailPlayer.Portrait.backdrop,"player"),true,"Forever on Retail applies")
+assert(nativeRetailPlayer._ktStockArtSelection.file == [=[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\forever_unitframe.tga]=], "Forever asset path preserves literal separators")
+expect(nativeRetailPlayer._ktStockArtSelection.source,"packaged-forever","Retail client keeps Forever art")
+near(nativeRetailPlayer._ktForeverPortraitArt.texCoord[2],199/256,"Forever sprite width")
+near(nativeRetailPlayer._ktForeverPortraitArt.texCoord[4],317/512,"Forever sprite height")
+local nativeRetailTarget=MakeUnitFrame()
+KT.VisualThemes:ApplyForeverUnitFrameArt(nativeRetailTarget,nativeRetailTarget.Portrait.backdrop,"target")
+near(nativeRetailTarget._ktForeverPortraitArt.texCoord[1],199/256,"Forever Target mirrors packaged sprite")
+mockRenderedTheme="retail"
+KT.VisualThemes:ApplyForeverUnitFrameArt(nativeRetailPlayer,nativeRetailPlayer.Portrait.backdrop,"player")
+assert(nativeRetailPlayer._ktStockArtSelection.source~="packaged-forever","Retail style preserves its own art")
 print("theme_client_assets: ok")

@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Skins
 ## Notes: KullThranUI module: Skins
 ## Author: KullThran
-## Version: 0.1.0
+## Version: 0.1.1
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

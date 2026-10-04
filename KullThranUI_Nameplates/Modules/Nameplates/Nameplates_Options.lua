@@ -1616,8 +1616,9 @@ initFrame:SetScript("OnEvent", function(self)
             DBVal("font")
             local npOutline  = (KT and KT.GetNPFontOutline and KT.GetNPFontOutline()) or
             "OUTLINE"
-            local barH       = Snap(DBVal("healthBarHeight"))
-            local rawBarW    = BAR_W + DBVal("healthBarWidth")
+            -- Same size rules as the live plates (style defaults apply while the player keeps the default size)
+            local barH       = Snap((ns.GetHealthBarHeight and ns.GetHealthBarHeight()) or DBVal("healthBarHeight"))
+            local rawBarW    = (ns.GetHealthBarWidth and ns.GetHealthBarWidth()) or (BAR_W + DBVal("healthBarWidth"))
             local barW       = IsDragging() and rawBarW or Snap(rawBarW)
             local castH      = Snap(DBVal("castBarHeight") or defaults.castBarHeight)
 
@@ -1844,9 +1845,9 @@ initFrame:SetScript("OnEvent", function(self)
 
             -- Slot-based text positioning
             -- Read slot assignments
-            local slotTop    = DBVal("textSlotTop") or defaults.textSlotTop
+            local slotTop    = (ns.GetTextSlot and ns.GetTextSlot("textSlotTop")) or DBVal("textSlotTop") or defaults.textSlotTop
             local slotRight  = DBVal("textSlotRight") or defaults.textSlotRight
-            local slotLeft   = DBVal("textSlotLeft") or defaults.textSlotLeft
+            local slotLeft   = (ns.GetTextSlot and ns.GetTextSlot("textSlotLeft")) or DBVal("textSlotLeft") or defaults.textSlotLeft
             local slotCenter = DBVal("textSlotCenter") or defaults.textSlotCenter
 
             -- Hide all three text elements first
@@ -2656,6 +2657,11 @@ initFrame:SetScript("OnEvent", function(self)
                     if ov._resizeToText then ov._resizeToText() end
                 end
             end
+
+            -- The preview wears the active nameplate style (bars, border, level and quest icon)
+            if ns.ApplyThemePreview then
+                ns.ApplyThemePreview(pf, health, healthBG, cast, castBG, nameFS, levelFS, borderFrame, simpleBorderFrame)
+            end
         end
 
         -- Expose preview elements for click-navigation hit overlays
@@ -3070,7 +3076,7 @@ initFrame:SetScript("OnEvent", function(self)
             function() return DBVal("enable") ~= false end,
             function(v)
                 DB().enable = v and true or false
-                ReloadUI()
+                StaticPopup_Show("KULLTHRANUI_RELOAD")
             end); y = y - h
 
         -----------------------------------------------------------------------
@@ -3358,7 +3364,7 @@ initFrame:SetScript("OnEvent", function(self)
                     Highlight()
                     -- 3) some of this (sizes, textures, anchors) only fully applies after a reload
                     StaticPopupDialogs["KT_NP_STYLE_RELOAD"] = {
-                        text = "Nameplate style changed to " .. st.label .. ". Sizes and dimensions were reset to that style. Reload the interface to finish applying it?",
+                        text = string.format(LText("Nameplate style changed to %s. Sizes and dimensions were reset to that style. Reload the interface to finish applying it?"), tostring(st.label)),
                         button1 = YES or "Yes", button2 = NO or "No",
                         OnAccept = function() ReloadUI() end,
                         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,

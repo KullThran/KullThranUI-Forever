@@ -261,10 +261,10 @@ ns.PF_HealthPowerFlushDriver:SetScript("OnUpdate", function(self)
 end)
 
 -- ---------------------------------------------------------------------------
--- Roster-scoped UNIT_* dispatcher (Grid2 / DandersFrames Core/RosterEvents.lua
--- pattern). RegisterEvent("UNIT_AURA"/"UNIT_HEALTH"/...) is GLOBAL: it fires
+-- Roster-scoped UNIT_* dispatcher.
+-- RegisterEvent("UNIT_AURA"/"UNIT_HEALTH"/...) is GLOBAL: it fires
 -- for every unit token in the game (nameplates, mobs, pets, targets...), a
--- firehose in a 40-man raid. Danders keeps one hidden frame per roster unit
+-- firehose in a 40-man raid. Instead, keep one hidden frame per roster unit
 -- (player + party1-4 + raid1-40 + arena1-5), each with a single
 -- RegisterUnitEvent(event, unit), so events only arrive for units we display.
 -- Per-unit frames are born inside OnEvent dispatch on PartyFrames' own event
@@ -1324,7 +1324,7 @@ local function SafeHideManagedFrame(frame)
         if not ok or forbidden then return end
     end
 
-    -- A constant secure visibility driver cannot be undone by Blizzard, Danders
+    -- A constant secure visibility driver cannot be undone by Blizzard
     -- or range updates during arena preparation/combat. Register it only while
     -- unlocked; alpha remains the fallback for frames without state support.
     if RegisterStateDriver and not managedHideDrivers[frame] and not (InCombatLockdown and InCombatLockdown()) then
@@ -1458,8 +1458,9 @@ local function ApplyTextStyle(text, db, sizeKey, fallbackSize, maxSize)
     text:SetTextColor(1, 1, 1, 1)
 end
 
-local function ApplyCharacterLevelTextStyle(text, db)
+local function ApplyCharacterLevelTextStyle(text, db, anchorFrame)
     if not (text and text.SetFont) then return end
+    anchorFrame = anchorFrame or text:GetParent()
     db = db or {}
     local outline = db.levelFontOutline
     if outline == "NONE" then outline = "" end
@@ -1475,10 +1476,10 @@ local function ApplyCharacterLevelTextStyle(text, db)
     text:ClearAllPoints()
     local anchor = db.levelAnchor
     if anchor and anchor ~= "AUTO" then
-        text:SetPoint(anchor, text:GetParent(), anchor,
+        text:SetPoint(anchor, anchorFrame, anchor,
             tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     else
-        text:SetPoint("BOTTOMLEFT", text:GetParent(), "TOPLEFT",
+        text:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT",
             tonumber(db.levelX) or 3, tonumber(db.levelY) or 1)
     end
 end
@@ -1946,7 +1947,7 @@ function Mod:EnsureDB()
     for _, mode in ipairs(MODE_ORDER) do
         ApplyAuraDefaults(self.db[mode])
     end
-    -- Explicit user request: party portraits ON in every visual theme. One-shot on module load
+    -- Party portraits ON in every visual theme. One-shot on module load
     -- (does not depend on the theme engine re-running), the user can switch them off afterwards.
     if not self.db.partyPortraitsAllThemesMigrated then
         self.db.party = type(self.db.party) == "table" and self.db.party or {}
@@ -2318,7 +2319,7 @@ function Mod:OnEnable()
     -- UNIT_CONNECTION / UNIT_NAME_UPDATE / UNIT_IN_RANGE_UPDATE fire for EVERY
     -- unit token in the game (nameplates, mobs, pets, targets...), a firehose
     -- in a 40-man raid. They are registered per-roster-unit via
-    -- RegisterUnitEvent by RebuildRosterEvents (Grid2 / DandersFrames pattern),
+    -- RegisterUnitEvent by RebuildRosterEvents,
     -- so events only arrive for units this addon actually displays.
     self:RegisterModuleEvent("READY_CHECK", "RefreshAllIndicators")
     self:RegisterModuleEvent("READY_CHECK_CONFIRM", "RefreshAllIndicators")
@@ -2387,6 +2388,7 @@ end
 
 function Mod:UpdateFrameRange(frame, updateAurasOnChange)
     if not (frame and frame.unit) or frame.fakeUnit then return true end
+    if frame._portraitModelActive then ns.PF_Portrait.RefreshModel(frame) end
     if SafeUnitBoolean(UnitIsDeadOrGhost, frame.unit) or SafeUnitBoolean(UnitIsConnected, frame.unit) == false then
         return true
     end
@@ -3119,12 +3121,131 @@ ns.PF_Portrait.UpdateBorder = function(frame, db, fakeData)
     frame.portraitBorder:SetVertexColor(r, g, b, a)
 end
 
+-- 3D portraits use a PlayerModel. The model is only re-applied when something
+-- that changes it happens (another unit or character in the slot, a model or
+-- portrait event, the unit going offline or out of view). Routine repaints for
+-- flags, range or roster updates leave it alone so the idle animation keeps
+-- playing instead of restarting.
+ns.PF_Portrait.questionMarkModel = "Interface\\Buttons\\TalkToMeQuestionMark.m2"
+
+ns.PF_Portrait.Call = function(object, method, ...)
+    local fn = object and object[method]
+    if not fn then return false end
+    return pcall(fn, object, ...)
+end
+
+ns.PF_Portrait.SafeUnitFlag = function(fn, unit)
+    if not fn then return true end
+    local ok, value = pcall(fn, unit)
+    if not ok or IsSecretValue(value) then return true end
+    return value and true or false
+end
+
+ns.PF_Portrait.IsModelAvailable = function(unit)
+    if unit == "player" then return true end
+    return ns.PF_Portrait.SafeUnitFlag(_G.UnitIsConnected, unit)
+        and ns.PF_Portrait.SafeUnitFlag(_G.UnitIsVisible, unit)
+end
+
+ns.PF_Portrait.GetModelGUID = function(unit)
+    if not (unit and UnitGUID) then return nil end
+    local ok, guid = pcall(UnitGUID, unit)
+    if not ok or IsSecretValue(guid) or type(guid) ~= "string" then return nil end
+    return guid
+end
+
+-- Zoom, rotation and offsets come from the user's settings; the defaults leave
+-- the camera untouched. Positive rotation turns toward the right, mirrored when
+-- the portrait faces the other way.
+ns.PF_Portrait.GetModelLook = function(db, facing, unit)
+    db = db or {}
+    local rotation, formZoom, formShift, viewShift = KT.Portrait3DYaw(unit, db.portraitSide == "right" and "right" or "left", nil,
+        facing == "flipped", db.portrait3DRotation)
+    return {
+        zoom = math.max(0.25, (tonumber(db.portrait3DZoom) or 125) / 100) * formZoom,
+        rotation = rotation,
+        viewShift = viewShift,
+        x = (tonumber(db.portrait3DX) or 0) / 100 + formShift,
+        y = (tonumber(db.portrait3DY) or 0) / 100,
+    }
+end
+
+ns.PF_Portrait.ApplyCamera = function(model, look)
+    KT.ApplyPortrait3DCamera(model, look and look.rotation or 0,
+        look and look.zoom or 1, look and look.x or 0, look and look.y or 0, look and look.viewShift)
+end
+
+ns.PF_Portrait.ApplyModel = function(model, unit, force, look)
+    local available = ns.PF_Portrait.IsModelAvailable(unit)
+    local guid = ns.PF_Portrait.GetModelGUID(unit)
+    local guidChanged = guid ~= nil and model._kuiGUID ~= nil and guid ~= model._kuiGUID
+    local lookKey = look and (look.zoom .. ":" .. look.rotation .. ":" .. look.x .. ":" .. look.y) or ""
+    if not force and not guidChanged and model._kuiUnit == unit and model._kuiAvailable == available
+        and model._kuiLook == lookKey then
+        return true
+    end
+
+    local call = ns.PF_Portrait.Call
+    if available then
+        call(model, "SetCamDistanceScale", look and (1 / look.zoom) or 1)
+        call(model, "SetPortraitZoom", 1)
+        call(model, "SetPosition", 0, look and look.x or 0, look and look.y or 0)
+        call(model, "ClearModel")
+        if not call(model, "SetUnit", unit) then
+            model._kuiUnit = nil
+            return false
+        end
+        model._kuiCamLook = look or false
+        ns.PF_Portrait.ApplyCamera(model, look)
+    else
+        model._kuiCamLook = nil
+        call(model, "SetCamDistanceScale", 0.25)
+        call(model, "SetPortraitZoom", 0)
+        call(model, "SetPosition", 0, 0, 0.25)
+        call(model, "ClearModel")
+        call(model, "SetModel", ns.PF_Portrait.questionMarkModel)
+    end
+    model._kuiUnit = unit
+    model._kuiGUID = guid
+    model._kuiAvailable = available
+    model._kuiLook = lookKey
+    return true
+end
+
+-- Models cannot be masked, so a circular portrait shrinks the model until its
+-- corners end under the ring, which is drawn above it. Other styles fill the
+-- whole portrait slot.
+ns.PF_Portrait.AnchorModel = function(button, metrics)
+    local model = button.portraitModel
+    if not model then return end
+    local inset = 0
+    if metrics.style == "circular" then
+        inset = math.floor(metrics.size * 0.18 + 0.5)
+    end
+    model:ClearAllPoints()
+    ns.PF_Portrait.Point(model, "TOPLEFT", button.portraitFrame, "TOPLEFT", inset, -inset)
+    ns.PF_Portrait.Point(model, "BOTTOMRIGHT", button.portraitFrame, "BOTTOMRIGHT", -inset, inset)
+end
+
+-- Cheap re-check used by range updates: a member walking into view swaps the
+-- placeholder for the real model without waiting for another repaint.
+ns.PF_Portrait.RefreshModel = function(frame)
+    local model = frame and frame.portraitModel
+    if not (model and model:IsShown() and frame.unit and not frame.fakeUnit) then return end
+    local db = Mod:GetModeDB(frame.mode or "party")
+    ns.PF_Portrait.ApplyModel(model, frame.unit, false, ns.PF_Portrait.GetModelLook(db, db and db.portraitFacing, frame.unit))
+end
+
 ns.PF_Portrait.EnsureModel = function(button)
     if button.portraitModel then return button.portraitModel end
     local ok, model = pcall(CreateFrame, "PlayerModel", nil, button.portraitFrame)
     if not ok or not model then return nil end
     model:SetAllPoints(button.portraitFrame)
-    if model.SetCamera then pcall(model.SetCamera, model, 0) end
+    model:SetFrameLevel(button.portraitFrame:GetFrameLevel() + 1)
+    ns.PF_Portrait.Call(model, "SetCamera", 0)
+    model:SetScript("OnModelLoaded", function(self)
+        if self._kuiCamLook ~= nil then ns.PF_Portrait.ApplyCamera(self, self._kuiCamLook or nil) end
+    end)
     model:Hide()
     button.portraitModel = model
     return model
@@ -3171,7 +3292,7 @@ ns.PF_Portrait.SetMask = function(button, style)
         end
     end
 end
-function Mod:UpdatePartyPortrait(frame, db, fakeData)
+function Mod:UpdatePartyPortrait(frame, db, fakeData, forceModel)
     local portraitFrame = frame and frame.portraitFrame
     if not portraitFrame then return end
     local metrics = ns.PF_Portrait.GetMetrics(db, frame._layoutHeight)
@@ -3179,17 +3300,14 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData)
     if not metrics.show or not unit and not fakeData then
         portraitFrame:Hide()
         if frame.portraitModel then frame.portraitModel:Hide() end
+        frame._portraitModelActive = nil
         return
     end
 
     local mode = db.portraitMode or "2d"
-    if metrics.style == "circular" and mode == "3d" then
-        mode = "2d"
-    end
     local classToken = ns.PF_Portrait.GetClassToken(unit, fakeData)
     local portrait = frame.portrait
     local classTexture = frame.portraitClass
-    local model = frame.portraitModel
     portraitFrame:Show()
     ns.PF_Portrait.SetMask(frame, metrics.style)
     portrait:SetTexCoord(metrics.facing == "flipped" and 1 or 0, metrics.facing == "flipped" and 0 or 1, 0, 1)
@@ -3198,32 +3316,33 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData)
     frame.portraitBorder:SetShown(db.portraitBorder ~= false)
     ns.PF_Portrait.UpdateBorder(frame, db, fakeData)
 
-    portrait:Hide()
-    classTexture:Hide()
-    if model then model:Hide() end
-    if mode == "class" and ns.PF_Portrait.ApplyClassTexture(classTexture, classToken) then
-        classTexture:Show()
-    elseif mode == "3d" and unit and not fakeData then
-        model = ns.PF_Portrait.EnsureModel(frame)
-        if model and model.SetUnit then
-            local ok = pcall(model.SetUnit, model, unit)
-            if ok then
-                model:Show()
-            else
-                model:Hide()
-                if _G.SetPortraitTexture then pcall(_G.SetPortraitTexture, portrait, unit) end
-                portrait:Show()
-            end
-        elseif _G.SetPortraitTexture then
-            pcall(_G.SetPortraitTexture, portrait, unit)
-            portrait:Show()
+    local show2D, showClass, showModel = false, false, false
+    if mode == "class" then
+        showClass = ns.PF_Portrait.ApplyClassTexture(classTexture, classToken)
+    elseif mode == "3d" then
+        -- Test frames have no real unit, so they preview the player's own model.
+        local modelUnit = fakeData and "player" or unit
+        local model = ns.PF_Portrait.EnsureModel(frame)
+        if model then
+            ns.PF_Portrait.AnchorModel(frame, metrics)
+            local wasShown = model:IsShown()
+            model:Show()
+            showModel = ns.PF_Portrait.ApplyModel(model, modelUnit, forceModel or not wasShown, ns.PF_Portrait.GetModelLook(db, metrics.facing, modelUnit))
         end
-    elseif fakeData and ns.PF_Portrait.ApplyClassTexture(classTexture, classToken) then
-        classTexture:Show()
-    elseif _G.SetPortraitTexture and unit then
-        pcall(_G.SetPortraitTexture, portrait, unit)
-        portrait:Show()
-    else
+    end
+    if not (showClass or showModel) then
+        if fakeData then
+            showClass = ns.PF_Portrait.ApplyClassTexture(classTexture, classToken)
+        elseif unit and _G.SetPortraitTexture then
+            show2D = pcall(_G.SetPortraitTexture, portrait, unit)
+        end
+    end
+
+    portrait:SetShown(show2D)
+    classTexture:SetShown(showClass)
+    if frame.portraitModel then frame.portraitModel:SetShown(showModel) end
+    frame._portraitModelActive = showModel or nil
+    if not (show2D or showClass or showModel) then
         portraitFrame:Hide()
     end
 
@@ -3238,6 +3357,88 @@ function Mod:UpdatePartyPortrait(frame, db, fakeData)
         classTexture:ClearAllPoints()
         ns.PF_Portrait.Point(classTexture, "TOPLEFT", portraitFrame, "TOPLEFT", classInset, -classInset)
         ns.PF_Portrait.Point(classTexture, "BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", -classInset, classInset)
+    end
+end
+
+ns.PF_Portrait.SyncLevels = function(frame)
+    local health = frame and frame.health
+    local portrait = frame and frame.portraitFrame
+    if not (health and portrait and frame.GetFrameLevel) then return end
+    -- Same strata as Health; frame levels are re-derived on every refresh
+    -- because raising the parent can collapse child levels onto one value.
+    -- The KUI style keeps the portrait under the health bar, like the Unit
+    -- Frames; the other styles draw it on top.
+    local strata = health:GetFrameStrata()
+    portrait:SetFrameStrata(strata)
+    local top
+    if ns.PF_Portrait.IsBelowHealth() then
+        local root = (frame:GetFrameLevel() or 0) + 1
+        portrait:SetFrameLevel(root)
+        if frame.portraitModel then frame.portraitModel:SetFrameLevel(root + 1) end
+        if frame.portraitBorderFrame then frame.portraitBorderFrame:SetFrameLevel(root + 2) end
+        local healthLevel = math.max(health:GetFrameLevel() or 0, root + 3)
+        health:SetFrameLevel(healthLevel)
+        if frame.absorb then frame.absorb:SetFrameLevel(healthLevel + 2) end
+        top = healthLevel + 2
+    else
+        local base = math.max(health:GetFrameLevel() or 0, (frame:GetFrameLevel() or 0) + 1)
+        if frame.absorb and frame.absorb.GetFrameLevel then
+            base = math.max(base, frame.absorb:GetFrameLevel() or 0)
+        end
+        portrait:SetFrameLevel(base + 4)
+        if frame.portraitModel then frame.portraitModel:SetFrameLevel(base + 5) end
+        if frame.portraitBorderFrame then frame.portraitBorderFrame:SetFrameLevel(base + 7) end
+        top = base + 7
+    end
+    if frame.overlayFrame then
+        frame.overlayFrame:SetFrameStrata(strata)
+        frame.overlayFrame:SetFrameLevel(top + 1)
+    end
+    if frame.auraFrame and frame.auraFrame.GetFrameLevel then
+        frame.auraFrame:SetFrameLevel(math.max(frame.auraFrame:GetFrameLevel() or 0, top + 3))
+    end
+    -- A circular portrait overlaps the frame border on its own side: leave that
+    -- edge out so the border does not cut across the portrait.
+    local borderFrame = frame.borderKT
+    if borderFrame and borderFrame._edges then
+        local edge = frame._portraitCircular and (frame._portraitSide == "right" and 4 or 3) or nil
+        for i = 3, 4 do
+            if borderFrame._edges[i] then borderFrame._edges[i]:SetShown(i ~= edge) end
+        end
+    end
+end
+
+ns.PF_Portrait.IsBelowHealth = function()
+    local vt = KT and KT.VisualThemes
+    if not (vt and vt.GetRenderedTheme) then return true end
+    local ok, theme = pcall(vt.GetRenderedTheme, vt)
+    return not ok or theme == nil or theme == "kui"
+end
+
+-- With a portrait shown, the level sits on the portrait's lower edge and the
+-- PvP badge moves outside the portrait instead of covering it.
+ns.PF_Portrait.PlaceBadges = function(frame, opts)
+    local portrait = frame and frame.portraitFrame
+    if not portrait then return end
+    opts = opts or {}
+    local shown = frame._portraitShown
+    if shown == nil then shown = portrait:IsShown() end
+    local level = frame.levelText
+    local levelAuto = opts.levelAnchor == nil or opts.levelAnchor == "AUTO"
+    if level then
+        level:SetJustifyH(shown and levelAuto and "CENTER" or "LEFT")
+    end
+    if not shown then return end
+    if level and levelAuto then
+        level:ClearAllPoints()
+        level:SetPoint("BOTTOM", portrait, "BOTTOM",
+            (tonumber(opts.levelX) or 3) - 3, (tonumber(opts.levelY) or 1) - 1)
+    end
+    local pvp = frame.pvpIcon
+    local side = opts.side or frame._portraitSide
+    if pvp and side ~= "right" and (opts.pvpAnchor == nil or opts.pvpAnchor == "AUTO") then
+        pvp:ClearAllPoints()
+        pvp:SetPoint("RIGHT", portrait, "LEFT", tonumber(opts.pvpX) or -2, tonumber(opts.pvpY) or 0)
     end
 end
 
@@ -3271,15 +3472,9 @@ ns.PF_Portrait.ApplyLayout = function(frame, db, width, height, padding)
     else
         ns.PF_Portrait.Point(frame.portraitFrame, "RIGHT", frame.health, "LEFT", -4 + metrics.x, metrics.y)
     end
-    -- Match Unit Frames' relationship: the portrait lives one full strata
-    -- above Health. Frame levels alone cannot cross a strata boundary.
-    local portraitStrata = ns.PF_Portrait.GetStrataAbove(frame.health)
-    frame.portraitFrame:SetFrameStrata(portraitStrata)
-    frame.portraitFrame:SetFrameLevel(frame.health:GetFrameLevel() + 3)
-    if frame.overlayFrame then
-        frame.overlayFrame:SetFrameStrata(portraitStrata)
-        frame.overlayFrame:SetFrameLevel(frame.portraitFrame:GetFrameLevel() + 2)
-    end
+    frame._portraitSide = metrics.side
+    frame._portraitCircular = metrics.show and metrics.style == "circular" or nil
+    ns.PF_Portrait.SyncLevels(frame)
 end
 
 function Mod:CreateUnitButton(parent, name)
@@ -3326,7 +3521,12 @@ function Mod:CreateUnitButton(parent, name)
     button.portraitClass:SetPoint("BOTTOMRIGHT", -2, 2)
     button.portraitClass:SetAlpha(0.8)
     button.portraitClass:Hide()
-    button.portraitBorder = button.portraitFrame:CreateTexture(nil, "OVERLAY")
+    -- The ring sits on its own frame above the portrait so it also covers 3D
+    -- models, which draw above every texture of the portrait frame.
+    button.portraitBorderFrame = CreateFrame("Frame", nil, button.portraitFrame)
+    button.portraitBorderFrame:SetAllPoints(button.portraitFrame)
+    button.portraitBorderFrame:SetFrameLevel(button.portraitFrame:GetFrameLevel() + 3)
+    button.portraitBorder = button.portraitBorderFrame:CreateTexture(nil, "OVERLAY")
     button.portraitBorder:SetTexture(ns.PF_Portrait.media .. "circle_border.tga")
     button.portraitBorder:SetAllPoints()
     button.portraitBorder:Hide()
@@ -3391,11 +3591,11 @@ function Mod:CreateUnitButton(parent, name)
     if button.nameText.SetNonSpaceWrap then button.nameText:SetNonSpaceWrap(false) end
     ApplyTextStyle(button.nameText, DEFAULTS.party, "nameFontSize", 15)
 
-    button.levelText = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    button.levelText = button.overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     button.levelText:SetJustifyH("LEFT")
     button.levelText:SetWordWrap(false)
     if button.levelText.SetNonSpaceWrap then button.levelText:SetNonSpaceWrap(false) end
-    ApplyCharacterLevelTextStyle(button.levelText, DEFAULTS)
+    ApplyCharacterLevelTextStyle(button.levelText, DEFAULTS, button)
     button.levelText:SetPoint("BOTTOMLEFT", button, "TOPLEFT", 3, 1)
     button.levelText:SetWidth(32)
     button.levelText:SetHeight(14)
@@ -5437,7 +5637,7 @@ function Mod:UpdateFrameIndicators(frame, data)
         else
             -- Tainted execution (typically in combat) makes leader queries return
             -- secret values. Keep the last readable state instead of blanking the
-            -- icon, mirroring the out-of-combat read strategy of DandersFrames.
+            -- icon, matching the last state read out of combat.
             leaderState = frame._lastLeaderState
             if not leaderState and not frame._leaderReadPending then
                 -- The update path can be tainted (PvP/in-combat identity reads).
@@ -6123,6 +6323,7 @@ function Mod:PositionFrame(frame, parent, index, count, mode, visibleCount, layo
             tonumber(self:GetRootConfigValue("pvpX", -2)) or -2,
             tonumber(self:GetRootConfigValue("pvpY", 0)) or 0)
     end
+    ns.PF_Portrait.PlaceBadges(frame, self.db)
 
     frame.absorb:ClearAllPoints()
     frame.absorb:SetPoint("TOPRIGHT", frame.health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
@@ -6160,6 +6361,8 @@ function Mod:SetFrameUnit(frame, unit)
     frame:SetAttribute("unit", frame.unit)
     if not frame.unit and frame.portraitFrame then frame.portraitFrame:Hide() end
     if frame.unit ~= oldUnit then
+        -- A new unit in the slot reloads the 3D model on the next paint.
+        if frame.portraitModel then frame.portraitModel._kuiUnit = nil end
         self._auraUnitFrames = self._auraUnitFrames or {}
         local list = self._auraUnitFrames[oldUnit]
         if list then
@@ -6197,7 +6400,9 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
     local portraitDB = self:GetModeDB(frame.mode or "party")
     local portraitData = frame.fakeUnit and GetTestUnitData(frame.fakeUnit, frame.mode or "party") or nil
     self:UpdatePartyPortrait(frame, portraitDB, portraitData)
-    ApplyCharacterLevelTextStyle(frame.levelText, self.db)
+    ApplyCharacterLevelTextStyle(frame.levelText, self.db, frame)
+    ns.PF_Portrait.SyncLevels(frame)
+    ns.PF_Portrait.PlaceBadges(frame, self.db)
     local levelText
     if showPartyLevel and frame.mode == "party" then
         if frame.fakeUnit then
@@ -7201,6 +7406,16 @@ function Mod:OnUnitEvent(event, unit)
         if not self._healthPowerFlushQueued then
             self._healthPowerFlushQueued = true
             ns.PF_HealthPowerFlushDriver:Show()
+        end
+        return
+    end
+    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+        -- Only portraits care about these; reload the 3D model when it changed.
+        for i = 1, #frames do
+            local frame = frames[i]
+            if frame and frame:IsShown() and frame._portraitShown then
+                self:UpdatePartyPortrait(frame, self:GetModeDB(frame.mode or "party"), nil, true)
+            end
         end
         return
     end

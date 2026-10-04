@@ -105,7 +105,7 @@ local function ApplyTitleAccent(fs)
         end
     end
 
-    -- Explicit user request: quest/mission titles use the player's class
+    -- Quest/mission titles use the player's class
     -- color instead of the addon's own generic accent color.
     local r, g, b
     local _, classToken = UnitClass("player")

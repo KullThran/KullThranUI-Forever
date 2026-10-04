@@ -1299,22 +1299,19 @@ local function PerformFullKullThranUIReset()
             ns.Handlers.Layout(KT.db:GetCurrentProfile(), ns.ProfileData.Layouts[layout])
         end
     end
+    -- A reset hands the scale back to the game, like a fresh install.
+    KT.db.profile.uiScale = nil
     KT.db.profile.autoResolutionScale = true
     KT.db.profile.useBlizzardUIScale = false
     KT.db.profile.uiScaleInitialized = false
+    KT.db.profile.uiScaleUserSet = false
+    KT.db.profile.uiScaleOwnershipMigrated = true
     if KT.db and KT.db.profile then
         KT.db.profile.installer = KT.db.profile.installer or {}
         KT.db.profile.installer.showOnLogin = true
         KT.db.profile.installer.step = 1
         KT.db.profile.installer.dontShowAgain = nil
         KT.db.profile.installer.lastVersion = nil
-    end
-    local Installer = KT:GetModule("Installer", true)
-    if Installer and Installer.ApplyScaleOnly then
-        Installer:ApplyScaleOnly("AUTO", { silent = true })
-    elseif KT.ApplyUIScale then
-        KT.db.profile.uiScale = nil
-        KT:ApplyUIScale()
     end
     ReloadUI()
 end
@@ -1351,7 +1348,7 @@ function KT:SanitizeEditModeFramesDB(framesDB)
     return framesDB
 end
 
--- [Forever debug] capture log shared with KT_UnlockMode (/ktuwatchlog)
+-- Debug capture log shared with KT_UnlockMode
 KT.ktWatchLog = {}
 local function KT_PersistCount(value)
     if type(value) ~= "table" then return 0 end
@@ -2747,22 +2744,9 @@ function KT:InitializeCore()
             self:StampProfileMeta(self.db.profile)
         end
 
-        -- Forever testing uses the addon defaults, regardless of stale retail
-        -- scale values that may be present in the broken SavedVariables.
-        if self.db and self.db.profile then
-            self.db.profile.autoResolutionScale = true
-            self.db.profile.useBlizzardUIScale = false
-            local _, height = GetPhysicalScreenSize()
-            local defaultScale = (height and height >= 2160) and 0.35
-                or (height and height >= 1440) and 0.53
-                or 0.71
-            self.db.profile.uiScale = defaultScale
-        end
-
         -- The Forever client can deliver KullThranDB after module startup.
-        -- Reapply the effective profile scale immediately after the real DB is
-        -- connected; otherwise the provisional AceDB profile remains visible
-        -- until the Options panel calls its scale guard.
+        -- Reapply the profile scale once the real DB is connected. ApplyUIScale
+        -- does nothing unless the player picked a scale by hand.
         pcall(self.ApplyUIScale, self)
         C_Timer.After(0, function()
             if KT and KT.ApplyUIScale then
@@ -2798,7 +2782,7 @@ function KT:InitializeCore()
         -- Modules whose rendering depends on KT.db.profile (VisualThemes'
         -- theme, in particular) were relying on blind fixed-delay retries
         -- from PLAYER_ENTERING_WORLD instead, which raced this and lost:
-        -- confirmed live via /ktforevertab -- a fresh login showed
+        -- a fresh login showed
         -- renderedTheme=forever (whatever the placeholder/stale-in-progress
         -- profile had) and only corrected to the real saved "classic" after
         -- a manual /reload, which restarts everything with the data already
@@ -2847,7 +2831,7 @@ function KT:InitializeCore()
         end)
     end
     -- Root cause of the login-vs-reload theme mismatch, found via
-    -- /ktpersistdebug: the very first log line already showed
+    -- debug logging: the very first log line already showed
     -- "char=Unknown - Classic Beta PvP". AceDB-3.0.lua computes its
     -- module-level charKey as UnitName("player") .. " - " .. GetRealmName()
     -- at FILE LOAD time (top-level locals, lines ~254-255 of that library) --
@@ -2873,7 +2857,7 @@ function KT:InitializeCore()
         pinProfileKeys()
         rawset(self.db, "profile", nil)
         rawset(self.db, "global", nil)
-        -- Confirmed live: theme style corrected after this fix, but target's
+        -- Theme style corrected after this fix, but target's
         -- frame position and health text size did not -- because this pins
         -- the profile directly (bypassing AceDB's own :SetProfile(), which
         -- has the SAME stale-charKey bug at its self.sv.profileKeys[charKey]
@@ -3009,7 +2993,7 @@ function KT:InitializeCore()
         KT:_HandleCPUCommand(args)
     end)
 
-    -- /ktdebug full: estado de módulos, addons, APIs y errores recientes.
+    -- Informe completo: estado de módulos, addons, APIs y errores recientes.
     self:RegisterChatCommand("ktdebug", function(args)
         args = (args or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
         if args ~= "full" and args ~= "scan" then
@@ -3090,7 +3074,7 @@ function KT:InitializeCore()
     end)
 
     -- -----------------------------------------------------------------------
-    -- /ktperf [segundos]
+    -- Rendimiento [segundos]
     -- Lee ns._perf que el módulo CDM popula con debugprofilestart/stop.
     -- -----------------------------------------------------------------------
     self:RegisterChatCommand("ktperf", function(args)
@@ -3122,7 +3106,7 @@ function KT:InitializeCore()
     end)
 
     -- -----------------------------------------------------------------------
-    -- /ktcdmstats - Estado de cada barra CDM
+    -- Estado de cada barra CDM
     -- -----------------------------------------------------------------------
     self:RegisterChatCommand("ktcdmstats", function()
         KT:_PrintCDMStats()
@@ -3177,38 +3161,7 @@ function KT:InitializeCore()
     self:Print("Welcome to |cff" .. string.format("%02x%02x%02x", accentR * 255, accentG * 255, accentB * 255) .. "KullThranUI|r " .. version)
 end
 
--- ============================================================================
--- 2. APPLY UI SCALE
--- ============================================================================
-function KT:ApplyUIScale()
-    if self._suppressApplyUIScale then return end
-    if not (self.db and self.db.profile and _G.UIParent) then return end
-
-    local scale = tonumber(self.db.profile.uiScale)
-    local auto = (self.db.profile.autoResolutionScale ~= false)
-    if auto or not scale then
-        local _, height = GetPhysicalScreenSize()
-        if height and height >= 2160 then
-            scale = 0.35
-        elseif height and height >= 1440 then
-            scale = 0.53
-        else
-            scale = 0.71
-        end
-        self.db.profile.uiScale = scale
-    end
-
-    _G.UIParent:SetScale(scale)
-
-    if _G.GameMenuFrame then
-        C_Timer.After(0, function()
-            local escapeMenu = KT.GetModule and KT:GetModule("EscapeMenu", true)
-            if escapeMenu and escapeMenu.RequestRefresh then
-                pcall(escapeMenu.RequestRefresh, escapeMenu)
-            end
-        end)
-    end
-end
+-- KT:ApplyUIScale lives in Modules/Defaults/Defaults.lua.
 
 -- ============================================================================
 -- 3. WELCOME FRAME (Instalador)
@@ -3794,7 +3747,7 @@ end
 -- 5. CDM STATS
 -- ============================================================================
 -- ============================================================================
--- CPU DEBUG (/ktcpu)
+-- CPU DEBUG
 -- ============================================================================
 local function KT_CPUProfileEnabled()
     if not _G.GetCVar then

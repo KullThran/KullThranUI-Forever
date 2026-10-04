@@ -31,7 +31,7 @@ local kuiForeverProject = _G.WOW_PROJECT_FOREVER
     or _G.WOW_PROJECT_FOREVER_BETA
     or _G.WOW_PROJECT_WOW_FOREVER_BETA
 KT.FOREVER_INTERFACE = 16001
--- The real client reports 160001 (see KTForeverProbe), the TOC says 16001: accept
+-- The real client reports 160001, the TOC says 16001: accept
 -- both and the whole 16xxx / 16xxxx band. Retail is 12xxxx, so no clash.
 local kuiIfaceNum = tonumber(kuiInterface)
 KT.IS_FOREVER = kuiIfaceNum == KT.FOREVER_INTERFACE
@@ -217,7 +217,7 @@ local hooksecurefunc = _G.hooksecurefunc
 KT.VERSION = KT.VERSION
     or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
 		or "0.0.4"
--- When loaded directly from the source tree (without the BigWigs packager),
+-- When loaded directly from the source tree (without the release packager),
 -- GetAddOnMetadata returns the literal "@project-version@" token.  Strip it
 -- so the in-game UI never displays the raw packager placeholder.
 if KT.VERSION and KT.VERSION:find("@", 1, true) then

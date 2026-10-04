@@ -1,359 +1,18 @@
 local addonName, ns = ...
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
 KT.VisualThemes = KT.VisualThemes or {}
-
--- TEMPORARY debug tool: /ktdebug opens a floating, draggable window with
--- selectable text dumping the CURRENT live state of the player/target
--- frames (not hooked into any apply function -- a chat print and an
--- on-screen marker triggered from inside ApplyForeverUnitFrameArt were both
--- tried first and neither ever appeared, which is itself a real finding:
--- either that code path isn't running at all on this client, or something
--- about this client swallows output from inside it). This reads global
--- frame state directly, independent of whether that function ever ran, so
--- it can't be silenced the same way. Delete this whole block (down to
--- SlashCmdList) once the issue is diagnosed -- not meant to ship on.
--- GetPoint()/GetWidth()/GetText() etc. can return a "secret" value on
--- regions inside a secure/protected subtree (confirmed live: RightText is a
--- tagged health-text FontString and threw here). tostring()/string.format()
--- do NOT strip that taint -- the result string is itself secret, and
--- table.concat then refuses it ("invalid value (secret) ... for 'concat'").
--- This must check issecretvalue() and return a fresh literal BEFORE the
--- value ever touches tostring/format, or the taint just propagates further.
-local function KTDebugSafeStr(value)
-    if type(issecretvalue) == "function" and issecretvalue(value) then
-        return "<secret>"
-    end
-    if value == nil then return "nil" end
-    return tostring(value)
-end
-
--- Ground truth for facing/flip: reads back the ACTUAL texcoords WoW is using
--- to draw the region right now, bypassing every formula/assumption. A
--- horizontal mirror shows as the U-coordinates (1st/3rd of each pair) being
--- swapped between the left-corner and right-corner points.
-local function KTDebugDumpTexCoord(tex, label)
-    if type(tex) ~= "table" or type(tex.GetTexCoord) ~= "function" then
-        return label .. ": (no GetTexCoord)"
-    end
-    local ok, a, b, c, d, e, f, g, h = pcall(tex.GetTexCoord, tex)
-    if not ok then return label .. ": GetTexCoord error: " .. KTDebugSafeStr(a) end
-    return string.format("%s: %s,%s,%s,%s,%s,%s,%s,%s", label,
-        KTDebugSafeStr(a), KTDebugSafeStr(b), KTDebugSafeStr(c), KTDebugSafeStr(d),
-        KTDebugSafeStr(e), KTDebugSafeStr(f), KTDebugSafeStr(g), KTDebugSafeStr(h))
-end
-
-local function KTDebugDumpFacingState(unit, label)
-    local getter = KT and KT.KTDebugFacingState
-    if type(getter) ~= "function" then
-        return label .. " FacingState: (KTDebugFacingState not exported -- stale/unloaded code)"
-    end
-    local ok, state = pcall(getter, unit)
-    if not ok or type(state) ~= "table" then
-        return label .. " FacingState: error: " .. KTDebugSafeStr(state)
-    end
-    return string.format(
-        "%s FacingState: facing=%s classFlipped=%s shapeshiftForm=%s classification=%s renderedTheme=%s frameArtKit=%s",
-        label, KTDebugSafeStr(state.facing), KTDebugSafeStr(state.classFlipped),
-        KTDebugSafeStr(state.shapeshiftForm), KTDebugSafeStr(state.classification),
-        KTDebugSafeStr(state.renderedTheme), KTDebugSafeStr(state.frameArtKit))
-end
-
-local function KTDebugDumpPoints(region, label)
-    if type(region) ~= "table" or type(region.GetNumPoints) ~= "function" then
-        return label .. ": (no GetNumPoints)"
-    end
-    local n = region:GetNumPoints()
-    if n == 0 then return label .. ": 0 points" end
-    local parts = {}
-    for i = 1, n do
-        local point, relTo, relPoint, x, y = region:GetPoint(i)
-        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
-        parts[#parts + 1] = string.format("%s->%s(%s) %s,%s",
-            KTDebugSafeStr(point), KTDebugSafeStr(relToName),
-            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y))
-    end
-    return label .. ": " .. table.concat(parts, " | ")
-end
-
--- Relative anchor offsets (GetPoint) live in the ANCHOR's own coordinate
--- space, which hides the real on-screen gap once frame:SetScale() is
--- involved (target's frame now gets a real SetScale via
--- ApplyFrameScaleCentered). GetCenter() is scale-resolved by WoW itself, so
--- comparing two regions' GetCenter() values directly gives the true visual
--- separation regardless of which frame either one is anchored to.
-local function KTDebugDumpCenter(region, label)
-    if type(region) ~= "table" or type(region.GetCenter) ~= "function" then
-        return label .. ": (no GetCenter)"
-    end
-    local ok, x, y = pcall(region.GetCenter, region)
-    if not ok then return label .. ": GetCenter error: " .. KTDebugSafeStr(x) end
-    return string.format("%s: %s,%s", label, KTDebugSafeStr(x), KTDebugSafeStr(y))
-end
-
-local function KTDebugDumpFrame(frame, label)
-    if type(frame) ~= "table" then
-        return label .. ": frame not found (wrong global name?)\n"
-    end
-    local health = frame.Health
-    local buffs = frame.Buffs
-    local nameFS = frame._ktStockNameText or frame.LeftText
-    local art = frame._ktForeverPortraitArt or frame._ktClassicPortraitArt
-    local host = frame._ktForeverArtHost or frame._ktClassicArtHost
-    local shapeMask = frame.Portrait and frame.Portrait.backdrop and frame.Portrait.backdrop._shapeMask
-    local typeArt = frame._ktRetailTargetTypeArt
-    -- Target's Retail ring still reads as "plain gold circle, no ring art"
-    -- after the unifiedBorder fix -- that fix only covered the SQUARE
-    -- generic border, not this. Real shown/texture/layer state for the ring
-    -- art itself (and what sits on top of it), instead of a sixth guess.
-    local extra = string.format(
-        "  ArtHost: exists=%s shown=%s strata=%s level=%s\n" ..
-        "  Art: shown=%s texture=%s\n" ..
-        "  TypeArt(target-only): exists=%s shown=%s texture=%s\n" ..
-        "  ShapeMask: exists=%s shown=%s atlas=%s\n" ..
-        "  EliteRareRing: classification=%s isEliteOrRare=%s artFieldExists=%s\n" ..
-        "  PvPCircle: profileVal=%s renderedTheme=%s computed=%s circleShown=%s circleExists=%s\n",
-        KTDebugSafeStr(host ~= nil),
-        KTDebugSafeStr(host and host.IsShown and host:IsShown()),
-        KTDebugSafeStr(host and host.GetFrameStrata and host:GetFrameStrata()),
-        KTDebugSafeStr(host and host.GetFrameLevel and host:GetFrameLevel()),
-        KTDebugSafeStr(art and art.IsShown and art:IsShown()),
-        KTDebugSafeStr(art and art.GetTexture and art:GetTexture()),
-        KTDebugSafeStr(typeArt ~= nil),
-        KTDebugSafeStr(typeArt and typeArt.IsShown and typeArt:IsShown()),
-        KTDebugSafeStr(typeArt and typeArt.GetTexture and typeArt:GetTexture()),
-        KTDebugSafeStr(shapeMask ~= nil),
-        KTDebugSafeStr(shapeMask and shapeMask.IsShown and shapeMask:IsShown()),
-        KTDebugSafeStr(shapeMask and shapeMask.GetAtlas and shapeMask:GetAtlas()),
-        KTDebugSafeStr(frame._ktDebugClassification),
-        KTDebugSafeStr(frame._ktDebugEliteOrRare),
-        KTDebugSafeStr(frame._ktDebugArtShownField),
-        KTDebugSafeStr(frame._ktDebugPvPCircleProfileVal),
-        KTDebugSafeStr(frame._ktDebugPvPCircleRenderedTheme),
-        KTDebugSafeStr(frame._ktDebugPvPCircleComputed),
-        KTDebugSafeStr(frame._kuiPvPCircle and frame._kuiPvPCircle.IsShown and frame._kuiPvPCircle:IsShown()),
-        KTDebugSafeStr(frame._kuiPvPCircle ~= nil)
-    )
-    return extra .. string.format(
-        "%s: LeftText=%s RightText=%s CenterText=%s Buffs=%s\n" ..
-        "  _ktStockNameText=%s _ktForeverLayoutActive=%s _ktClassicLayoutActive=%s\n" ..
-        "  Health=%s (%sx%s) frame=%sx%s Art=%sx%s\n" ..
-        "  %s\n  %s\n  %s\n  %s\n" ..
-        "  HealthCalc=%s\n  ArtCalc=%s\n  NameCalc=%s\n  BuffsCalc=%s\n" ..
-        "  RightText: shown=%s size=%sx%s text=%s\n  %s\n" ..
-        "  StatusOverlay: exists=%s shown=%s\n  %s\n" ..
-        "  LevelCircle: exists=%s shown=%s size=%sx%s\n  %s\n" ..
-        "  LevelText2: shown=%s\n  %s\n" ..
-        "  ClassificationRing: exists=%s shown=%s\n" ..
-        "  IndicatorOverlayLevel=%s LevelOverlayLevel=%s RingParentLevel=%s\n" ..
-        "  %s\n" ..
-        "  %s\n" ..
-        "  %s\n" ..
-        "  %s\n" ..
-        "  %s\n  %s\n  %s\n  FrameScale=%s BuffsScale=%s\n" ..
-        "  BUILD_MARKER=%s\n",
-        label,
-        tostring(frame.LeftText ~= nil), tostring(frame.RightText ~= nil),
-        tostring(frame.CenterText ~= nil), tostring(frame.Buffs ~= nil),
-        tostring(frame._ktStockNameText), tostring(frame._ktForeverLayoutActive),
-        tostring(frame._ktClassicLayoutActive),
-        tostring(health ~= nil),
-        tostring(health and health.GetWidth and health:GetWidth()),
-        tostring(health and health.GetHeight and health:GetHeight()),
-        tostring(frame.GetWidth and frame:GetWidth()),
-        tostring(frame.GetHeight and frame:GetHeight()),
-        tostring(art and art.GetWidth and art:GetWidth()),
-        tostring(art and art.GetHeight and art:GetHeight()),
-        KTDebugDumpPoints(health, "HealthPoints"),
-        KTDebugDumpPoints(buffs, "BuffsPoints"),
-        KTDebugDumpPoints(nameFS, "NamePoints"),
-        KTDebugDumpPoints(art, "ArtPoints"),
-        tostring(frame._ktDebugHealthCalc),
-        tostring(frame._ktDebugArtCalc),
-        tostring(frame._ktDebugNameCalc),
-        tostring(frame._ktDebugBuffsCalc),
-        -- "Health text moving" was assumed to mean frame.Health itself, which
-        -- /ktforevertab already confirmed correct -- but frame.RightText (the
-        -- value) and frame._kuiStatusOverlay (AFK/Ghost/Dead) were NEVER
-        -- actually checked. Adding both now to close that blind spot.
-        KTDebugSafeStr(frame.RightText and frame.RightText.IsShown and frame.RightText:IsShown()),
-        KTDebugSafeStr(frame.RightText and frame.RightText.GetWidth and frame.RightText:GetWidth()),
-        KTDebugSafeStr(frame.RightText and frame.RightText.GetHeight and frame.RightText:GetHeight()),
-        KTDebugSafeStr(frame.RightText and frame.RightText.GetText and frame.RightText:GetText()),
-        KTDebugDumpPoints(frame.RightText, "RightTextPoints"),
-        KTDebugSafeStr(frame._kuiStatusOverlay ~= nil),
-        KTDebugSafeStr(frame._kuiStatusOverlay and frame._kuiStatusOverlay.IsShown and frame._kuiStatusOverlay:IsShown()),
-        KTDebugDumpPoints(frame._kuiStatusOverlay, "StatusOverlayPoints"),
-        -- Fourth attempt at the level-circle-vs-elite/rare-ring conflict:
-        -- confirmed live (post-reload, post-Forever-extension-fix) still not
-        -- resolved, with no code bug found by re-reading. Real data instead
-        -- of a fifth guess.
-        KTDebugSafeStr(frame._kuiLevelCircle ~= nil),
-        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.IsShown and frame._kuiLevelCircle:IsShown()),
-        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.GetWidth and frame._kuiLevelCircle:GetWidth()),
-        KTDebugSafeStr(frame._kuiLevelCircle and frame._kuiLevelCircle.GetHeight and frame._kuiLevelCircle:GetHeight()),
-        KTDebugDumpPoints(frame._kuiLevelCircle, "LevelCirclePoints"),
-        KTDebugSafeStr(frame._kuiLevelText and frame._kuiLevelText.IsShown and frame._kuiLevelText:IsShown()),
-        KTDebugDumpPoints(frame._kuiLevelText, "LevelTextPoints"),
-        KTDebugSafeStr(frame._kuiClassificationPortraitRing ~= nil),
-        KTDebugSafeStr(frame._kuiClassificationPortraitRing and frame._kuiClassificationPortraitRing.IsShown
-            and frame._kuiClassificationPortraitRing:IsShown()),
-        KTDebugSafeStr(frame._kuiIndicatorOverlay and frame._kuiIndicatorOverlay.GetFrameLevel
-            and frame._kuiIndicatorOverlay:GetFrameLevel()),
-        KTDebugSafeStr(frame._kuiLevelOverlay and frame._kuiLevelOverlay.GetFrameLevel
-            and frame._kuiLevelOverlay:GetFrameLevel()),
-        KTDebugSafeStr(frame._kuiClassificationPortraitRing and frame._kuiClassificationPortraitRing.GetParent
-            and frame._kuiClassificationPortraitRing:GetParent() and frame._kuiClassificationPortraitRing:GetParent().GetFrameLevel
-            and frame._kuiClassificationPortraitRing:GetParent():GetFrameLevel()),
-        -- Ground truth from here down: live formula outputs and the actual
-        -- texcoords WoW is drawing with, not inferred from re-reading code.
-        KTDebugDumpFacingState(frame.unit or label:lower(), label),
-        KTDebugDumpTexCoord(frame._kuiClassificationPortraitRing, "RingTexCoord"),
-        KTDebugDumpTexCoord(frame.Portrait and frame.Portrait.backdrop and frame.Portrait.backdrop._2d, "Portrait2DTexCoord"),
-        KTDebugDumpTexCoord(frame.Portrait and frame.Portrait.backdrop and frame.Portrait.backdrop._class, "PortraitClassTexCoord"),
-        -- Real on-screen separation between the frame and its buffs -- two
-        -- code-based fixes (auraAnchor tracing, then matching the anchor
-        -- parent to frame.Health) made zero visible difference, so this
-        -- stops guessing at the mechanism and just measures the actual gap.
-        KTDebugDumpCenter(frame, "FrameCenter"),
-        KTDebugDumpCenter(health, "HealthCenter"),
-        KTDebugDumpCenter(buffs, "BuffsCenter"),
-        KTDebugSafeStr(frame.GetScale and frame:GetScale()),
-        KTDebugSafeStr(buffs and buffs.GetScale and buffs:GetScale()),
-        -- Bump this string on every edit that touches facing/flip/z-order so
-        -- a fresh /ktforevertab dump proves (or disproves) that the running
-        -- code is actually the code on disk, instead of assuming a reload
-        -- picked it up.
-        "buffs-debug-2026-09-30-b"
-    )
-end
-
-
--- RightText's own GetPoint()/GetWidth() are unreadable (confirmed live:
--- entirely secret-tainted, presumably because its :SetText() content is
--- health-derived and WoW blanket-taints the whole widget once that happens).
--- Static reading can't find who else repositions it either -- the only two
--- call sites found (ApplyStockUFHealthTextGeometry, and the generic
--- BuildTextPositioner + corrective ApplyClassicFrameArt pattern in
--- ReloadFrames) both look correctly ordered by inspection. hooksecurefunc
--- sidesteps the taint: its callback gets the CALLER's own literal arguments,
--- not a re-read of the (tainted) widget state, so this can still show which
--- code repositions RightText and in what order, even though GetPoint cannot.
-local ktHookedRightText = {}
-local function KTHookRightTextCalls(frame, label)
-    if type(frame) ~= "table" or type(frame.RightText) ~= "table" then return end
-    local rt = frame.RightText
-    if ktHookedRightText[rt] then return end
-    ktHookedRightText[rt] = true
-    if type(hooksecurefunc) ~= "function" then return end
-    hooksecurefunc(rt, "SetPoint", function(_, point, relTo, relPoint, x, y)
-        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
-        print(string.format("[%s RightText:SetPoint] %s->%s(%s) %s,%s",
-            label, KTDebugSafeStr(point), KTDebugSafeStr(relToName),
-            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y)))
-    end)
-    hooksecurefunc(rt, "ClearAllPoints", function()
-        print(string.format("[%s RightText:ClearAllPoints]", label))
-    end)
-    hooksecurefunc(rt, "SetWidth", function(_, width)
-        print(string.format("[%s RightText:SetWidth] %s", label, KTDebugSafeStr(width)))
-    end)
-end
-
--- CONFIRMED LIVE via /ktforevertab pasted twice: frame.Health itself jumps
--- from the correct narrow Forever width (~123-125) to the full frame width
--- (~230) between two dumps, for player AND target simultaneously, while
--- ApplyForeverUnitFrameArt's own cached debug strings still show the old
--- correct numbers -- i.e. something resets Health AFTER Forever's apply
--- last ran, and nothing reruns to fix it. RightText/_kuiStatusOverlay are
--- anchored live to Health (CENTER/0,0) -- they never needed their own
--- SetPoint call to visually "move"; they just followed Health passively,
--- which is exactly why the RightText hook above never fired. All 6 known
--- Health-clobber sites (grep "_ktForeverLayoutActive" in KUIUnitFrames.lua)
--- are still properly guarded, so a 7th, not-yet-found site must exist.
--- Hooking Health itself, with a short stack trace, to find it.
-local function KTShortStack()
-    local ok, stack = pcall(debugstack)
-    if not ok or type(stack) ~= "string" then return "(no stack)" end
-    -- 5 lines wasn't enough: it cut off right at hooksecurefunc's own C
-    -- dispatch boundary/pcall wrapper, before ever reaching the real caller
-    -- (confirmed live -- every capture ended in "[C]: ? <- [C]: in function
-    -- 'pcall'" with nothing but this file's own hook frames before it).
-    local lines = {}
-    for line in stack:gmatch("[^\n]+") do
-        lines[#lines + 1] = line
-        if #lines >= 18 then break end
-    end
-    return table.concat(lines, " <- ")
-end
-
-local ktHookedHealth = {}
-local function KTHookHealthCalls(frame, label)
-    if type(frame) ~= "table" or type(frame.Health) ~= "table" then return end
-    local health = frame.Health
-    if ktHookedHealth[health] then return end
-    ktHookedHealth[health] = true
-    if type(hooksecurefunc) ~= "function" then return end
-    hooksecurefunc(health, "SetPoint", function(_, point, relTo, relPoint, x, y)
-        local relToName = relTo and (relTo.GetName and relTo:GetName() or relTo) or nil
-        print(string.format("[%s Health:SetPoint] %s->%s(%s) %s,%s",
-            label, KTDebugSafeStr(point), KTDebugSafeStr(relToName),
-            KTDebugSafeStr(relPoint), KTDebugSafeStr(x), KTDebugSafeStr(y)))
-        print("  from: " .. KTShortStack())
-    end)
-    hooksecurefunc(health, "ClearAllPoints", function()
-        print(string.format("[%s Health:ClearAllPoints]", label))
-    end)
-    hooksecurefunc(health, "SetWidth", function(_, width)
-        print(string.format("[%s Health:SetWidth] %s", label, KTDebugSafeStr(width)))
-        print("  from: " .. KTShortStack())
-    end)
-    hooksecurefunc(health, "SetSize", function(_, width, height)
-        print(string.format("[%s Health:SetSize] %s x %s", label, KTDebugSafeStr(width), KTDebugSafeStr(height)))
-        print("  from: " .. KTShortStack())
-    end)
-end
-
--- NOT /ktdebug: KullThranUI already registers its own /ktdebug ("compatibility
--- scan") elsewhere in the addon. Same command string means SlashCmdList only
--- keeps one handler -- confirmed live: every previous /ktdebug attempt this
--- session actually ran THAT scan, never this code, which is why nothing here
--- ever seemed to have any effect. Using a name that can't collide.
-SLASH_KTFOREVERDEBUG1 = "/ktforevertab"
-SlashCmdList["KTFOREVERDEBUG"] = function()
-    -- Printed to normal chat (one message per line) instead of a custom
-    -- window, so it lands in KullThranUI_Chat's own history and can be
-    -- grabbed with its existing "Copy Chat" dialog, which the user already
-    -- has and prefers over a bespoke EditBox.
-    KTHookRightTextCalls(_G.KullThranUI_UF_Player, "Player")
-    KTHookRightTextCalls(_G.KullThranUI_UF_Target, "Target")
-    KTHookHealthCalls(_G.KullThranUI_UF_Player, "Player")
-    KTHookHealthCalls(_G.KullThranUI_UF_Target, "Target")
-    local text = KTDebugDumpFrame(_G.KullThranUI_UF_Player, "Player")
-        .. KTDebugDumpFrame(_G.KullThranUI_UF_Target, "Target")
-    for line in text:gmatch("[^\n]+") do
-        print(line)
+KT.VisualThemes.NativeStockFonts = {}
+for _, name in ipairs({ "TextStatusBarText", "GameNormalNumberFont", "GameFontNormalSmall" }) do
+    local font = _G[name]
+    if font and font.GetFont then
+        local path, size, flags = font:GetFont()
+        KT.VisualThemes.NativeStockFonts[name] = { path, size, flags or "" }
     end
 end
-
--- TEMPORARY debug tool: /ktretaildebug dumps ResolveRetailAtlasOverride's
--- last decision per atlas name -- theme-is-retail, table-has-entry, and
--- (the empirical check) whether the live resolved file actually differs
--- from the expected real file. Delete once the Retail atlas override is
--- confirmed working.
-SLASH_KTRETAILDEBUG1 = "/ktretaildebug"
-SlashCmdList["KTRETAILDEBUG"] = function()
-    local trails = KT._ktRetailAtlasDebug or {}
-    local any = false
-    for name, trail in pairs(trails) do
-        any = true
-        print(string.format(
-            "|cff33ff99[KTRETAILDEBUG]|r atlas=%s renderedTheme=%s foundEntry=%s liveFile=%s expectedFile=%s result=%s",
-            tostring(name), tostring(trail.renderedTheme), tostring(trail.foundEntry),
-            tostring(trail.liveFile), tostring(trail.expectedFile), tostring(trail.result)))
-    end
-    if not any then
-        print("|cffff4444[KTRETAILDEBUG]|r ResolveRetailAtlasOverride was never called yet -- reload and let a unit frame render first.")
-    end
+function KT.VisualThemes:GetNativeStockFont(name, path, size, flags)
+    local native = self.NativeStockFonts[name]
+    if native and native[1] then return native[1], native[2], native[3] end
+    return path, size, flags
 end
 
 --[[
@@ -381,20 +40,20 @@ local PORTRAIT_FRAME_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame]]
 -- this addon for its own "circular" portraitStyle -- see KUIUnitFrames.lua's
 -- PORTRAIT_MASKS.circle. Reused here as-is so the classic/forever portrait
 -- art reads as a clean circle regardless of what its underlying crop/atlas
--- actually contains, per explicit user request (round, not square).
+-- actually contains (round, not square).
 local PORTRAIT_MASK_TEXTURE = [[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\circle_mask.tga]]
 
--- Hand-authored by the user directly from a zoomed screenshot of the real
--- gap between the ring's flat dome corner and the circular portrait mask
+-- Hand-authored mask matching the real gap between the ring's flat dome
+-- corner and the circular portrait mask
 -- (concave arc, opaque toward the corner, fading toward the round side) --
 -- replaces the plain square guess, which needed several rounds of margin
 -- tuning and still either fell short of the corner or overshot the round
 -- edge. `_LEFT` fits a corner whose solid side faces left (target's
 -- bottom-left, health bar on its left); `_RIGHT` is its horizontal mirror
 -- (player's bottom-right, health bar on its right), pre-flipped as its own
--- file rather than mirrored at runtime (MaskTexture:SetTexCoord flips were
--- already confirmed live, on the portrait's own mask, to make the whole
--- portrait vanish -- never risk that on this one either).
+-- file rather than mirrored at runtime (MaskTexture:SetTexCoord flips make
+-- the whole portrait vanish when applied to the portrait's own mask, so
+-- never risk that on this one either).
 local DOME_CORNER_MASK_LEFT = [[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\dome_corner_mask.tga]]
 local DOME_CORNER_MASK_RIGHT = [[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\dome_corner_mask_mirrored.tga]]
 -- Native pixel size of both files above (same for both: one is a plain
@@ -500,10 +159,9 @@ end
 -- than the real bar it sits on: Classic's real health/power bars are only
 -- 12px tall (vs Forever's 20px), but both use the same 232x100 outer box, so
 -- the same scale factor leaves Classic's text sized for a bar nearly twice
--- as tall as the one it actually renders on -- confirmed live via
--- screenshot, text visibly overflowing a bar far shorter than it. A
--- first-pass estimate (no client here to fine-tune it pixel-perfectly);
--- adjust this single constant if manual QA finds it too much or too little.
+-- as tall as the one it actually renders on, so the text overflows a bar
+-- far shorter than it. The value is a first-pass estimate; adjust this
+-- single constant if it proves too large or too small.
 local STOCK_BAR_TEXT_HEIGHT_RATIO = 0.8
 local CLASSIC_BAR_TEXT_HEIGHT_RATIO = 0.65
 
@@ -511,7 +169,7 @@ local CLASSIC_BAR_TEXT_HEIGHT_RATIO = 0.65
 --- OWN unscaled base size (cached on the FontString the first time this
 --- runs), never from its current size -- reapplying this on every render
 --- pass must never compound (shrinking further each time), and the base
---- must survive `scale` changing between calls (e.g. the user adjusting
+--- must survive `scale` changing between calls (e.g. a change in
 --- portrait size). Also caps the result to a fraction of the real bar's own
 --- pixel height (`maxHeightPx`), when given, so a font sized for the outer
 --- box's uniform scale never renders taller than the bar it actually sits
@@ -566,8 +224,8 @@ local function FitTextToWidth(fs, maxWidth)
     -- ScaleStockBarText's own cache, so the two never fight over the same
     -- slot) and always re-measure from THAT size, never from whatever size
     -- the last call left behind -- otherwise repeated calls within the same
-    -- refresh (confirmed live via KUIUnitFrames.lua's identical bug: a
-    -- target change fires this more than once) would shrink an
+    -- refresh (a target change fires this more than once, as in
+    -- KUIUnitFrames.lua's equivalent helper) would shrink an
     -- already-shrunk font further each time, never recovering.
     local base = fs._ktForeverFitBaseFontSize
     if not base then
@@ -577,12 +235,98 @@ local function FitTextToWidth(fs, maxWidth)
     fs:SetFont(path, base, flags)
     local width = fs:GetStringWidth()
     -- A FontString showing text derived from a secure/protected context can
-    -- return a tainted "secret" number here -- confirmed live, an identical
-    -- comparison in KUIUnitFrames.lua's own equivalent helper threw "attempt
-    -- to compare ... a secret number value" and broke the addon on enable.
+    -- return a tainted "secret" number here; comparing it throws "attempt to
+    -- compare ... a secret number value" (the equivalent helper in
+    -- KUIUnitFrames.lua threw the same error and broke the addon on enable).
     if type(issecretvalue) == "function" and issecretvalue(width) then return end
     if not width or width <= 0 or width <= maxWidth then return end
     fs:SetFont(path, math.max(6, base * (maxWidth / width)), flags)
+end
+
+--- Blizzard's own name text for the stock-art styles: GameFontNormalSmall
+--- (sized with the frame art) in Blizzard yellow. Later font or color writes
+--- from the generic text pass are held to that look while it is active, but
+--- a smaller size (fitting a long name into the tab) is still allowed.
+--- Turned off with unitFrames.blizzardNameStyle = false.
+function KT.VisualThemes:ApplyBlizzardBarText(fs, scale, maxHeight, fontName)
+    if type(fs) ~= "table" or not fs.SetFont then return end
+    fs._ktBlizzName = nil
+    local path, size, flags = self:GetNativeStockFont(fontName or "TextStatusBarText", "Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    size = size * scale
+    if maxHeight then size = math.min(size, maxHeight * 0.9) end
+    fs._ktBlizzBar = { path = path, size = math.max(6, size), flags = flags }
+    if not fs._ktBlizzBarHook and hooksecurefunc then
+        fs._ktBlizzBarHook = true
+        hooksecurefunc(fs, "SetFont", function(text, p, n, f)
+            local style = text._ktBlizzBar
+            local vt = KT.VisualThemes
+            local theme = vt.GetRenderedTheme and vt:GetRenderedTheme()
+            if not style or text._ktBlizzBarBusy or (theme ~= "retail" and theme ~= "forever") then return end
+            if p ~= style.path or n ~= style.size or f ~= style.flags then
+                text._ktBlizzBarBusy = true
+                text:SetFont(style.path, style.size, style.flags)
+                text._ktBlizzBarBusy = nil
+            end
+        end)
+    end
+    fs:SetFont(path, math.max(6, size), flags)
+    if fs.SetTextColor then fs:SetTextColor(1, 1, 1, 1) end
+    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 1) end
+    if fs.SetShadowOffset then fs:SetShadowOffset(scale, -scale) end
+end
+
+function KT.VisualThemes:ApplyBlizzardNameText(fs, scale, maxWidth)
+    if fs then fs._ktBlizzBar = nil end
+    if type(fs) ~= "table" or type(fs.SetFont) ~= "function" then return end
+    local uf = KT.db and KT.db.profile and KT.db.profile.unitFrames
+    if uf and uf.blizzardNameStyle == false then
+        if fs._ktBlizzName then
+            fs._ktBlizzName = nil
+            fs._ktStockBaseFontSize, fs._ktForeverFitBaseFontSize, fs._ktStockFitBaseFontSize = nil, nil, nil
+        end
+        return
+    end
+    local path, size, flags = "Fonts\\FRIZQT__.TTF", 10, ""
+    local obj = _G.GameFontNormalSmall
+    if obj and obj.GetFont then
+        local ok, p2, s2, f2 = pcall(obj.GetFont, obj)
+        if ok and type(p2) == "string" and type(s2) == "number" and s2 > 0 then
+            path, size, flags = p2, s2, f2 or ""
+        end
+    end
+    size = math.max(6, size * ((type(scale) == "number" and scale > 0) and scale or 1))
+    fs._ktBlizzName = { path = path, size = size, flags = flags }
+    if not fs._ktBlizzNameHooked and hooksecurefunc then
+        fs._ktBlizzNameHooked = true
+        hooksecurefunc(fs, "SetFont", function(self, p3, s3, f3)
+            local b = self._ktBlizzName
+            if not b or self._ktBlizzBusy then return end
+            local want = (type(s3) == "number" and s3 < b.size) and s3 or b.size
+            if p3 ~= b.path or f3 ~= b.flags or s3 ~= want then
+                self._ktBlizzBusy = true
+                self:SetFont(b.path, want, b.flags)
+                self._ktBlizzBusy = nil
+            end
+        end)
+        hooksecurefunc(fs, "SetTextColor", function(self)
+            if not self._ktBlizzName or self._ktBlizzBusy then return end
+            self._ktBlizzBusy = true
+            self:SetTextColor(1, 0.82, 0)
+            self._ktBlizzBusy = nil
+        end)
+    end
+    fs._ktBlizzBusy = true
+    fs:SetFont(path, size, flags)
+    fs:SetTextColor(1, 0.82, 0)
+    fs._ktBlizzBusy = nil
+    if fs.SetShadowOffset then
+        fs:SetShadowOffset(1, -1)
+        fs:SetShadowColor(0, 0, 0, 1)
+    end
+    if maxWidth and maxWidth > 0 then
+        fs._ktForeverFitBaseFontSize = size
+        FitTextToWidth(fs, maxWidth)
+    end
 end
 
 local function ResolveStockScale(frame, geom)
@@ -634,12 +378,30 @@ end
 
 local function SeatStockPortrait(unitRegion, frame, portrait, scale, maskExpand)
     unitRegion._ktStockPortraitAnchor = true
+    if frame._ktNativeClassificationKind and frame._ktNativeClassificationScale then
+        maskExpand = -portrait.size * (1 - frame._ktNativeClassificationScale) / 2
+    end
     unitRegion._ktStockPortraitMaskExpand = (maskExpand == nil and 5 or maskExpand) * scale
     if unitRegion._shapeBorderTex then unitRegion._shapeBorderTex:Hide() end
     unitRegion:ClearAllPoints()
+    local nativeRaise = frame._ktNativeClassificationKind and portrait.point == "TOPLEFT" and 5 or 0
+    local nativeRight = nativeRaise ~= 0 and 3 or 0
     unitRegion:SetPoint(portrait.point, frame, portrait.point,
-        portrait.x * scale, portrait.y * scale)
+        (portrait.x + nativeRight) * scale, (portrait.y + nativeRaise) * scale)
     unitRegion:SetSize(portrait.size * scale, portrait.size * scale)
+    if frame._ktNativeClassificationKind and unitRegion._3d then
+        local nativeScale = frame._ktNativeClassificationScale or 1
+        local inset = portrait.size * scale * ((1 - nativeScale) / 2 + 2 / 58 * nativeScale)
+        unitRegion._3d:ClearAllPoints()
+        unitRegion._3d:SetPoint("TOPLEFT", unitRegion, "TOPLEFT", inset, -inset)
+        unitRegion._3d:SetPoint("BOTTOMRIGHT", unitRegion, "BOTTOMRIGHT", -inset, inset)
+        unitRegion._ktNativeModelViewport = true
+    elseif unitRegion._ktNativeModelViewport and unitRegion._3d then
+        unitRegion._ktNativeModelViewport = nil
+        unitRegion._3d:ClearAllPoints()
+        unitRegion._3d:SetPoint("TOPLEFT", unitRegion, "TOPLEFT", 0, 0)
+        unitRegion._3d:SetPoint("BOTTOMRIGHT", unitRegion, "BOTTOMRIGHT", 0, 0)
+    end
     if unitRegion._shapeMask then
         local expand = unitRegion._ktStockPortraitMaskExpand
         unitRegion._shapeMask:ClearAllPoints()
@@ -655,7 +417,7 @@ end
 
 -- Classic's own border/background accent (bronze/gold), matching the same
 -- color already used for its unit-frame border (SetUnitBorderColor in
--- Adapters/UnitFrames.lua). Explicit user request: the cast bar used a
+-- Adapters/UnitFrames.lua). Without it the cast bar would use a
 -- generic black border/background shared with every other theme.
 local CLASSIC_CASTBAR_BORDER = { r = 0.92, g = 0.72, b = 0.22, a = 1 }
 local CLASSIC_CASTBAR_BG = { r = 0.20, g = 0.14, b = 0.04, a = 0.6 }
@@ -669,12 +431,12 @@ local CLASSIC_CASTBAR_BG = { r = 0.20, g = 0.14, b = 0.04, a = 0.6 }
 --- attached-portrait layout, where _xOffset compensates for the portrait
 --- eating into the frame's width -- it does NOT keep the left edges
 --- aligned under real stock geometry, where _xOffset instead means the
---- health bar's own real offset within the box. Confirmed live via
---- screenshot: both dimensions AND position were wrong for both player and
---- target under Classic. Re-anchoring fresh, directly below Power with no
+--- health bar's own real offset within the box, so the generic anchor left
+--- both dimensions AND position wrong for player and target under Classic.
+--- Re-anchoring fresh, directly below Power with no
 --- extra offset, sidesteps that mismatch entirely. Also gives Classic its
 --- own bronze border/background instead of the generic black one shared
---- with every other theme (explicit user request), restoring the plain
+--- with every other theme, restoring the plain
 --- black look if the frame later switches to a different theme.
 --- @param frame Frame the unit frame's outer frame
 --- @param geom table this unit's FOREVER_FRAME_GEOMETRY/CLASSIC_FRAME_GEOMETRY entry
@@ -688,10 +450,10 @@ local function SeatStockCastbar(frame, geom, scale)
         bg:SetPoint("TOPLEFT", frame.Power, "BOTTOMLEFT", 0, 0)
     end
     bg:SetWidth(geom.power.w * scale)
-    -- Confirmed live via screenshot: the cast bar read as too thick/chunky
-    -- and clipped -- it was still using KUI's generic castbarHeight (14+),
-    -- disproportionate against the real stock box's much slimmer bars.
-    -- Matched to Power's own real height for the same slender proportions.
+    -- KUI's generic castbarHeight (14+) is disproportionate against the real
+    -- stock box's much slimmer bars (the cast bar reads as too thick and
+    -- clipped). Matched to Power's own real height for the same slender
+    -- proportions.
     if bg.SetHeight and geom.power.h then
         bg:SetHeight(geom.power.h * scale)
     end
@@ -727,9 +489,8 @@ local function SeatStockCastbar(frame, geom, scale)
     -- with no awareness of the real stock bar's actual height set just
     -- above -- exactly the same "font sized for the outer box, not the real
     -- slim bar" problem ScaleStockBarText already solves for health/power
-    -- text. Confirmed live: with the castbar height-clobbering bug fixed,
-    -- the bar is now genuinely thin, and the untouched text visibly
-    -- overflowed/clipped against it. Cap it the same way.
+    -- text. With the bar genuinely thin, the untouched text would overflow and
+    -- clip against it, so cap it the same way.
     local cbHeight = bg.GetHeight and bg:GetHeight()
     if castbar and cbHeight and cbHeight > 0 then
         local ratio = isClassic and CLASSIC_BAR_TEXT_HEIGHT_RATIO or STOCK_BAR_TEXT_HEIGHT_RATIO
@@ -748,8 +509,8 @@ end
 -- mask itself (never the portrait content, which must stay exactly sized to
 -- the stock ring's real aperture) by this ratio makes the mask's PAINTED
 -- circle land exactly on the target's bounds instead.
--- 17/94 is exact only for a perfectly circular aperture. Confirmed live via
--- screenshot (radial pixel scan around the full ring): Classic's real
+-- 17/94 is exact only for a perfectly circular aperture. A radial pixel scan
+-- around the full ring shows that Classic's real
 -- UI-TargetingFrame aperture isn't perfectly round -- a thin background
 -- crescent remained in the lower-right quadrant specifically, the same kind
 -- of hand-painted irregularity that already forced Forever's dome ring into
@@ -816,7 +577,7 @@ local function ApplyClassicRoundPortraitMask(backdrop)
     -- mask's expanded ring with nothing behind it: _bg itself never
     -- reached that far, so the ring's real aperture leaked straight
     -- through to the world background instead of to a dark fallback --
-    -- confirmed live via screenshot (a visible sky-colored gap, not black).
+    -- (a visible sky-colored gap, not black).
     -- Expanding only _bg (never the photo) to match the mask backs that
     -- ring with the same dark fill already used elsewhere, instead of
     -- leaving it as a hole.
@@ -851,8 +612,8 @@ end
 -- Classic's real UI-TargetingFrame aperture is wider than the 64px stock
 -- portrait square. The portrait backdrop clips its own regions to that
 -- square (SetClipsChildren, needed for druid forms / model swaps), so the
--- earlier "expand _bg" fix could never reach past it -- confirmed live via
--- screenshot: a thin see-through crescent remained between the ring art and
+-- earlier "expand _bg" fix could never reach past it, and a thin see-through
+-- crescent remained between the ring art and
 -- the photo. This dedicated, unclipped filler frame sits one level BELOW
 -- the portrait backdrop (and therefore below the ring art too) and paints a
 -- dark disc slightly larger than the portrait, filling that gap. Any
@@ -896,8 +657,8 @@ local function SyncClassicPortraitFill(frame, unitRegion, scale, innerSide)
     -- The real aperture is not centred on the portrait square: the gap is on
     -- the bottom and on the side facing the bars (player: right, target:
     -- left); the top/outer sides already reach the ring, and padding them
-    -- made the dark disc poke out past the ring's outer edge (confirmed live
-    -- via screenshot). Pad only the bottom and the inner side.
+    -- made the dark disc poke out past the ring's outer edge.
+    -- Pad only the bottom and the inner side.
     local pad = (innerSide and CLASSIC_PORTRAIT_FILL_PAD or 0) * (scale or 1)
     local padL = (innerSide == "left") and pad or 0
     local padR = (innerSide == "right") and pad or 0
@@ -973,6 +734,16 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     -- portrait and empty level ornament on that exact coordinate system;
     -- global frame scaling is applied by UnitFrames separately.
     local scale = 1
+    local nativePlayer = unit == "player" and frame._ktNativeClassificationKind ~= nil
+    local portraitExtension = 0
+    if nativePlayer then
+        local radius = geom.portrait.size / 2 * (frame._ktNativeClassificationScale or 1)
+        local centreX = geom.portrait.x + geom.portrait.size / 2 + 3
+        local centreY = -geom.portrait.y + geom.portrait.size / 2 - 5
+        local dy = geom.power.y + geom.power.h - centreY
+        local reach = math.sqrt(math.max(0, radius * radius - dy * dy))
+        portraitExtension = math.max(0, geom.power.x - centreX - reach + 2)
+    end
 
     frame:SetSize(geom.w * scale, geom.h * scale)
     SyncArtLayers(frame, host, true)
@@ -983,11 +754,40 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
         frame._ktClassicPortraitArt = art
     end
     local artGeom = geom.art
-    art:SetTexture(frame._ktClassicSheetPath or PORTRAIT_FRAME_TEXTURE)
+    art._ktGlowTextureFile = frame._ktClassicSheetPath or PORTRAIT_FRAME_TEXTURE
+    art:SetTexture(art._ktGlowTextureFile)
     art:SetTexCoord(artGeom.l, artGeom.r, artGeom.t, artGeom.b)
     art:ClearAllPoints()
     art:SetPoint("CENTER", frame, "CENTER", artGeom.x * scale, artGeom.y * scale)
     art:SetSize(artGeom.w * scale, artGeom.h * scale)
+    if nativePlayer then
+        -- The Classic sheet includes its portrait ring. Retain only its
+        -- bar/name fragment so no second ring shows behind the dragon.
+        local crop = geom.health.x / artGeom.w
+        art:SetTexCoord(artGeom.l + (artGeom.r - artGeom.l) * crop,
+            artGeom.r, artGeom.t, artGeom.b)
+        art:ClearAllPoints()
+        art:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+        art:SetSize((artGeom.w - geom.health.x + portraitExtension) * scale, artGeom.h * scale)
+        -- Keep this opaque bar fragment out of the portrait, regardless of
+        -- later frame-level refreshes. Clip at the original bar boundary.
+        local clip = frame._ktClassicNativeBarClip
+        if not clip then
+            clip = CreateFrame("Frame", nil, host)
+            clip:SetClipsChildren(true)
+            frame._ktClassicNativeBarClip = clip
+        end
+        clip:SetFrameStrata(host:GetFrameStrata())
+        clip:SetFrameLevel(host:GetFrameLevel())
+        clip:ClearAllPoints()
+        clip:SetPoint("TOPLEFT", frame, "TOPLEFT", geom.health.x * scale, 0)
+        clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        art:SetParent(clip)
+        clip:Show()
+    else
+        art:SetParent(host)
+        if frame._ktClassicNativeBarClip then frame._ktClassicNativeBarClip:Hide() end
+    end
     art:Show()
 
     local portrait = geom.portrait
@@ -997,22 +797,43 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     -- clipped even after a unit changes model/shape (notably druid forms).
     -- Classification rings are re-enabled deliberately by the metadata pass
     -- when they need to extend outside this region.
-    ApplyClassicRoundPortraitMask(unitRegion)
-    SyncClassicPortraitFill(frame, unitRegion, scale,
-        (portrait.point == "TOPRIGHT") and "left" or "right")
+    if nativePlayer then
+        ClearClassicRoundPortraitMask(frame)
+        ClearClassicPortraitFill(frame)
+        if unitRegion._shapeMask then
+            unitRegion._shapeMask:SetAtlas("CircleMask", false)
+            unitRegion._shapeMask:SetTexCoord(0, 1, 0, 1)
+            unitRegion._shapeMask:Show()
+            for _, key in ipairs({"_2d", "_class", "_bg"}) do
+                local region = unitRegion[key]
+                if region and region.AddMaskTexture then
+                    if region.RemoveMaskTexture then region:RemoveMaskTexture(unitRegion._shapeMask) end
+                    region:AddMaskTexture(unitRegion._shapeMask)
+                end
+            end
+        end
+        local topBarLevel = math.max(frame.Health and frame.Health:GetFrameLevel() or 0,
+            frame.Power and frame.Power:GetFrameLevel() or 0)
+        unitRegion:SetFrameLevel(topBarLevel + 2)
+        if unitRegion._3d then unitRegion._3d:SetFrameLevel(topBarLevel + 3) end
+    else
+        ApplyClassicRoundPortraitMask(unitRegion)
+        SyncClassicPortraitFill(frame, unitRegion, scale,
+            (portrait.point == "TOPRIGHT") and "left" or "right")
+    end
 
     local health = frame.Health
     if health then
         health:ClearAllPoints()
         health:SetPoint("TOPLEFT", frame, "TOPLEFT",
-            geom.health.x * scale, -geom.health.y * scale)
-        health:SetSize(geom.health.w * scale, geom.health.h * scale)
-        health._xOffset = geom.health.x * scale
+            (geom.health.x - portraitExtension) * scale, -geom.health.y * scale)
+        health:SetSize((geom.health.w + portraitExtension) * scale, geom.health.h * scale)
+        health._xOffset = (geom.health.x - portraitExtension) * scale
         health._rightInset = (geom.w - geom.health.x - geom.health.w) * scale
         health._topOffset = geom.health.y * scale
         local absorb = frame.HealthPrediction and frame.HealthPrediction.damageAbsorb
         if absorb and absorb.SetSize then
-            absorb:SetSize(geom.health.w * scale, geom.health.h * scale)
+            absorb:SetSize((geom.health.w + portraitExtension) * scale, geom.health.h * scale)
         end
     end
 
@@ -1020,8 +841,8 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     if power then
         power:ClearAllPoints()
         power:SetPoint("TOPLEFT", frame, "TOPLEFT",
-            geom.power.x * scale, -geom.power.y * scale)
-        power:SetSize(geom.power.w * scale, geom.power.h * scale)
+            (geom.power.x - portraitExtension) * scale, -geom.power.y * scale)
+        power:SetSize((geom.power.w + portraitExtension) * scale, geom.power.h * scale)
     end
 
     SeatStockCastbar(frame, geom, scale)
@@ -1037,8 +858,8 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
         -- absorb shield never overflows the bar) -- nameText's own parent
         -- chain (frame.LeftText -> _textOverlay -> frame.Health) inherits
         -- that clip. Positioning it in the real name tab, ABOVE Health's own
-        -- rectangle, put it outside that clip region -- confirmed live: the
-        -- FontString's own position/size/text were all correct, it was
+        -- rectangle, put it outside that clip region: the FontString's own
+        -- position/size/text were all correct, but it was
         -- simply invisible. Name text needs to anchor directly to the
         -- frame, never inside any bar-clipping container. Reparenting onto
         -- `host` (already correctly leveled by SyncArtLayers, and never
@@ -1055,6 +876,9 @@ function KT.VisualThemes:ApplyClassicUnitFrameArt(frame, unitRegion, unit)
     ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
     ScaleStockBarText(frame.RightText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
     ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight, CLASSIC_BAR_TEXT_HEIGHT_RATIO)
+    if nameText and geom.name then
+        self:ApplyBlizzardNameText(nameText, scale, geom.name.w * scale)
+    end
 
     -- Classic's name tab is part of the opaque texture. Its buffs therefore
     -- need their own row above the whole stock frame; the normal aura refresh
@@ -1136,17 +960,14 @@ local FOREVER_FRAME_GEOMETRY = {
     },
     target = {
         w = 232, h = 100,
-        -- Explicit user request (with acknowledged risk): target's own real
-        -- atlas (UI-HUD-UnitFrame-Target-PortraitOn, 192x67) genuinely lacks
-        -- a decorative corner point that player's (198x71) has -- confirmed
-        -- live via a close-up screenshot, not a code bug; both atlases are
+        -- Target's own real atlas (UI-HUD-UnitFrame-Target-PortraitOn, 192x67)
+        -- genuinely lacks a decorative corner point that player's (198x71) has;
+        -- this is a property of the art, not a code bug, and both atlases are
         -- drawn full/unmodified. Reusing player's own atlas, mirrored,
-        -- guarantees the identical ring art. NOTE: an earlier experimental
-        -- mirror = true on TARGET's OWN atlas (see prior git history) made
-        -- things worse -- that mirrored an asset that was already correctly
-        -- oriented for its own use. This is different: player's atlas was
-        -- never designed to be mirrored either, so this is still a genuine
-        -- experiment, just a different one, pending live QA.
+        -- guarantees the identical ring art. Mirroring target's OWN atlas does not
+        -- work, since that asset is already correctly oriented for its own use.
+        -- Player's atlas was not designed to be mirrored either, so this remains an
+        -- experimental approach that needs visual verification.
         art = "UI-HUD-UnitFrame-Player-PortraitOn",
         mirror = true,
         -- Every offset below is the exact horizontal mirror of player's own
@@ -1170,23 +991,21 @@ local FOREVER_FRAME_GEOMETRY = {
     },
 }
 
--- Explicit user correction: Retail's target portrait is player's own real
--- atlas, mirrored -- not a separate
--- target-native atlas. Target's own real atlas genuinely lacks the
+-- Retail's target portrait is player's own real atlas, mirrored -- not a
+-- separate target-native atlas. Target's own real atlas genuinely lacks the
 -- decorative ring point (see FOREVER_FRAME_GEOMETRY.target's comment), and
 -- the separate "-Type" reputation-strip atlas this used to layer on top
--- was never verified against a real client; /ktforevertab confirmed live
--- it actually drew a yellow/gold-tinted patch over the portrait (the exact
--- "plain gold circle, no ring" symptom reported). Retail target now reuses
--- FOREVER_FRAME_GEOMETRY.target as-is (mirror=true, player's atlas name);
--- ResolveRetailAtlasOverride substitutes the real gold Retail pixels for
--- that same atlas name, already proven working for player.
+-- was never verified against a real client and drew a yellow/gold-tinted
+-- patch over the portrait (a plain gold circle with no ring). Retail target
+-- now reuses FOREVER_FRAME_GEOMETRY.target as-is (mirror=true, player's
+-- atlas name); ResolveRetailAtlasOverride substitutes the real gold Retail
+-- pixels for that same atlas name, already proven working for player.
 
--- Confirmed live: buffs and the name tab shared the exact same Y (buffs grow
+-- Buffs and the name tab would otherwise share the exact same Y (buffs grow
 -- up from the tab's top edge, name grows down from it), leaving zero margin
--- -- icon borders/glow and text ascenders overlapped a little on both units.
--- A first-pass estimate (no client here to fine-tune it pixel-perfectly);
--- adjust this single constant if manual QA finds it too much or too little.
+-- -- icon borders/glow and text ascenders overlap a little on both units.
+-- A first-pass estimate; adjust this single constant if it proves too
+-- large or too small.
 local BUFFS_TAB_GAP = 3
 
 local function UnsnapTexture(texture)
@@ -1270,10 +1089,10 @@ local function ResizeHealthPrediction(frame, width, height)
     end
 end
 -- Real Retail unit-frame art, resolved independently of C_Texture.GetAtlasInfo.
--- This workspace tests on a Forever-flavored client, which remaps this
--- atlas name to its own bronze sheet -- GetAtlasInfo/SetAtlas on THIS
--- client return Forever's bronze file regardless of which visual theme the
--- user picked in the addon, confirmed live. Genuine gold Retail art needs
+-- A Forever-flavored client remaps this
+-- atlas name to its own bronze sheet -- GetAtlasInfo/SetAtlas on such a
+-- client return Forever's bronze file regardless of which visual theme is
+-- selected in the addon. Genuine gold Retail art needs
 -- the real sheet file and pixel sub-rect instead, sourced directly from
 -- Blizzard's own retail texture sheets (facts about the game client, not
 -- any third party's material): file ID, full sheet pixel dimensions, and
@@ -1333,8 +1152,8 @@ local RETAIL_PLAYER_PORTRAIT_MASK = "UI-HUD-UnitFrame-Player-Portrait-Mask"
 
 --- Applies player's real, unmirrored Retail portrait cutout to KUI's
 --- existing portrait mask (its squared lower-right opening). Target reuses
---- the plain round mask instead -- never flip a MaskTexture: live testing
---- confirmed that inverted coordinates clip the portrait fully.
+--- the plain round mask instead -- never flip a MaskTexture: inverted
+--- coordinates clip the portrait fully.
 --- @param shapeMask MaskTexture
 --- @param atlasName string
 --- @return boolean applied
@@ -1370,11 +1189,6 @@ end
 --- draws the real thing natively there.
 --- @param atlasName string
 --- @return table|nil info shaped like C_Texture.GetAtlasInfo's own return
--- Debug trail: ResolveRetailAtlasOverride has three independent gates, any
--- one of which silently falling through explains "still looks like
--- Forever" with no error. Recorded here instead of guessing; read via
--- /ktretaildebug.
-KT._ktRetailAtlasDebug = KT._ktRetailAtlasDebug or {}
 
 --- Resolves an atlas name to real Retail pixel data, ignoring which theme is
 --- currently rendered. Returns nil when the client already draws the genuine
@@ -1383,6 +1197,16 @@ KT._ktRetailAtlasDebug = KT._ktRetailAtlasDebug or {}
 --- must always show real Retail art even while another theme is active.
 --- @param atlasName string
 --- @return table|nil info shaped like C_Texture.GetAtlasInfo's own return
+function KT.VisualThemes:GetForeverAtlasPixels(atlasName)
+    if type(atlasName) ~= "string" or atlasName:lower() ~= "ui-hud-unitframe-player-portraiton" then return nil end
+    return {
+        file = [[Interface\AddOns\KullThranUI\Libraries\texture\media\portraits\forever_unitframe.tga]],
+        width = 198, height = 71,
+        leftTexCoord = 1 / 256, rightTexCoord = 199 / 256,
+        topTexCoord = 246 / 512, bottomTexCoord = 317 / 512,
+    }
+end
+
 function KT.GetRetailAtlasPixels(atlasName)
     if type(atlasName) ~= "string" then return nil end
     local entry = RETAIL_ATLAS_OVERRIDES[atlasName:lower()]
@@ -1404,29 +1228,18 @@ function KT.GetRetailAtlasPixels(atlasName)
 end
 
 local function ResolveRetailAtlasOverride(atlasName)
-    local trail = { atlasName = atlasName }
-    KT._ktRetailAtlasDebug[atlasName or "?"] = trail
     local renderedTheme = KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
         and KT.VisualThemes:GetRenderedTheme()
-    trail.renderedTheme = renderedTheme
-    if renderedTheme ~= "retail" then trail.result = "not-retail-theme"; return nil end
+    if renderedTheme ~= "retail" then return nil end
     local entry = atlasName and RETAIL_ATLAS_OVERRIDES[atlasName:lower()]
-    trail.foundEntry = entry ~= nil
-    if not entry then trail.result = "no-table-entry"; return nil end
-    -- Empirical check: ask the
-    -- CLIENT what this atlas name resolves to right now, rather than
-    -- trusting a client-flavor flag. Confirmed live via /ktretaildebug:
-    -- KT:IsForever() returned false on this exact client despite the art
-    -- clearly being Forever's remapped bronze -- that flag is unreliable
-    -- here. If the live file already matches the expected real file,
-    -- nothing has remapped this atlas; let the normal path draw it
-    -- natively instead of overriding something that's already correct.
+    if not entry then return nil end
+    -- Ask the client what this atlas resolves to right now instead of
+    -- trusting a client-flavor flag, which can be wrong. If the live file
+    -- already matches the expected file, nothing remapped the atlas and the
+    -- normal path draws it natively.
     local liveInfo = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlasName)
     local liveFile = liveInfo and (liveInfo.file or liveInfo.filename)
-    trail.liveFile = liveFile
-    trail.expectedFile = entry.file
-    if liveFile == entry.file then trail.result = "already-native"; return nil end
-    trail.result = "applied"
+    if liveFile == entry.file then return nil end
     return {
         file = entry.file,
         width = entry.width or (entry.right - entry.left),
@@ -1470,13 +1283,15 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     end
 
     local retailOverrideInfo = ResolveRetailAtlasOverride(geom.art)
-    local info = retailOverrideInfo
+    local foreverOverrideInfo = renderedTheme == "forever" and _G.WOW_PROJECT_MAINLINE
+        and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE and self:GetForeverAtlasPixels(geom.art)
+    local info = foreverOverrideInfo or retailOverrideInfo
         or (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(geom.art))
     if not info then
         -- C_Texture.GetAtlasInfo can return nil very early after login,
         -- before all game data tables are populated, even for a perfectly
-        -- valid atlas name that resolves fine moments later -- confirmed
-        -- live: Forever rendered black on first entering the game and only
+        -- valid atlas name that resolves fine moments later: Forever
+        -- rendered black on first entering the game and only
         -- looked right after a manual /reload, which re-runs this from
         -- scratch later in the loading sequence once the atlas IS
         -- available. Same retry pattern this codebase already uses for an
@@ -1497,6 +1312,11 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         return
     end
     frame._ktForeverArtRetries = nil
+    frame._ktStockArtSelection = {
+        theme = renderedTheme, atlas = geom.art, file = info.file or info.filename,
+        source = foreverOverrideInfo and "packaged-forever" or (retailOverrideInfo and "retail-override" or "client-atlas"),
+        width = info.width, height = info.height,
+    }
 
     -- The same stock-box scale resolver is shared with Classic, so attached
     -- and circular layouts interpret the configured width identically.
@@ -1512,6 +1332,22 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- one (extend right). The bars grow only toward the portrait, preserving
     -- their outer edge instead of translating the whole StatusBar.
     local ringShiftX = (frame._ktRingHugShift and (tonumber(frame._ktRingHugShift) or 0)) or 0
+    local nativeClassification = frame._ktNativeClassificationKind ~= nil
+    local nameShiftX = nativeClassification and 0 or ringShiftX
+    local nameWidth = geom.name and geom.name.w * scale or 0
+    if nativeClassification and geom.name then
+        -- Use the opening's measured head-side reach, independently of
+        -- padding on the opposite side of the atlas.
+        local headReach = (frame._ktNativeClassificationHeadReach or 36) * geom.portrait.size / 58
+        if unit == "player" then
+            local headRight = geom.portrait.x + 3 + geom.portrait.size / 2 + headReach
+            nameShiftX = math.max(0, headRight + 2 - geom.name.x) * scale
+            nameWidth = math.max(1, nameWidth - nameShiftX)
+        elseif unit == "target" then
+            local headLeft = geom.w + geom.portrait.x - geom.portrait.size / 2 - headReach
+            nameWidth = math.max(1, math.min(nameWidth, (headLeft - 2 - geom.name.x) * scale))
+        end
+    end
     local portraitExtension = 0
     local barShiftX = 0
     if unit == "player" and ringShiftX < 0 then
@@ -1526,6 +1362,15 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     local host = EnsureArtHost(frame, "_ktForeverArtHost")
     if not host then return end
     SyncArtLayers(frame, host, false)
+    if unit == "player" and nativeClassification then
+        -- The extended bars run behind the circular portrait. Its mask
+        -- exposes the bars only outside the opening instead of cutting a
+        -- rectangular bite into the photo/model at the near edge.
+        local topBarLevel = math.max(frame.Health and frame.Health:GetFrameLevel() or 0,
+            frame.Power and frame.Power:GetFrameLevel() or 0)
+        unitRegion:SetFrameLevel(topBarLevel + 1)
+        if unitRegion._3d then unitRegion._3d:SetFrameLevel(topBarLevel + 2) end
+    end
 
     local art = frame._ktForeverPortraitArt
     if not art then
@@ -1533,20 +1378,19 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         UnsnapTexture(art)
         frame._ktForeverPortraitArt = art
     end
-    -- A full-box solid fill behind `art` was tried and reverted (the real
-    -- atlas is the whole bar-area background graphic, genuinely transparent
-    -- over large parts of the box). A second attempt, seated on `host`
-    -- behind `art`'s own sublevel, was ALSO wrong -- confirmed live: `host`
+    -- A full-box solid fill behind `art` does not work: the real atlas is the
+    -- whole bar-area background graphic and is genuinely transparent over
+    -- large parts of the box. Seating the patch on `host` behind `art`'s own
+    -- sublevel is also wrong: `host`
     -- (SyncArtLayers) sits at a higher frame level than `unitRegion`
     -- (frame.Portrait.backdrop), so anything opaque on `host` covers the
     -- portrait photo entirely wherever the ring art is transparent, not
     -- just the small edge gap. The photo itself is on `unitRegion`'s own
     -- frame level; a patch needs to live THERE, below the photo's own
     -- sublevel, for the photo to draw over it normally and reveal it only
-    -- where neither the photo nor the ring draws anything. Masked with its
-    -- own circular MaskTexture (expanded a few px past the portrait) per
-    -- explicit user request, instead of the square block the unmasked
-    -- version showed.
+    -- where neither the photo nor the ring draws anything. It is masked with its
+    -- own circular MaskTexture (expanded a few px past the portrait) so it
+    -- does not show as a square block.
     local fill = frame._ktForeverPortraitArtFill
     if not fill then
         fill = unitRegion:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -1563,7 +1407,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     fillMask:ClearAllPoints()
     -- Reverted 10 -> 6: enlarging the CIRCLE enough to reach the dome's
     -- flat-bottom corner overshot past the ring's own round top/sides --
-    -- confirmed live, a black crescent then peeked out past the gold ring
+    -- so a black crescent peeked out past the gold ring
     -- there. A circle can't fit both without distortion; the corners are
     -- handled separately below with their own small square patches instead
     -- of stretching this one.
@@ -1581,16 +1425,16 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- hand-authored concave mask above instead of a plain square -- a
     -- square/circle needed several rounds of margin tuning and still either
     -- fell short of the corner or overshot the round edge.
-    -- Originally patched BOTH bottom corners every call (the "redundant"
+    -- Both bottom corners are not patched on every call: the "redundant"
     -- side meant to stay invisibly hidden behind the ring's own opaque
-    -- corner). Confirmed live that it isn't actually hidden: the level
+    -- corner is not actually hidden. The level
     -- badge (_kuiLevelCircle) sits right in that same corner and its own
     -- texture has a transparent square margin around its round art, so the
-    -- redundant patch peeked out through THAT corner instead -- a second,
-    -- unrelated collision the ring-opacity reasoning didn't cover. The
-    -- other side was never fixing a real gap to begin with (the ring
-    -- already covers it natively), so only the real corner gets a patch
-    -- now; the other is explicitly hidden.
+    -- redundant patch would peek out through THAT corner -- a second,
+    -- unrelated collision the ring-opacity reasoning doesn't cover. The
+    -- other side never fixes a real gap to begin with (the ring
+    -- already covers it natively), so only the real corner gets a patch;
+    -- the other is explicitly hidden.
     local cornerOverlap = 4 * scale
     local cornerScale = 1.25
     local cornerW, cornerH = DOME_CORNER_MASK_W * scale * cornerScale, DOME_CORNER_MASK_H * scale * cornerScale
@@ -1652,11 +1496,14 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     if shapeMask then
         -- Player-only: target now mirrors player's own atlas (see the
         -- comment above FOREVER_FRAME_GEOMETRY.target), and MaskTexture
-        -- mirroring via SetTexCoord was already confirmed live to make the
+        -- mirroring via SetTexCoord makes the
         -- whole portrait disappear -- never attempt it on target's mask.
         local appliedRetailMask = isRetailTheme and unit == "player" and not circularPortrait
             and ApplyRetailStockPortraitMask(shapeMask, RETAIL_PLAYER_PORTRAIT_MASK)
-        if not appliedRetailMask then
+        if nativeClassification then
+            shapeMask:SetAtlas("CircleMask", false)
+            shapeMask:SetTexCoord(0, 1, 0, 1)
+        elseif not appliedRetailMask then
             -- Reset texcoord too, not just the texture -- a stale flip from
             -- the mirrored Retail target would otherwise persist onto the
             -- plain round mask after switching themes or hitting a fallback.
@@ -1675,13 +1522,15 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- discarding the override for the unmirrored (player) case.
     if info.leftTexCoord and info.rightTexCoord
         and info.topTexCoord and info.bottomTexCoord and (info.file or info.filename) then
-        art:SetTexture(info.file or info.filename)
+        art._ktGlowTextureFile = info.file or info.filename
+        art:SetTexture(art._ktGlowTextureFile)
         if geom.mirror then
             art:SetTexCoord(info.rightTexCoord, info.leftTexCoord, info.topTexCoord, info.bottomTexCoord)
         else
             art:SetTexCoord(info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord)
         end
     else
+        art._ktGlowTextureFile = nil
         art:SetAtlas(geom.art)
     end
     art:ClearAllPoints()
@@ -1711,7 +1560,7 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- shown): plain round shape instead of Retail's drop-shaped stock mask, so
     -- it needs the normal mask-padding compensation (nil) instead of 0.
     SeatStockPortrait(unitRegion, frame, portrait, scale,
-        (isRetailTheme and not circularPortrait) and 0 or nil)
+        (nativeClassification or (isRetailTheme and not circularPortrait)) and 0 or nil)
 
     local health = frame.Health
     if geom.health and type(health) == "table" and health.ClearAllPoints then
@@ -1726,8 +1575,8 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         ApplyForeverBarMask(health, geom.health, scale, portraitExtension)
         ResizeHealthPrediction(frame, geom.health.w * scale + portraitExtension, geom.health.h * scale)
         -- TEMPORARY debug: cache the exact arithmetic that just ran, and the
-        -- width immediately after SetSize, so /ktforevertab can show whether
-        -- something ELSE changes it before the user inspects it later.
+        -- width immediately after SetSize, so the diagnostic dump can show whether
+        -- something ELSE changes it before it is inspected later.
         frame._ktDebugHealthCalc = string.format(
             "scale=%.4f geomW=%.2f geomH=%.2f setW=%.4f setH=%.4f postSetGetWidth=%s",
             scale, geom.health.w, geom.health.h,
@@ -1757,27 +1606,28 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         -- frame.Health has SetClipsChildren(true) (CreateAbsorbBar); nameText's
         -- normal parent chain (frame.LeftText -> _textOverlay -> frame.Health)
         -- inherits that clip. See the identical comment in
-        -- ApplyClassicUnitFrameArt for why this reparent is needed -- confirmed
-        -- live, the name was correctly positioned/sized/texted and still
+        -- ApplyClassicUnitFrameArt for why this reparent is needed: the name
+        -- was correctly positioned/sized/texted and still
         -- invisible until this fix.
         if nameText.SetParent then nameText:SetParent(host) end
         nameText:ClearAllPoints()
         nameText:SetPoint(point, frame, point,
-            geom.name.x * scale + ringShiftX, geom.name.y * scale)
-        if nameText.SetWidth then nameText:SetWidth(geom.name.w * scale) end
+            geom.name.x * scale + nameShiftX, geom.name.y * scale)
+        if nameText.SetWidth then nameText:SetWidth(nameWidth) end
         if nameText.SetJustifyH then nameText:SetJustifyH(geom.name.justify or "LEFT") end
         frame._ktDebugNameCalc = string.format(
             "point=%s x=%.4f y=%.4f w=%.4f postSetGetWidth=%s postSetText=%s",
-            tostring(point), geom.name.x * scale + ringShiftX, geom.name.y * scale, geom.name.w * scale,
+            tostring(point), geom.name.x * scale + nameShiftX, geom.name.y * scale, nameWidth,
             tostring(nameText.GetWidth and nameText:GetWidth()),
             tostring(nameText.GetText and nameText:GetText()))
     end
 
     local barTextMaxHeight = geom.health.h * scale
-    ScaleStockBarText(frame.LeftText, scale, barTextMaxHeight)
-    ScaleStockBarText(frame.RightText, scale, barTextMaxHeight)
-    ScaleStockBarText(frame.CenterText, scale, barTextMaxHeight)
-    -- Explicit user rule: a name long enough to overflow the real tab's
+    self:ApplyBlizzardBarText(frame.LeftText, scale, barTextMaxHeight)
+    self:ApplyBlizzardBarText(frame.RightText, scale, barTextMaxHeight)
+    self:ApplyBlizzardBarText(frame.CenterText, scale, barTextMaxHeight)
+    self:ApplyBlizzardBarText(frame.Power and frame.Power._ppFS, scale, geom.power.h * scale)
+    -- A name long enough to overflow the real tab's
     -- real width shrinks further, on top of the uniform theme scale above,
     -- rather than spilling past the tab or overlapping the buffs below it.
     -- Must target the SAME object just positioned in the tab (`nameText`,
@@ -1786,10 +1636,11 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
     -- differ (that FontString was never moved, so fitting it did nothing
     -- useful and left the actual tab text unfitted).
     if geom.name then
-        FitTextToWidth(nameText, geom.name.w * scale)
+        FitTextToWidth(nameText, nameWidth)
+        self:ApplyBlizzardNameText(nameText, scale, nameWidth)
     end
 
-    -- Buffs move into the same real name tab, per explicit user request --
+    -- Buffs move into the same real name tab --
     -- Forever-only for now (Classic/Retail keep their existing Health-bar-
     -- relative anchor untouched). Anchored so the icon ROW's bottom edge
     -- sits on the tab's own top edge, growing upward from it -- the tab
@@ -1800,14 +1651,14 @@ function KT.VisualThemes:ApplyForeverUnitFrameArt(frame, unitRegion, unit)
         local tabW = geom.health.w * scale
         local iconSize = math.max(8, geom.health.h * scale)
         local gap = buffs.spacing or 1
-        -- Confirmed live: sharing the exact same Y as the name tab's own top
+        -- Sharing the exact same Y as the name tab's own top
         -- edge left zero margin between buffs (growing up from that line)
         -- and the name text (growing down from it) -- close enough that
         -- icon borders/glow and text ascenders overlapped a little, on both
         -- player and target. Nudging buffs' own anchor a few pixels further
         -- up (name's own position is untouched) opens a small gap.
         local buffsY = geom.name.y + BUFFS_TAB_GAP
-        -- Explicit user request, confirmed by screenshot: target's buffs sat
+        -- Target's buffs sat
         -- visibly lower than player's despite sharing this same formula
         -- (geom.name.y is identical for both in FOREVER_FRAME_GEOMETRY) --
         -- a small target-only nudge upward to match.
@@ -1835,6 +1686,10 @@ end
 --- @param frame Frame|Region the unit frame passed to ApplyForeverUnitFrameArt
 function KT.VisualThemes:ClearForeverUnitFrameArt(frame)
     if type(frame) ~= "table" then return end
+    for _, fs in pairs({ frame.LeftText, frame.RightText, frame.CenterText,
+        frame.Power and frame.Power._ppFS, frame._kuiLevelText }) do
+        fs._ktBlizzBar = nil
+    end
 
     local art = frame._ktForeverPortraitArt
     if art then art:Hide() end
@@ -2029,6 +1884,7 @@ function KT.VisualThemes:ApplyPetFrameArt(frame, unitRegion, kind, opts)
     if nameText then
         ScaleStockBarText(nameText, scale, math.max(barMax, 11 * scale), 0.8)
         FitTextToWidth(nameText, geom.name.w * scale)
+        self:ApplyBlizzardNameText(nameText, scale, geom.name.w * scale)
     end
     for _, fs in ipairs({ frame.LeftText, frame.RightText, frame.CenterText }) do
         if fs and fs ~= nameText then ScaleStockBarText(fs, scale, barMax, ratio) end

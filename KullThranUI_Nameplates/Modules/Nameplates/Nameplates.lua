@@ -1326,6 +1326,10 @@ ns.EstimateHealthTextWidth = EstimateHealthTextWidth
 
 local function GetHealthBarWidth()
     local extra = KullThranUINameplatesDB and KullThranUINameplatesDB.healthBarWidth or defaults.healthBarWidth
+    -- Style width only while the player keeps the default width.
+    if extra == defaults.healthBarWidth and ns.ThemeBarWidthExtra then
+        extra = ns.ThemeBarWidthExtra() or extra
+    end
     return BAR_W + extra
 end
 ns.GetHealthBarWidth = GetHealthBarWidth
@@ -1496,22 +1500,27 @@ ns.StopButtonGlow      = StopButtonGlow
 ns.StartAutoCastShine  = StartAutoCastShine
 ns.StopAutoCastShine   = StopAutoCastShine
 
--- Los glows de nameplates deben quedar por encima de otros elementos de interfaz.
-local NAMEPLATE_GLOW_STRATA = "TOOLTIP"
+-- Nameplate glows share the strata of the aura slot they decorate and rise
+-- above it by frame level, so windows such as the world map still cover them.
+local function GetNameplateGlowStrata(owner)
+    local strata = owner and owner.GetFrameStrata and owner:GetFrameStrata()
+    return strata or "BACKGROUND"
+end
 local NAMEPLATE_GLOW_FRAME_LEVEL = 1000
 local function RaiseNameplateGlowLayers(glowObject)
     local wrapper = glowObject and glowObject.wrapper
     if not wrapper then return end
-    wrapper:SetFrameStrata(NAMEPLATE_GLOW_STRATA)
+    local strata = GetNameplateGlowStrata(wrapper:GetParent())
+    wrapper:SetFrameStrata(strata)
     wrapper:SetFrameLevel(NAMEPLATE_GLOW_FRAME_LEVEL)
     local overlay = wrapper.overlay
     if overlay then
-        overlay:SetFrameStrata(NAMEPLATE_GLOW_STRATA)
+        overlay:SetFrameStrata(strata)
         overlay:SetFrameLevel(NAMEPLATE_GLOW_FRAME_LEVEL + 1)
     end
     local autoGlow = wrapper._ktAutoCastGlow
     if autoGlow then
-        autoGlow:SetFrameStrata(NAMEPLATE_GLOW_STRATA)
+        autoGlow:SetFrameStrata(strata)
         autoGlow:SetFrameLevel(NAMEPLATE_GLOW_FRAME_LEVEL + 1)
     end
     local flipTex = glowObject.flipTex
@@ -1554,7 +1563,7 @@ local function EnsureDebuffExpiryGlow(slot)
     wrapper:SetPoint("CENTER", slot, "CENTER", 0, 0)
     wrapper:SetSize(1, 1)
     wrapper:SetFrameLevel(slot:GetFrameLevel() + 8)
-    wrapper:SetFrameStrata(NAMEPLATE_GLOW_STRATA)
+    wrapper:SetFrameStrata(GetNameplateGlowStrata(slot))
     if wrapper.EnableMouse then
         wrapper:EnableMouse(false)
     end
@@ -1661,7 +1670,7 @@ local function BuildGlowFrameSet(slot, field, initAlpha)
     local wrapper = CreateFrame("Frame", nil, slot)
     wrapper:SetAllPoints()
     wrapper:SetFrameLevel(slot:GetFrameLevel() + 1)
-    wrapper:SetFrameStrata(NAMEPLATE_GLOW_STRATA)
+    wrapper:SetFrameStrata(GetNameplateGlowStrata(slot))
 
     local flipTex = wrapper:CreateTexture(nil, "OVERLAY", nil, 7)
     flipTex:SetPoint("CENTER")
@@ -1874,10 +1883,10 @@ local GetClassPowerTopPush
 -- Aura layout subsystem
 --  Sistema de layout de auras — separa cálculo geométrico de aplicación.
 --
---  Fase 1  (ResolveOffsets):  slotKey → DB key → posición → XY.
---  Fase 2  (BuildPlacement):  genera tabla de descriptores de ancla
+--  Paso 1  (ResolveOffsets):  slotKey → DB key → posición → XY.
+--  Paso 2  (BuildPlacement):  genera tabla de descriptores de ancla
 --            {pt, rel, relPt, x, y}[1..count] sin tocar frames.
---  Fase 3  (Commit):          aplica descriptores sobre frames reales.
+--  Paso 3  (Commit):          aplica descriptores sobre frames reales.
 --
 --  MeasureLateralExtent + CommitArrowAnchors sustituyen la antigua
 --  PositionArrowsOutsideAuras con la misma separación cálculo/aplicación.
@@ -1894,7 +1903,7 @@ ns._AuraLayout = {
     },
 }
 
---- Fase 1: resuelve offsets XY desde la DB para un slotKey de aura.
+--- Paso 1: resuelve offsets XY desde la DB para un slotKey de aura.
 --- Mapea slotKey → DB key → posición guardada → GetSlotOffsets.
 function ns._AuraLayout.ResolveOffsets(slotKey)
     local dbKey = ns._AuraLayout.SLOT_DB_MAP[slotKey]
@@ -1906,7 +1915,7 @@ end
 
 local GetTopTextVerticalLift
 
---- Fase 2: construye descriptores de anclaje para count iconos.
+--- Paso 2: construye descriptores de anclaje para count iconos.
 --- Retorna nil si count < 1 o el slot no es reconocido.
 --- Cada entry: {pt, rel, relPt, x, y} — listo para PP.Point directo.
 function ns._AuraLayout.BuildPlacement(slot, count, sizeW, gap, plate, dx, dy, slotKey)
@@ -2003,7 +2012,7 @@ function ns._AuraLayout.BuildPlacement(slot, count, sizeW, gap, plate, dx, dy, s
     return (#anchors > 0) and anchors or nil
 end
 
---- Fase 3: aplica descriptores de ancla sobre los frames.
+--- Paso 3: aplica descriptores de ancla sobre los frames.
 --- No calcula geometría; sólo itera y ejecuta PP.Point.
 function ns._AuraLayout.Commit(frames, count, anchors)
     if not anchors then return end
@@ -2133,6 +2142,10 @@ end
 function ns._AuraLayout.CommitArrowAnchors(plate)
     if not (plate.leftArrow and plate.leftArrow:IsShown()) then return end
     local extL, extR = ns._AuraLayout.MeasureLateralExtent(plate)
+    if ns.ThemeLateralExtent then
+        local tl, tr = ns.ThemeLateralExtent(plate)
+        extL, extR = math.max(extL, tl), math.max(extR, tr)
+    end
     local arrowGap = 8
     plate.leftArrow:ClearAllPoints()
     plate.rightArrow:ClearAllPoints()
@@ -2147,11 +2160,11 @@ ns.PositionArrowsOutsideAuras = function(plate) ns._AuraLayout.CommitArrowAnchor
 --  Sistema visual por capas para adornos de placa (target, focus, arrows).
 --
 --  Arquitectura en 3 fases:
---    Fase 1 – Resolución de estado: ns._ResolveTargetVisuals lee DB + unit
+--    Paso 1 – Resolución de estado: ns._ResolveTargetVisuals lee DB + unit
 --             y devuelve un descriptor plano con lo que cada capa necesita.
---    Fase 2 – Adquisición de recursos: ns._AcquireVisualLayer construye
+--    Paso 2 – Adquisición de recursos: ns._AcquireVisualLayer construye
 --             o reutiliza los objetos gráficos de una capa concreta.
---    Fase 3 – Commit: ApplyTarget / UpdateHealthColor aplican el descriptor
+--    Paso 3 – Commit: ApplyTarget / UpdateHealthColor aplican el descriptor
 --             sobre los recursos ya adquiridos, mostrando u ocultando.
 --
 --  Separar cálculo y aplicación permite que un refresh parcial (ej: cambio
@@ -2160,7 +2173,7 @@ ns.PositionArrowsOutsideAuras = function(plate) ns._AuraLayout.CommitArrowAnchor
 local GLOW_TEX = "Interface\\AddOns\\KullThranUI_Nameplates\\Modules\\Nameplates\\Media\\background.png"
 local GLOW_EXTEND = 6
 
--- Fase 1: resolución de estado visual de target y adornos laterales.
+-- Paso 1: resolución de estado visual de target y adornos laterales.
 -- Devuelve un descriptor ligero (no crea objetos) que el commit consume.
 -- Se almacena en ns.* porque no podemos añadir locales de archivo (200).
 ns._ResolveTargetVisuals = function(plate, unit)
@@ -2189,7 +2202,7 @@ ns._ResolveTargetVisuals = function(plate, unit)
     return desc
 end
 
--- Fase 2: pool de recursos visuales por capa. Cada capa se construye una
+-- Paso 2: pool de recursos visuales por capa. Cada capa se construye una
 -- sola vez por placa y se reutiliza en sucesivos targets.  La separación
 -- de la construcción respecto al commit permite que la geometría sea
 -- inmutable y el commit solo toque visibilidad y tintes.
@@ -2386,12 +2399,12 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
         end
     end
 -- Nameplate border subsystem
-    -- Fase 1 (BuildBorderGeometry): recorre un blueprint de 8 segmentos
+    -- Paso 1 (BuildBorderGeometry): recorre un blueprint de 8 segmentos
     --   (4 esquinas + 4 aristas) para producir las texturas. El blueprint
     --   es estático y compartido por todas las placas.
-    -- Fase 2 (SelectBorderVariant / ApplyBorderStyle): decide cuál de
+    -- Paso 2 (SelectBorderVariant / ApplyBorderStyle): decide cuál de
     --   los dos conjuntos (colorless / simple) queda visible.
-    -- Fase 3 (TintBorderTextures / ApplyBorderColor): aplica vertex
+    -- Paso 3 (TintBorderTextures / ApplyBorderColor): aplica vertex
     --   color a ambos conjuntos en una sola pasada.
     local BORDER_TEX        = "Interface\\AddOns\\KullThranUI_Nameplates\\Modules\\Nameplates\\Media\\border-colorless.png"
     local BORDER_TEX_SIMPLE = "Interface\\AddOns\\KullThranUI_Nameplates\\Modules\\Nameplates\\Media\\border-simple.png"
@@ -2412,7 +2425,7 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
         { t = "e", a1pt = "TOPRIGHT",    a1c = 2, a1r = "BOTTOMRIGHT", a2pt = "BOTTOMRIGHT", a2c = 4, a2r = "TOPRIGHT",    dim = "w", tc = {0.5, 1, 0.5, 0.5} },
     }
 
-    -- Fase 1: construye un frame con texturas recorriendo el blueprint.
+    -- Paso 1: construye un frame con texturas recorriendo el blueprint.
     local function BuildBorderGeometry(parent, tex, color)
         local f = CreateFrame("Frame", nil, parent)
         f:SetFrameLevel(parent:GetFrameLevel() + 5)
@@ -2443,7 +2456,7 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     plate.borderFrame        = BuildBorderGeometry(plate.health, BORDER_TEX,        bc)
     plate._simpleBorderFrame = BuildBorderGeometry(plate.health, BORDER_TEX_SIMPLE, bc)
 
-    -- Fase 2: selecciona el variante visible según estilo de DB
+    -- Paso 2: selecciona el variante visible según estilo de DB
     function plate:ApplyBorderStyle()
         local style = GetBorderStyle()
         if style == "none" then
@@ -2457,7 +2470,7 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
             plate._simpleBorderFrame:Hide()
         end
     end
-    -- Fase 3: aplica vertex color a ambos conjuntos de texturas
+    -- Paso 3: aplica vertex color a ambos conjuntos de texturas
     function plate:ApplyBorderColor()
         local cr, cg, cb = GetBorderColor()
         for _, tex in ipairs(plate.borderFrame._texs) do tex:SetVertexColor(cr, cg, cb) end
@@ -2608,7 +2621,6 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     plate.debuffs = {}
     for i = 1, 4 do
         local d = CreateFrame("Frame", nil, plate)
-        d:SetFrameStrata("MEDIUM")
         d:SetFrameLevel(800)
         PP.Size(d, 26, 26)
         PP.Point(d, "BOTTOM", plate.name, "TOP", (i - 2.5) * 30, 2)
@@ -2648,7 +2660,6 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     plate.buffs = {}
     for i = 1, 4 do
         local b = CreateFrame("Frame", nil, plate)
-        b:SetFrameStrata("MEDIUM")
         b:SetFrameLevel(800)
         PP.Size(b, 24, 24)
         PP.Point(b, "RIGHT", plate.health, "LEFT", -2 - (i - 1) * 26, 0)
@@ -2688,7 +2699,6 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     plate.cc = {}
     for i = 1, 2 do
         local c = CreateFrame("Frame", nil, plate)
-        c:SetFrameStrata("MEDIUM")
         c:SetFrameLevel(800)
         PP.Size(c, 24, 24)
         PP.Point(c, "LEFT", plate.health, "RIGHT", 2 + (i - 1) * 26, 0)
@@ -3302,6 +3312,13 @@ local classPowerFormReq  -- required GetShapeshiftFormID() value, or nil if no f
 local CP_PIP_W, CP_PIP_H = 8, 3  -- pip geometry
 local CP_CIRCLE_MASK = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
 local CP_CIRCLE_BORDER = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_border.tga"
+-- Outer ring colour of the round combo/class-power pips: gold, bronze (#DC8560) in Forever.
+local function CPCircleBorderColor()
+    if ns.NameplateStyle and ns.NameplateStyle() == "forever" then
+        return 0.862745, 0.521569, 0.376471
+    end
+    return 1, 0.82, 0.08
+end
 
 -- Per-class filled pip colors (official WoW class colors)
 local CP_CLASS_COLORS = {
@@ -3397,7 +3414,8 @@ local function ApplyClassPowerPipShape(pip, round)
             pip._circleBorder:SetTexture(CP_CIRCLE_BORDER)
             pip._circleBorder:SetAllPoints(pip)
         end
-        pip._circleBorder:SetVertexColor(1, 0.82, 0.08, 1)
+        local br, bg, bb = CPCircleBorderColor()
+        pip._circleBorder:SetVertexColor(br, bg, bb, 1)
         pip._circleBorder:Show()
         SetPipDecor(pip, false)
     else
@@ -3581,7 +3599,7 @@ local function UpdateClassPowerOnPlate(plate)
         anchorPoint, anchorRelPoint, anchorFrame, yDir = "TOP", "BOTTOM", plate.health, -1
     end
 
-    -- === Fase 1: Recursos de tipo barra (Stagger, Insanity, Focus) ===
+    -- === Paso 1: Recursos de tipo barra (Stagger, Insanity, Focus) ===
     local barDef = ns._BarResourceDefs[classPowerType]
     if barDef then
         -- Ocultar todos los pips: la barra los reemplaza
@@ -3625,7 +3643,7 @@ local function UpdateClassPowerOnPlate(plate)
         return
     end
 
-    -- === Fase 2: Recursos de tipo pip ===
+    -- === Paso 2: Recursos de tipo pip ===
     -- Ocultar barra si venimos de un recurso tipo barra
     if plate._cpBar then plate._cpBar:Hide() end
 
@@ -3665,12 +3683,12 @@ local function UpdateClassPowerOnPlate(plate)
     -- CP_PIP_W/H (8x3) is a thin flat bar-segment shape, meant for the
     -- rectangular look -- a circular mask on an 8:3 box clips down to the
     -- smaller dimension (3), producing an almost invisible sliver.
-    -- Confirmed live: combo points on nameplates barely showed at all.
+    -- Combo points on nameplates barely showed at all.
     -- Round pips use a square sized to the width (8), a far more visible
     -- circle than the flat height would give.
     if comboRound then
-        -- Explicit user request: the initial +25% still looked too small on
-        -- a real nameplate (confirmed via screenshot) -- bumped further.
+        -- The initial +25% still looked too small on
+        -- a real nameplate, so it is enlarged further.
         scaledW = scaledW * 2.5
         scaledH = scaledW
     end
@@ -4364,8 +4382,9 @@ local function GetReactionColor(unit)
     if type(inCombat) == "boolean" and inCombat then
         return eic.r, eic.g, eic.b
     end
-    -- Classic style keeps the saturated colour out of combat (no darkening)
-    if ns.NameplateStyle and ns.NameplateStyle() == "classic" then
+    -- Classic and Forever styles keep the saturated colour out of combat (no darkening)
+    local style = ns.NameplateStyle and ns.NameplateStyle()
+    if style == "classic" or style == "forever" then
         return eic.r, eic.g, eic.b
     end
     return DarkenColor(eic.r, eic.g, eic.b)
@@ -4873,6 +4892,9 @@ function NameplateFrame:SetUnit(unit, nameplate)
     self.nameplate = nameplate
     -- Paso 1: anclar al nameplate Blizzard
     self:SetParent(nameplate)
+    if nameplate.GetFrameStrata then
+        self:SetFrameStrata(nameplate:GetFrameStrata())
+    end
     if self.SetIgnoreParentScale then
         self:SetIgnoreParentScale(false)
     end
@@ -5410,12 +5432,12 @@ local function GetInlineNameReservedWidth(nameSlot)
     return reservedWidth
 end
 
--- Fase 3 commit: oculta las flechas de target si existen
+-- Paso 3 commit: oculta las flechas de target si existen
 local function HideTargetArrows(frame)
     ns.SetTargetIndicatorShown(frame, false)
 end
 
--- Fase 3 commit: dimensiona y muestra las flechas de target usando el
+-- Paso 3 commit: dimensiona y muestra las flechas de target usando el
 -- descriptor previamente resuelto en ns._ResolveTargetVisuals.
 local function CommitTargetArrows(frame, desc)
     if not desc.arrowsNeeded then
@@ -5427,7 +5449,7 @@ local function CommitTargetArrows(frame, desc)
     ns.SetTargetIndicatorShown(frame, true)
 end
 
--- Fase 3 commit: muestra u oculta los pips de class power en la placa
+-- Paso 3 commit: muestra u oculta los pips de class power en la placa
 -- según el descriptor de estado visual.
 local function CommitTargetClassPower(frame, desc)
     if not desc.classPowerNeeded then
@@ -5694,7 +5716,7 @@ function NameplateFrame:UpdateRaidIcon()
     self.raidFrame:Show()
     self:UpdateNameWidth()
 end
--- Fase 3 commit: aplica el estado visual de target sobre la placa.
+-- Paso 3 commit: aplica el estado visual de target sobre la placa.
 -- Consume el descriptor de ns._ResolveTargetVisuals para decidir qué
 -- capas mostrar/ocultar, evitando recálculos redundantes.
 function NameplateFrame:ApplyTarget()
@@ -5703,10 +5725,10 @@ function NameplateFrame:ApplyTarget()
         return
     end
 
-    -- Fase 1: resolver estado visual completo
+    -- Paso 1: resolver estado visual completo
     local desc = ns._ResolveTargetVisuals(self, unit)
 
-    -- Fase 2+3: glow – adquirir recurso sólo si lo necesitamos
+    -- Paso 2+3: glow – adquirir recurso sólo si lo necesitamos
     if desc.glowNeeded then
         ns._AcquireVisualLayer(self, "glow")
         local glowColor = (db and db.targetGlowColor) or defaults.targetGlowColor
@@ -5721,7 +5743,7 @@ function NameplateFrame:ApplyTarget()
         self.glow:Hide()
     end
 
-    -- Fase 3: bordes – vibrant tiñe de blanco; todo lo demás restaura color
+    -- Paso 3: bordes – vibrant tiñe de blanco; todo lo demás restaura color
     if desc.vibrantBorder then
         local color = (db and db.targetGlowColor) or defaults.targetGlowColor
         local r = (color and (color.r or color[1])) or 0.4117
@@ -5733,7 +5755,7 @@ function NameplateFrame:ApplyTarget()
         self:ApplyBorderColor()
     end
 
-    -- Fase 3: flechas y class power desde descriptor
+    -- Paso 3: flechas y class power desde descriptor
     CommitTargetArrows(self, desc)
     CommitTargetClassPower(self, desc)
 end

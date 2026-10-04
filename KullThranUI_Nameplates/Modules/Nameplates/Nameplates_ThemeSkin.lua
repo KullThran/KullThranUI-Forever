@@ -100,7 +100,7 @@ local function Build(plate, bar, key)
 
     -- ===== RETAIL / FOREVER: look Blizzard (borde claro fino, rojo glossy) =====
     local r = f.retail
-    -- RETAIL / FOREVER: Blizzard's own nameplate atlases (read from the live client with /ktnpdump).
+    -- RETAIL / FOREVER: Blizzard's own nameplate atlases.
     --   health: fill "UI-HUD-CoolDownManager-Bar" + background/border "UI-HUD-CoolDownManager-Bar-BG"
     --   cast:   fill "UI-CastingBar-Full-Standard" + background "UI-CastingBar-Background"
     local bgTex = bar:CreateTexture(nil, "BACKGROUND", nil, -7)
@@ -113,16 +113,37 @@ local function Build(plate, bar, key)
         interior:SetColorTexture(0.16, 0.03, 0.03, 1)
         f.interior = interior
     end
-    -- Forever: bronze ring that follows the EXACT silhouette of Blizzard's border:
-    -- a solid bronze texture masked by the same atlas, enlarged by PAD px, behind the BG.
-    local bronzeTex = bar:CreateTexture(nil, "BACKGROUND", nil, -8)
-    bronzeTex:SetTexture(WHITE)
-    bronzeTex:SetVertexColor(0.78, 0.55, 0.26, 1)
-    local bronzeMask = bar:CreateMaskTexture()
-    bronzeMask:SetAtlas(key == "cast" and "UI-CastingBar-Background" or "UI-HUD-CoolDownManager-Bar-BG")
-    bronzeTex:AddMaskTexture(bronzeMask)
-    f.bronzeMask = bronzeMask
-    f.bronze = { bronzeTex }
+    -- Forever: 2px bronze band between two black lines; corners softly rounded
+    -- (each ring is cut one pixel more than the one inside it).
+    local fv = {}
+    f.forever = fv
+    local function Tex(color)
+        local t = Solid(f, "OVERLAY", 6, color[1], color[2], color[3], 1)
+        fv[#fv + 1] = t
+        return t
+    end
+    local CORNERS = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
+    local BRONZE = { 0.56, 0.35, 0.16 }
+    for _, ring in ipairs({ { 1, 0, { 0, 0, 0 } }, { 2, 1, BRONZE }, { 3, 1, BRONZE }, { 4, 2, { 0, 0, 0 } } }) do
+        local d, c, color = ring[1], ring[2], ring[3]
+        local t = Tex(color)
+        t:SetPoint("TOPLEFT", bar, "TOPLEFT", -(d - c), d); t:SetPoint("TOPRIGHT", bar, "TOPRIGHT", d - c, d); t:SetHeight(1)
+        t = Tex(color)
+        t:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", -(d - c), -d); t:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", d - c, -d); t:SetHeight(1)
+        t = Tex(color)
+        t:SetPoint("TOPLEFT", bar, "TOPLEFT", -d, d - c); t:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", -d, -(d - c)); t:SetWidth(1)
+        t = Tex(color)
+        t:SetPoint("TOPRIGHT", bar, "TOPRIGHT", d, d - c); t:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", d, -(d - c)); t:SetWidth(1)
+        -- staircase pixels closing the cut corner
+        for i = 1, c - 1 do
+            local x, y = d - c + i, d - i
+            for _, corner in ipairs(CORNERS) do
+                local p = Tex(color)
+                p:SetSize(1, 1)
+                p:SetPoint(corner, bar, corner, (corner:find("LEFT") and -x or x), (corner:find("TOP") and y or -y))
+            end
+        end
+    end
     local gloss = Solid(f, "OVERLAY", 3, 1, 1, 1, 1)
     gloss:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
     gloss:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
@@ -167,8 +188,9 @@ local function SkinBar(plate, bar, bg, field, key, theme)
     f:Show()
     SetShown(f.classic, theme == "classic")
     SetShown(f.retail, false)   -- gloss/shade manuales: el atlas de Blizzard ya los trae
-    local blizzLook = theme ~= "classic"
-    if f.interior then f.interior:SetShown(blizzLook) end
+    if f.forever then SetShown(f.forever, theme == "forever") end
+    local blizzLook = theme == "retail"
+    if f.interior then f.interior:SetShown(theme ~= "classic") end
     if f.bg then
         f.bg:SetShown(blizzLook)
         if blizzLook then
@@ -184,24 +206,14 @@ local function SkinBar(plate, bar, bg, field, key, theme)
             end
         end
     end
-    if f.bronze then
-        SetShown(f.bronze, theme == "forever")
-        if theme == "forever" and f.bg and f.bronzeMask then
-            local PAD = 2
-            local tex = f.bronze[1]
-            for _, o in ipairs({ tex, f.bronzeMask }) do
-                o:ClearAllPoints()
-                o:SetPoint("TOPLEFT", f.bg, "TOPLEFT", -PAD, PAD)
-                o:SetPoint("BOTTOMRIGHT", f.bg, "BOTTOMRIGHT", PAD, -PAD)
-            end
-        end
-    end
     if bg then
         if not plate["_skinBG" .. key] then
             plate["_skinBG" .. key] = (key == "health") and { 0.12, 0.12, 0.12, 1 } or { 0.1, 0.1, 0.1, 0.9 }
         end
         if theme == "classic" then
             bg:SetColorTexture(0.05, 0.05, 0.05, 0.95)       -- resto vacio oscuro (Classic real)
+        elseif theme == "forever" and key == "cast" then
+            bg:SetColorTexture(0.06, 0.06, 0.06, 0.9)
         else
             bg:SetColorTexture(0, 0, 0, 0)                   -- el atlas BG de Blizzard pinta el fondo
         end
@@ -223,12 +235,13 @@ function ns.ApplyThemeSkin(plate)
             plate.health:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
             if plate.cast then pcall(plate.cast.SetStatusBarTexture, plate.cast, "Interface\\TargetingFrame\\UI-StatusBar") end
         else
+            -- Retail and Forever: Blizzard's nameplate bar fills
             pcall(plate.health.SetStatusBarTexture, plate.health, "UI-HUD-CoolDownManager-Bar")
             if plate.cast then pcall(plate.cast.SetStatusBarTexture, plate.cast, "UI-CastingBar-Full-Standard") end
         end
-        if theme == "classic" and plate.name then
+        if (theme == "classic" or theme == "forever") and plate.name then
             local nf, _, nfl = plate.name:GetFont()
-            local sz = ((ns.GetEnemyNameTextSize and ns.GetEnemyNameTextSize()) or 10) + 2
+            local sz = ((ns.GetEnemyNameTextSize and ns.GetEnemyNameTextSize()) or 10) + (theme == "classic" and 3 or 2)
             if nf then plate.name:SetFont(nf, sz, nfl or "OUTLINE") end
         end
     elseif plate._skinHealth and plate.ApplyBorderStyle then
@@ -246,22 +259,162 @@ end
 
 if KT then KT.RefreshNameplateTheme = function() ns.RefreshThemeSkin() end end
 
--- Classic: el nivel va en una pildora dorada pequena DENTRO del extremo derecho de la barra.
+-- Yellow "!" just left of the bar on mobs you still need for a quest (every style).
+function ns.ApplyThemeQuestIcon(plate, th)
+    local health = plate and plate.health
+    if not health then return end
+    local qi = plate._fvQuest
+    th = th or RenderedTheme()
+    local show = plate._previewQuest or (plate.unit and ns.IsQuestMob and ns.IsQuestMob(plate.unit))
+    if not show then
+        if qi then qi:Hide() end
+        return
+    end
+    if not qi then
+        qi = plate:CreateFontString(nil, "OVERLAY")
+        plate._fvQuest = qi
+    end
+    local barH = health:GetHeight() or 16
+    local font = plate.level and plate.level:GetFont() or STANDARD_TEXT_FONT
+    qi:SetFont(font, math.floor(barH + 4), "OUTLINE")
+    qi:SetText("!")
+    qi:SetTextColor(1, 0.86, 0.10, 1)
+    qi:ClearAllPoints()
+    -- Retail's Blizzard border sticks out 0.25H to the left of the bar
+    local gap = (th == "retail") and math.floor(barH * 0.25 + 4) or (th == "forever") and 7 or 5
+    qi:SetPoint("RIGHT", health, "LEFT", -gap, 0)
+    qi:Show()
+end
+
+-- Small level box with a two-tone border and 1px-cut (rounded) corners.
+local function BuildLevelBox(plate, outer, rim, fill)
+    local box = CreateFrame("Frame", nil, plate)
+    local function Rect(sub, c, l, t, r, b)
+        local tx = box:CreateTexture(nil, "BACKGROUND", nil, sub)
+        tx:SetColorTexture(c[1], c[2], c[3], 1)
+        tx:SetPoint("TOPLEFT", l, -t)
+        tx:SetPoint("BOTTOMRIGHT", -r, b)
+    end
+    -- Same layering as the Forever bar frame: outer line, rim line, black line, dark inside.
+    -- A ring cut by c pixels at each corner is the union of c + 1 overlapping rectangles.
+    local function Ring(sub, color, base, c)
+        for i = 0, c do Rect(sub, color, base + c - i, base + i, base + c - i, base + i) end
+    end
+    Ring(-5, outer, 0, 2)
+    Ring(-4, rim, 1, 1)
+    Ring(-3, { 0, 0, 0 }, 2, 0)
+    Rect(-2, fill, 3, 3, 3, 3)
+    box.txt = box:CreateFontString(nil, "OVERLAY")
+    box.txt:SetPoint("CENTER", box, "CENTER", 1, 0)
+    box.txt:SetJustifyH("CENTER")
+    return box
+end
+
+-- Fills a level box with the plate's level text (difficulty colour, yellow fallback) and sizes it.
+local function FillLevelBox(box, level, health, h, size, anchorX)
+    box:SetFrameLevel(health:GetFrameLevel() + 8)
+    local okT, txt = pcall(level.GetText, level)
+    if not okT then txt = nil end
+    local w = h
+    if type(txt) == "string" and not (issecretvalue and issecretvalue(txt)) then
+        w = math.max(h, math.floor(#txt * size * 0.62 + 8))
+    end
+    box:SetSize(w, h)
+    box:ClearAllPoints()
+    box:SetPoint("LEFT", health, "RIGHT", anchorX, 0)
+    box.txt:SetFont(level:GetFont() or STANDARD_TEXT_FONT, size, "OUTLINE")
+    local okC, cr, cg, cb = pcall(level.GetTextColor, level)
+    if okC and cr and not (cr == 0 and cg == 0 and cb == 0) then box.txt:SetTextColor(cr, cg, cb, 1) else box.txt:SetTextColor(1, 0.82, 0, 1) end
+    box.txt:SetText(txt or "")
+    level:SetAlpha(0)
+    box:SetShown(level:IsShown() and true or false)
+end
+
+-- Forever: yellow level box just right of the bar (original Forever plate).
+local function ApplyForeverLevel(plate, level, health)
+    local fb = plate._fvBadge
+    if not fb then
+        fb = BuildLevelBox(plate, { 0, 0, 0 }, { 1, 0.82, 0 }, { 0.02, 0.02, 0.02 })
+        plate._fvBadge = fb
+    end
+    local barH = health:GetHeight() or 16
+    -- as tall as the bar with its 4px frame
+    FillLevelBox(fb, level, health, math.floor(barH + 8), math.max(9, math.floor(barH * 0.7)), 6)
+    fb.txt:SetTextColor(1, 0.82, 0, 1)
+end
+
+-- Classic: filled gold pill (black edge, light gold rim, darker gold inside); the ends are circles.
+local CIRCLE_MASK = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
+local PILL_LAYERS = {
+    { 0, 0.02, 0.02, 0.02, -4 },
+    { 1, 0.88, 0.74, 0.36, -3 },
+    { 2, 0.58, 0.46, 0.15, -2 },
+}
+local function BuildClassicPill(plate)
+    local box = CreateFrame("Frame", nil, plate)
+    box.layers = {}
+    for _, L in ipairs(PILL_LAYERS) do
+        local parts = { inset = L[1] }
+        for i = 1, 3 do
+            local t = box:CreateTexture(nil, "BACKGROUND", nil, L[5])
+            t:SetColorTexture(L[2], L[3], L[4], 1)
+            if i ~= 2 then
+                -- circle_mask.tga is a MASK: applied over a solid colour texture
+                local m = box:CreateMaskTexture()
+                m:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+                m:SetAllPoints(t)
+                t:AddMaskTexture(m)
+            end
+            parts[i] = t
+        end
+        box.layers[#box.layers + 1] = parts
+    end
+    box.txt = box:CreateFontString(nil, "OVERLAY")
+    box.txt:SetPoint("CENTER", box, "CENTER", 0, 0)
+    box.txt:SetJustifyH("CENTER")
+    box.txt:SetShadowColor(0, 0, 0, 1)
+    box.txt:SetShadowOffset(1, -1)
+    return box
+end
+
+local function LayoutClassicPill(box, w, h)
+    w = math.max(w, h)
+    box:SetSize(w, h)
+    for _, p in ipairs(box.layers) do
+        local i = p.inset
+        local d = h - 2 * i
+        p[1]:ClearAllPoints(); p[1]:SetSize(d, d); p[1]:SetPoint("LEFT", box, "LEFT", i, 0)
+        p[3]:ClearAllPoints(); p[3]:SetSize(d, d); p[3]:SetPoint("RIGHT", box, "RIGHT", -i, 0)
+        p[2]:ClearAllPoints()
+        p[2]:SetPoint("TOPLEFT", box, "TOPLEFT", i + d / 2, -i)
+        p[2]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(i + d / 2), i)
+    end
+end
+
+-- Classic: el nivel va en una pildora dorada que solapa el extremo derecho de la barra.
 function ns.ApplyThemeLevel(plate)
     local level, health = plate and plate.level, plate and plate.health
     if not (level and health) then return end
     local badge = plate._clBadge
     local th = RenderedTheme()
+    ns.ApplyThemeQuestIcon(plate, th)
+    if th == "forever" then
+        if badge then badge:Hide() end
+        if plate._blzBadge then plate._blzBadge:Hide() end
+        ApplyForeverLevel(plate, level, health)
+        return
+    end
+    if plate._fvBadge then plate._fvBadge:Hide() end
     if th ~= "classic" then
         level:SetAlpha(1)
         if badge then badge:Hide() end
         local bb = plate._blzBadge
-        if th ~= "retail" and th ~= "forever" then
+        if th ~= "retail" then
             if bb then bb:Hide() end
             level:SetJustifyH("RIGHT")
             return
         end
-        -- Retail/Forever: nivel en BLANCO, sin placa ni textura, dentro de la barra al inicio y tan grande como la barra;
+        -- Retail: nivel en BLANCO, sin placa ni textura, dentro de la barra al inicio y tan grande como la barra;
         -- el nombre se desplaza a su derecha (ns.ThemeLevelInset).
         if not bb then
             bb = CreateFrame("Frame", nil, plate)
@@ -287,51 +440,33 @@ function ns.ApplyThemeLevel(plate)
     end
     if plate._blzBadge then plate._blzBadge:Hide() end
     if not badge then
-        badge = CreateFrame("Frame", nil, plate)
-        badge:SetFrameLevel(health:GetFrameLevel() + 8)
-        local CIRCLE = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\media\\portraits\\circle_mask.tga"
-        -- circle_mask.tga es una MASCARA: se usa como MaskTexture sobre texturas de color solido
-        -- (tintarla como textura normal la dejaba negra).
-        local function Oval(sub, r, g, b, inset)
-            local t = badge:CreateTexture(nil, "BACKGROUND", nil, sub)
-            t:SetColorTexture(r, g, b, 1)
-            t:SetPoint("TOPLEFT", inset, -inset); t:SetPoint("BOTTOMRIGHT", -inset, inset)
-            local m = badge:CreateMaskTexture()
-            m:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            m:SetPoint("TOPLEFT", inset, -inset); m:SetPoint("BOTTOMRIGHT", -inset, inset)
-            t:AddMaskTexture(m)
-            return t
-        end
-        Oval(-3, 0.02, 0.02, 0.02, -1)    -- aro negro
-        Oval(-2, 0.85, 0.70, 0.30, 0)     -- placa dorada ovalada
-        Oval(-1, 0.05, 0.05, 0.05, 2)     -- interior oscuro (referencia Classic: aro dorado, centro oscuro)
-        -- Numero propio sobre la placa (el FontString original queda en otro frame y se perdia)
-        badge.txt = badge:CreateFontString(nil, "OVERLAY")
-        badge.txt:SetPoint("CENTER", badge, "CENTER", 0, 0)
-        badge.txt:SetJustifyH("CENTER")
+        badge = BuildClassicPill(plate)
         plate._clBadge = badge
     end
-    local barH = health:GetHeight() or 12
-    local size = math.max(9, math.min(13, math.floor(barH * 0.75)))
-    local w = math.max(26, size * 2 + 10)
-    local bh = barH + 6
-    badge:SetSize(w, bh)
-    badge:ClearAllPoints()
-    badge:SetPoint("LEFT", health, "RIGHT", -8, 0)   -- solapa el extremo derecho de la barra
-    local font = level:GetFont()
-    if font then badge.txt:SetFont(font, size, "OUTLINE") end
-    local okC, cr, cg, cb = pcall(level.GetTextColor, level)
-    if okC and cr and not (cr == 0 and cg == 0 and cb == 0) then badge.txt:SetTextColor(cr, cg, cb, 1) else badge.txt:SetTextColor(1, 0.82, 0, 1) end
+    badge:SetFrameLevel(health:GetFrameLevel() + 8)
+    local barH = health:GetHeight() or 10
+    local h = math.floor(barH + 5)
+    local size = math.max(9, math.min(13, math.floor(barH * 0.95)))
     local okT, txt = pcall(level.GetText, level)
-    badge.txt:SetText((okT and txt) or "")
+    if not okT then txt = nil end
+    local w = math.floor(h * 1.7)
+    if type(txt) == "string" and not (issecretvalue and issecretvalue(txt)) then
+        w = math.max(w, math.floor(#txt * size * 0.6 + h * 0.7))
+    end
+    LayoutClassicPill(badge, w, h)
+    badge:ClearAllPoints()
+    badge:SetPoint("LEFT", health, "RIGHT", -math.floor(h * 0.5), 0)   -- solapa el extremo derecho de la barra
+    badge.txt:SetFont(level:GetFont() or STANDARD_TEXT_FONT, size, "")
+    badge.txt:SetTextColor(1, 0.86, 0.32, 1)
+    badge.txt:SetText(txt or "")
     level:SetAlpha(0)
     badge:SetShown(level:IsShown() and true or false)
 end
 
--- Espacio que ocupa la placa de nivel interna (Retail/Forever) a la izquierda del nombre.
+-- Espacio que ocupa la placa de nivel interna (Retail) a la izquierda del nombre.
 function ns.ThemeLevelInset(plate)
     local th = RenderedTheme()
-    if th ~= "retail" and th ~= "forever" then return 0 end
+    if th ~= "retail" then return 0 end
     local lv, health = plate and plate.level, plate and plate.health
     if not (lv and health and lv:IsShown()) then return 0 end
     local size = math.max(8, math.floor((health:GetHeight() or 16) * 0.85))
@@ -341,137 +476,61 @@ end
 -- Altura de barra por tema (solo si el usuario no fijo healthBarHeight).
 function ns.ThemeBarHeight()
     local th = RenderedTheme()
-    if th == "classic" then return 16 end
-    if th == "retail" or th == "forever" then return 23 end
+    if th == "classic" then return 15 end
+    if th == "retail" then return 23 end
+    if th == "forever" then return 17 end
     return nil
 end
 
+-- Options live preview: applies the active style to the preview's own bars, texts and border.
+function ns.ApplyThemePreview(pf, health, healthBG, cast, castBG, nameFS, levelFS, border, simpleBorder)
+    if not (pf and health) then return end
+    local p = pf._themeProxy
+    if not p then
+        p = CreateFrame("Frame", nil, pf)
+        p:SetAllPoints(pf)
+        p._previewQuest = true
+        pf._themeProxy = p
+    end
+    p.health, p.healthBG, p.cast, p.castBG = health, healthBG, cast, castBG
+    p.name, p.level = nameFS, levelFS
+    p.borderFrame, p._simpleBorderFrame = border, simpleBorder
+    ns.ApplyThemeSkin(p)
+    ns.ApplyThemeLevel(p)
+end
+
+-- Ancho extra de barra por tema (solo si el usuario no fijo healthBarWidth).
+function ns.ThemeBarWidthExtra()
+    if RenderedTheme() == "classic" then return 85 end
+    return nil
+end
+
+-- Room the Forever quest icon and level badge take beside the bar, so the target arrows sit outside them.
+function ns.ThemeLateralExtent(plate)
+    local l, r = 0, 0
+    local qi, fb = plate and plate._fvQuest, plate and plate._fvBadge
+    if qi and qi:IsShown() then
+        local gap = (RenderedTheme() == "retail") and math.floor((plate.health:GetHeight() or 16) * 0.25 + 4) or 5
+        l = gap + (qi:GetStringWidth() or 0)
+    end
+    if fb and fb:IsShown() then r = 6 + (fb:GetWidth() or 0) end
+    return l, r
+end
+
+-- Refresh the quest icons when the quest log changes.
+local questRefresh = CreateFrame("Frame")
+questRefresh:RegisterEvent("QUEST_LOG_UPDATE")
+questRefresh:SetScript("OnEvent", function(self)
+    if self.pending or not ns.plates then return end
+    self.pending = true
+    C_Timer.After(0.2, function()
+        self.pending = nil
+        for _, plate in pairs(ns.plates) do ns.ApplyThemeQuestIcon(plate) end
+    end)
+end)
+
 function ns.ThemeBlizzText()
-    local th = RenderedTheme()
-    return th == "retail" or th == "forever"
-end
-
--- /ktnpdebug: reports whether Blizzard's NamePlateFullBorderTemplate border was created on the plates.
-SLASH_KTNPDEBUG1 = "/ktnpdebug"
-SlashCmdList["KTNPDEBUG"] = function()
-    local n, withB = 0, 0
-    for _, plate in pairs(ns.plates or {}) do
-        for _, fld in ipairs({ "_skinHealth", "_skinCast" }) do
-            local f = plate[fld]
-            if f and f.retail then
-                n = n + 1
-                if f.retail.blizz then
-                    withB = withB + 1
-                    if withB == 1 then
-                        local b = f.retail.blizz
-                        print(("KUI NP: border %.0fx%.0f shown=%s regions=%d"):format(b:GetWidth() or 0, b:GetHeight() or 0, tostring(b:IsShown()), select("#", b:GetRegions())))
-                    end
-                end
-            end
-        end
-    end
-    print(("KUI NP: style=%s skinBars=%d withBlizzBorder=%d"):format(tostring(ns.NameplateStyle()), n, withB))
-end
-
--- /ktnpdump [unit]: copyable dump of the REAL Blizzard nameplate (textures, atlases, texcoords, sizes,
--- anchors) of your target (or the given unit) so our Retail/Forever skin can copy it exactly.
-local function SafeStr(v)
-    if type(issecretvalue) == "function" and issecretvalue(v) then return "<secret>" end
-    if v == nil then return "nil" end
-    if type(v) == "number" then return (("%.3f"):format(v):gsub("0+$", ""):gsub("%.$", "")) end
-    return tostring(v)
-end
-
-local function DumpRegion(rg, indent, out)
-    local ok, ot = pcall(rg.GetObjectType, rg)
-    if not ok then return end
-    local line = indent .. ot
-    local nm = rg.GetName and rg:GetName()
-    if nm then line = line .. " name=" .. SafeStr(nm) end
-    if rg.GetDrawLayer then
-        local o1, layer, sub = pcall(rg.GetDrawLayer, rg)
-        if o1 then line = line .. (" layer=%s/%s"):format(SafeStr(layer), SafeStr(sub)) end
-    end
-    if ot == "Texture" or ot == "MaskTexture" then
-        local atlas = rg.GetAtlas and select(2, pcall(rg.GetAtlas, rg))
-        local tex = rg.GetTexture and select(2, pcall(rg.GetTexture, rg))
-        line = line .. (" atlas=%s tex=%s"):format(SafeStr(atlas), SafeStr(tex))
-        if rg.GetTexCoord then
-            local o2, a, b, c, d, e, f, g, h = pcall(rg.GetTexCoord, rg)
-            if o2 then line = line .. (" tc=%s,%s,%s,%s"):format(SafeStr(a), SafeStr(b), SafeStr(g), SafeStr(h)) end
-        end
-        if rg.GetVertexColor then
-            local o3, r, g, b, a = pcall(rg.GetVertexColor, rg)
-            if o3 then line = line .. (" vc=%s,%s,%s,%s"):format(SafeStr(r), SafeStr(g), SafeStr(b), SafeStr(a)) end
-        end
-        if rg.GetBlendMode then line = line .. " blend=" .. SafeStr(select(2, pcall(rg.GetBlendMode, rg))) end
-    elseif ot == "FontString" then
-        line = line .. " font=" .. SafeStr(select(2, pcall(rg.GetFont, rg)))
-    elseif ot == "StatusBar" then
-        line = line .. " statusTex=" .. SafeStr(select(2, pcall(function() return rg:GetStatusBarTexture():GetAtlas() or rg:GetStatusBarTexture():GetTexture() end)))
-    end
-    local ow, w = pcall(rg.GetWidth, rg); local oh, h = pcall(rg.GetHeight, rg)
-    line = line .. (" size=%sx%s shown=%s"):format(SafeStr(ow and w), SafeStr(oh and h), SafeStr(select(2, pcall(rg.IsShown, rg))))
-    local n = rg.GetNumPoints and select(2, pcall(rg.GetNumPoints, rg)) or 0
-    if type(n) == "number" then
-        for i = 1, math.min(n, 4) do
-            local op, p, rel, rp, x, y = pcall(rg.GetPoint, rg, i)
-            if op then
-                local relName = rel and rel.GetName and rel:GetName() or (rel and rel.GetObjectType and rel:GetObjectType()) or "nil"
-                line = line .. (" [%s>%s:%s %s,%s]"):format(SafeStr(p), SafeStr(relName), SafeStr(rp), SafeStr(x), SafeStr(y))
-            end
-        end
-    end
-    out[#out + 1] = line
-end
-
-local function DumpFrame(f, indent, out, depth, label)
-    if depth > 5 or #out > 400 then return end
-    DumpRegion(f, indent .. (label and (label .. ": ") or ""), out)
-    if f.GetRegions then
-        for _, rg in ipairs({ f:GetRegions() }) do DumpRegion(rg, indent .. "  ", out) end
-    end
-    if f.GetChildren then
-        for _, ch in ipairs({ f:GetChildren() }) do DumpFrame(ch, indent .. "  ", out, depth + 1) end
-    end
-end
-
-local dumpFrame
-SLASH_KTNPDUMP1 = "/ktnpdump"
-SlashCmdList["KTNPDUMP"] = function(msg)
-    local unit = (msg and msg:match("%S+")) or "target"
-    local np = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)
-    if not np then print("KUI NP: no hay nameplate visible para '" .. unit .. "' (selecciona un enemigo con su nameplate en pantalla)") return end
-    local out = {}
-    local uf = np.UnitFrame or np
-    DumpFrame(uf, "", out, 0, "UnitFrame")
-    if not dumpFrame then
-        dumpFrame = CreateFrame("Frame", "KTNPDumpFrame", UIParent, "BackdropTemplate")
-        dumpFrame:SetSize(900, 520)
-        dumpFrame:SetPoint("CENTER")
-        dumpFrame:SetFrameStrata("DIALOG")
-        dumpFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        dumpFrame:SetBackdropColor(0, 0, 0, 0.92); dumpFrame:SetBackdropBorderColor(0.8, 0.6, 0.2, 1)
-        dumpFrame:EnableMouse(true); dumpFrame:SetMovable(true)
-        dumpFrame:RegisterForDrag("LeftButton")
-        dumpFrame:SetScript("OnDragStart", dumpFrame.StartMoving); dumpFrame:SetScript("OnDragStop", dumpFrame.StopMovingOrSizing)
-        local sf = CreateFrame("ScrollFrame", nil, dumpFrame, "UIPanelScrollFrameTemplate")
-        sf:SetPoint("TOPLEFT", 10, -10); sf:SetPoint("BOTTOMRIGHT", -30, 36)
-        local eb = CreateFrame("EditBox", nil, sf)
-        eb:SetMultiLine(true); eb:SetFontObject(ChatFontNormal); eb:SetWidth(850); eb:SetAutoFocus(false)
-        eb:SetScript("OnEscapePressed", function() dumpFrame:Hide() end)
-        sf:SetScrollChild(eb)
-        dumpFrame.eb = eb
-        local close = CreateFrame("Button", nil, dumpFrame, "UIPanelButtonTemplate")
-        close:SetSize(80, 22); close:SetPoint("BOTTOMRIGHT", -10, 8); close:SetText("Cerrar")
-        close:SetScript("OnClick", function() dumpFrame:Hide() end)
-        local tip = dumpFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tip:SetPoint("BOTTOMLEFT", 12, 14); tip:SetText("Ctrl+A, Ctrl+C y pegalo en el chat con Claude")
-    end
-    dumpFrame.eb:SetText(table.concat(out, "\n"))
-    dumpFrame.eb:HighlightText()
-    dumpFrame:Show()
-    print(("KUI NP: %d lineas volcadas de la nameplate de '%s'"):format(#out, unit))
+    return RenderedTheme() == "retail"
 end
 
 -- Migracion: perfiles que ya tenian sembrados los enemigos en azul (cualquier estilo) o naranja (Forever)

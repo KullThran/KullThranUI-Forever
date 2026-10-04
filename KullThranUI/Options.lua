@@ -1198,7 +1198,7 @@ local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
         or "0.0.4"
-    -- When loaded from the source tree without the BigWigs packager the TOC
+    -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
@@ -1363,7 +1363,7 @@ local function BuildChangelogText(version)
 
     if displayEntry.notes and #displayEntry.notes > 0 then
         for _, note in ipairs(displayEntry.notes) do
-            local cleanNote = NormalizeNote(note)
+            local cleanNote = NormalizeNote(LText(note))
             if cleanNote then
                 lines[#lines + 1] = "- " .. cleanNote
             end
@@ -4638,6 +4638,9 @@ end
 -- ============================================================================
 local function LockScaleGuard()
     if not UIParent then return end
+    if not (KT and KT.IsUIScaleManaged and KT:IsUIScaleManaged()) then
+        return
+    end
     if KT and KT.db and KT.db.profile and KT.db.profile.useBlizzardUIScale then
         return
     end
@@ -4747,7 +4750,8 @@ function KT:OpenMenu(pageId)
                 C_Timer.After(0, CloseGameMenuForKUIOptions)
             end
 
-            if UIParent and KT._scaleLockValue and not (KT.db and KT.db.profile and KT.db.profile.useBlizzardUIScale) then
+            if UIParent and KT._scaleLockValue and KT.IsUIScaleManaged and KT:IsUIScaleManaged()
+                and not (KT.db and KT.db.profile and KT.db.profile.useBlizzardUIScale) then
                 local cur = UIParent:GetScale()
                 if cur and math.abs(cur - KT._scaleLockValue) > 0.001 then
                     if KT and KT._ApplyScaleValue then
@@ -5810,10 +5814,53 @@ local function BuildGeneralCore(sc, W, y)
     heroVersion:SetText(LTextFmt("VERSION  %s", currentVersion))
     heroVersion:SetTextColor(accentR, accentG, accentB, 1)
 
+    -- Compact changelog access in the corner of the landing card.
+    local changelogBtn = CreateFrame("Button", nil, hero, "BackdropTemplate")
+    changelogBtn:SetSize(92, 20)
+    changelogBtn:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -14, -12)
+    KT:AddBackdrop(changelogBtn, 0.05, 0.045, 0.055, 0.95)
+    KT:AddBorder(changelogBtn, accentR, accentG, accentB, 0.55)
+
+    local changelogLabel = changelogBtn:CreateFontString(nil, "OVERLAY")
+    changelogLabel:SetFont(KT.FONT_PATH, 9, "OUTLINE")
+    changelogLabel:SetPoint("CENTER")
+    changelogLabel:SetText(LText("Open Changelog"))
+    changelogBtn:SetWidth(math.max(92, math.ceil(changelogLabel:GetStringWidth()) + 20))
+    changelogLabel:SetTextColor(accentR, accentG, accentB, 1)
+
+    changelogBtn:SetScript("OnClick", function()
+        if KT and KT.ShowChangelogPopup then
+            KT:ShowChangelogPopup(currentVersion)
+        end
+    end)
+    changelogBtn:SetScript("OnEnter", function(self)
+        KT:AddBorder(self, accentR, accentG, accentB, 1)
+        changelogLabel:SetTextColor(1, 1, 1, 1)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText(LText("Updates & Release Notes"), 1, 1, 1)
+            GameTooltip:AddLine(LTextFmt("Installed Version: %s", currentVersion), accentR, accentG, accentB)
+            if changelogEntry then
+                GameTooltip:AddLine(LTextFmt("Release notes are available for version %s.", changelogEntry.version), 0.75, 0.75, 0.75, true)
+            elseif latestChangelogEntry then
+                GameTooltip:AddLine(LTextFmt("Latest archived release notes: %s", latestChangelogEntry.version), 0.75, 0.75, 0.75, true)
+            end
+            if isFallback then
+                GameTooltip:AddLine(LText("The current release has not been published to the Wago archive yet. CurseForge and Discord sources remain available inside the changelog."), 1, 0.62, 0.32, true)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    changelogBtn:SetScript("OnLeave", function(self)
+        KT:AddBorder(self, accentR, accentG, accentB, 0.55)
+        changelogLabel:SetTextColor(accentR, accentG, accentB, 1)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
     if assigned then
         local heroSpec = hero:CreateFontString(nil, "OVERLAY")
         heroSpec:SetFont(KT.FONT_PATH, 9, "")
-        heroSpec:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -18, -16)
+        heroSpec:SetPoint("RIGHT", changelogBtn, "LEFT", -10, 0)
         heroSpec:SetText(LTextFmt("SPEC ASSIGNMENT  %s", assigned))
         heroSpec:SetTextColor(0.72, 0.72, 0.76, 1)
     end
@@ -5825,6 +5872,19 @@ local function BuildGeneralCore(sc, W, y)
     AddOptionBlock(coreCols, "left", "Interface Scale", function(container)
         local by = 0
         _, h = W:Label(container, LText("Match KUI to your display first. This controls the scale used by every module."), -by, 10); by = by + h
+        _, h = W:Toggle(container, "KUI controls the UI scale", -by,
+            function()
+                return KT.IsUIScaleManaged and KT:IsUIScaleManaged() or false
+            end,
+            function(v)
+                if v then
+                    if KT.MarkUIScaleUserSet then KT:MarkUIScaleUserSet() end
+                    KT:ApplyUIScale()
+                elseif KT.ReleaseUIScale then
+                    KT:ReleaseUIScale()
+                end
+            end
+        ); by = by + h
         _, h = W:Toggle(container, "Use Blizzard UI Scale", -by,
             function()
                 return KT.db.profile.useBlizzardUIScale
@@ -5834,6 +5894,7 @@ local function BuildGeneralCore(sc, W, y)
                 if v then
                     KT.db.profile.autoResolutionScale = false
                 end
+                if KT.MarkUIScaleUserSet then KT:MarkUIScaleUserSet() end
                 KT:ApplyUIScale()
             end
         ); by = by + h
@@ -5854,6 +5915,7 @@ local function BuildGeneralCore(sc, W, y)
                     else
                         KT.db.profile.autoResolutionScale = true
                         KT.db.profile.uiScale = autoScale
+                        if KT.MarkUIScaleUserSet then KT:MarkUIScaleUserSet() end
                         KT:ApplyUIScale()
                     end
                 end
@@ -5862,7 +5924,9 @@ local function BuildGeneralCore(sc, W, y)
         _, h = W:Slider(container, "Manual UI Scale", -by,
             function()
                 local scale
-                if KT.db.profile.useBlizzardUIScale and KT.GetBlizzardUIScale then
+                if not (KT.IsUIScaleManaged and KT:IsUIScaleManaged()) then
+                    scale = UIParent and UIParent:GetScale() or nil
+                elseif KT.db.profile.useBlizzardUIScale and KT.GetBlizzardUIScale then
                     scale = KT:GetBlizzardUIScale()
                 else
                     scale = tonumber(KT.db.profile.uiScale)
@@ -5879,6 +5943,7 @@ local function BuildGeneralCore(sc, W, y)
                 else
                     KT.db.profile.autoResolutionScale = false
                     KT.db.profile.uiScale = v
+                    if KT.MarkUIScaleUserSet then KT:MarkUIScaleUserSet() end
                     KT:ApplyUIScale()
                 end
             end,
@@ -5978,31 +6043,13 @@ local function BuildGeneralCore(sc, W, y)
         return by
     end)
 
-    y = EndOptionBlocks(coreCols) + 4
-
-    local updateBlock, updateContent = CreateOptionBlock(sc, "Updates & Release Notes", 10, -y, sc:GetWidth() - 22)
-    local updateY = 0
-    _, h = W:Label(updateContent, LTextFmt("Installed Version: %s", currentVersion), -updateY, 11, { r = accentR, g = accentG, b = accentB }); updateY = updateY + h
-    if changelogEntry then
-        _, h = W:Label(updateContent, LTextFmt("Release notes are available for version %s.", changelogEntry.version), -updateY, 10); updateY = updateY + h
-    elseif latestChangelogEntry then
-        _, h = W:Label(updateContent, LTextFmt("Latest archived release notes: %s", latestChangelogEntry.version), -updateY, 10); updateY = updateY + h
-    end
-    if isFallback then
-        _, h = W:Label(updateContent, LText("The current release has not been published to the Wago archive yet. CurseForge and Discord sources remain available inside the changelog."), -updateY, 10, { r = 1, g = 0.62, b = 0.32 }); updateY = updateY + h
-    end
-    _, h = W:Button(updateContent, "Open Changelog", -updateY, function()
-        if KT and KT.ShowChangelogPopup then
-            KT:ShowChangelogPopup(currentVersion)
-        end
-    end, "FULL"); updateY = updateY + h
-    y = y + FinalizeOptionBlock(updateBlock, updateContent, updateY) + 14
+    y = EndOptionBlocks(coreCols) + 14
     _, h = W:SectionHeader(sc, "Advanced Style System", -y); y = y + h
     _, h = W:Label(sc, "Build a complete visual preset for KUI or fine tune the palette manually. These settings affect the entire addon.", -y, 11); y = y + h
     -- Visual Theme sits on top, full width: it decides the geometry and assets.
     local themeFrame, themeContent = CreateOptionBlock(sc, "Visual Theme", 10, -y, sc:GetWidth() - 22)
     local themeY = 0
-    -- Explicit user request: the addon's own general accent color (this
+    -- The addon's own general accent color (this
     -- tab's "Accent Color" swatch, used for Unlock Mode/Friend List/
     -- Armory/Objective Tracker/Bags) no longer gets silently overridden by
     -- whichever Unit Frame visual theme happens to be active (see the
@@ -6076,7 +6123,7 @@ local function BuildGeneralCore(sc, W, y)
     end
     y = y + FinalizeOptionBlock(presetFrame, presetContent, presetBuild(presetContent)) + 14
 
-    -- Explicit user request: color presets/manual colors stay fully usable
+    -- Color presets/manual colors stay fully usable
     -- regardless of which Unit Frame visual theme is active, not just kui
     -- -- this full-section mouse-blocking overlay (plus its twin below, for
     -- the Manual Colors section) was the actual mechanism making the
@@ -6249,7 +6296,7 @@ local function BuildGeneralCore(sc, W, y)
 
 
 
-    -- Explicit user request: Manual Colors stays fully usable regardless of
+    -- Manual Colors stays fully usable regardless of
     -- theme (see the matching removal above, for the Color Presets block).
     content:SetAlpha(1.0)
 
@@ -7109,7 +7156,7 @@ local function BuildDisableModulesTab(sc, W, y)
         { label = "Aura Reminders", get = function() local db = _G._KUIAR_AceDB; local p = db and db.profile; return p == nil or p.enable ~= false end, set = function(v) local db = _G._KUIAR_AceDB; if db and db.profile then db.profile.enable = v and true or false end; Reload() end },
         { label = "Nameplates", get = function() return not (_G.KullThranUINameplatesDB and _G.KullThranUINameplatesDB.enable == false) end, set = function(v) _G.KullThranUINameplatesDB = _G.KullThranUINameplatesDB or {}; _G.KullThranUINameplatesDB.enable = v and true or false; Reload() end },
         { label = "Cooldown Manager", get = function() return KT.db.profile.cooldownManager.cdmBars.enabled end, set = function(v) KT.db.profile.cooldownManager.cdmBars.enabled = v; Reload() end },
-        { label = "Resource Bars", get = function() return (KT.db.profile.resourceBars.primary.enabled or KT.db.profile.resourceBars.secondary.enabled or KT.db.profile.resourceBars.health.enabled) and true or false end, set = function(v) KT.db.profile.resourceBars.primary.enabled = v; KT.db.profile.resourceBars.secondary.enabled = v; KT.db.profile.resourceBars.health.enabled = v; Reload() end },
+        { label = "Resource Bars", get = function() return KT.db.profile.resourceBars.enabled ~= false and (KT.db.profile.resourceBars.primary.enabled or KT.db.profile.resourceBars.secondary.enabled or KT.db.profile.resourceBars.health.enabled) and true or false end, set = function(v) KT.db.profile.resourceBars.enabled = v and true or false; KT.db.profile.resourceBars.primary.enabled = v; KT.db.profile.resourceBars.secondary.enabled = v; KT.db.profile.resourceBars.health.enabled = v; Reload() end },
 }
 
     _, h = W:SectionHeader(sc, "Disable Modules", -y); y = y + h

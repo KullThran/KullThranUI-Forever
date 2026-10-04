@@ -5,6 +5,30 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.1.1 (2026-10-04)
+
+**New**
+- Nameplates mark enemies you still need for a quest with a yellow "!" in every style.
+- Party Frames: Portrait Mode (2D, 3D or Class Theme) with 3D Portrait Zoom, Rotation and X/Y Offset sliders.
+- Chat: new "Click Channel to Chat" option; left-click a channel tag to start typing in that channel.
+- General: new "KUI controls the UI scale" option.
+- Unit Frames: Blizzard-style name and level text, combat and resting icons, and a combo point ring on the Target frame.
+
+**Improved**
+- Forever nameplates redesigned: taller bars with the Retail texture, the name above the bar, a bronze border with softly rounded corners, and the level in a yellow box beside the bar.
+- Classic nameplates show the level as a gold number on a gold pill at the end of the bar and are larger by default.
+- The nameplate live preview shows the selected visual style.
+- Better 3D party portraits, and 3D portraits in circular Unit Frame portraits.
+- The Classic style shows the original Blizzard text on health and power bars, and its Rare/Elite ring hugs the portrait.
+- Combo points use a look that matches each visual style by default.
+- Redesigned Mail skin.
+- The Installer returns to the Visual Style page after a style change reloads the interface, and no longer reopens by itself if you closed it.
+
+**Fixed**
+- KUI no longer changes your UI scale or moves Edit Mode frames unless you choose to, and module on/off toggles apply correctly.
+- Fixed KUI Tracker icons briefly showing a green swipe.
+- Profile import notices, nameplate style prompts and visual style messages are now available in every supported language.
+
 ## 0.1.0 (2026-10-03)
 
 Beta focused on making every visual style consistent across Unit Frames, Nameplates, Minimap and Skins.

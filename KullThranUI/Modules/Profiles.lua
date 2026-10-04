@@ -13,11 +13,18 @@ local EXPORT_PREFIX = "!KTUI_"
 local CDM_EXPORT_PREFIX = "!KTCDM_"
 local PROFILE_BRIDGE_VERSION = 2
 
+-- Per-display scale settings: never exported, never replaced by an import.
+local LOCAL_SCALE_KEYS = {
+    "uiScale", "autoResolutionScale", "useBlizzardUIScale", "uiScaleInitialized",
+    "uiScaleUserSet", "uiScaleOwnershipMigrated",
+}
+
 local MODULE_DEFS = {
     {
         id = "general",
         label = "General",
-        keys = { "globalFont", "language", "uiScale", "autoResolutionScale", "useBlizzardUIScale", "menuCustomWidth", "menuCustomHeight", "editMode" },
+        -- UI scale stays out of shared strings: it belongs to each player's display.
+        keys = { "globalFont", "language", "menuCustomWidth", "menuCustomHeight", "editMode" },
         -- Accept keys emitted by older General module strings, but do not put
         -- them in new exports now that they belong to their own page scopes.
         importKeys = { "skin", "objectiveTracker", "blizzframes", "externalAddons", "uufIntegration" },
@@ -127,23 +134,23 @@ end
 -- tagged with where it came from (see KT:StampProfileMeta).
 local function ValidatePayloadFlavor(payload)
     if type(payload) ~= "table" then
-        return false, "Perfil invalido."
+        return false, LText("Invalid profile.")
     end
 
     local flavor = payload.flavor
     if payload.client ~= "KullThranUI" or (flavor ~= "forever" and flavor ~= "retail") then
-        return false, "Cadena de perfil no reconocida como de KullThranUI."
+        return false, LText("Profile string not recognized as a KullThranUI string.")
     end
 
     if payload.version ~= (KT and KT.PROFILE_FORMAT_VERSION or 2) then
-        return false, "Version de perfil no soportada. Exporta el perfil de nuevo desde esta variante."
+        return false, LText("Unsupported profile version. Export the profile again from this variant.")
     end
 
     local warning
     if flavor ~= GetProfileFlavor() then
-        warning = "Aviso: este perfil viene de la variante " .. tostring(flavor) ..
-            " y se esta importando en " .. tostring(GetProfileFlavorLabel()) ..
-            ". Normalmente es compatible, pero puede dar incompatibilidades."
+        warning = string.format(
+            LText("Notice: this profile comes from the %s variant and is being imported into %s. It is usually compatible, but may cause incompatibilities."),
+            tostring(flavor), tostring(GetProfileFlavorLabel()))
     end
     return true, nil, warning
 end
@@ -1553,9 +1560,17 @@ function Mod:ApplyFullProfile(profileData)
     end
 
     local transferProfile = BuildTransferProfile(profileData)
+    -- Keep this display's scale choice; an imported profile never brings one.
+    local localScale = {}
+    for _, key in ipairs(LOCAL_SCALE_KEYS) do
+        localScale[key] = root[key]
+    end
     WipeTable(root)
     for key, value in pairs(transferProfile) do
         root[key] = DeepCopy(value)
+    end
+    for _, key in ipairs(LOCAL_SCALE_KEYS) do
+        root[key] = localScale[key]
     end
     if KT.SanitizeProfileForFlavor then
         KT:SanitizeProfileForFlavor(root)

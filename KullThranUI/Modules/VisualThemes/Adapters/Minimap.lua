@@ -9,7 +9,7 @@ local function GetProfile()
 end
 
 -- Only forever/classic get a fixed circular identity for now; retail and kui
--- are intentionally left untouched (studied and confirmed with the user,
+-- are intentionally left untouched (the
 -- retail port is a later pass once this is validated in Forever).
 KT.VisualThemes:RegisterModule("minimap", {
     isAvailable = function() return GetProfile() ~= nil end,
