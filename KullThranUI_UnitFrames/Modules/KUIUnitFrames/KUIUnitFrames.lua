@@ -75,6 +75,18 @@ function ns.ClassicRing.KindForClassification(c)
     if c == "rare" then return "rare" end
     return nil
 end
+-- Art px -> screen px for the overlay crop. `scale` was tuned against KUI's
+-- padded circle mask sized to the backdrop; the Classic/Forever/Retail stock
+-- renderers grow that mask by _ktStockPortraitMaskExpand on each side, so the
+-- visible portrait is larger than the backdrop and the ring must follow it.
+function ns.ClassicRing.ArtScale(backdrop)
+    local size = backdrop:GetWidth() or 0
+    if size < 1 then size = 46 end
+    if backdrop._ktStockPortraitAnchor then
+        size = size + 2 * (backdrop._ktStockPortraitMaskExpand or 0)
+    end
+    return size * ns.ClassicRing.scale / 64
+end
 local OVERLAY_ANCHORS = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true,
     LEFT = true, CENTER = true, RIGHT = true,
@@ -5866,7 +5878,7 @@ local function SetupUnitIndicators(frame, unit)
                         frame._kuiClassicRingTex = ct
                     end
                     portraitRing:Hide()
-                    local sc = portraitSize * CR.scale / 64
+                    local sc = CR.ArtScale(portraitBackdrop)
                     ct:SetTexture(classificationTexture)
                     ct:SetTexCoord(CR.uLeft, CR.uRight, CR.vTop, CR.vBottom)
                     ct:SetSize(CR.cropW * sc, CR.cropH * sc)
@@ -5990,7 +6002,7 @@ local function SetupUnitIndicators(frame, unit)
         if playerClassicRingKind and frame._kuiClassificationPortraitActive and portraitBackdrop
             and frame._kuiLevelText then
             local CR = ns.ClassicRing
-            local sc = (portraitBackdrop:GetWidth() or 46) * CR.scale / 64
+            local sc = CR.ArtScale(portraitBackdrop)
             frame._kuiLevelText:ClearAllPoints()
             -- Wide enough that the number never truncates to "..." (the box is centred on the anchor).
             frame._kuiLevelText:SetSize(40, 16)
