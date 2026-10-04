@@ -91,3 +91,12 @@ GetPlayerInfoByGUID = function() error('GUID unavailable') end
 contains(Mod:GetEntryMessage(say), 'Depicaros')
 print('PASS: message and author survive event construction, history and rendering')
 print('PASS: player links, class colors, channels, system, Battle.net, monitor and reload')
+
+-- Chat-type tags are clickable channel links, like Blizzard's own chat frames.
+local tradeLine = Mod:GetEntryMessage(event('CHANNEL', 'WTS mats', 'Seller-Realm', '2. Trade - City'))
+contains(tradeLine, '|Hchannel:channel:2|h[')
+local guildLine = Mod:GetEntryMessage(event('GUILD', 'hello guild', 'Member-Realm'))
+contains(guildLine, '|Hchannel:GUILD|h[')
+local systemLine = Mod:GetEntryMessage(event('SYSTEM', 'Server notice', ''))
+assert(not systemLine:find('|Hchannel:', 1, true))
+print('PASS: channel and chat-type tags render as clickable channel links')
