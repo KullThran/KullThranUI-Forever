@@ -5,7 +5,9 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
-## 0.1.1 (2026-10-04)
+## 0.1.1 (2026-10-05)
+
+- Cast Bar now offers KUI, Classic, Forever and Retail preview tabs with Apply controls; native styles use Blizzard casting art and colors. Classic has no icon, outlined text and a properly layered frame.
 
 **New**
 - Nameplates mark enemies you still need for a quest with a yellow "!" in every style.
@@ -28,6 +30,11 @@ Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/file
 - KUI no longer changes your UI scale or moves Edit Mode frames unless you choose to, and module on/off toggles apply correctly.
 - Fixed KUI Tracker icons briefly showing a green swipe.
 - Profile import notices, nameplate style prompts and visual style messages are now available in every supported language.
+- KUI Style target combo points now form a separate row above the portrait.
+- Classic Rare/Elite overlays fit KUI circular portraits without the stock level socket.
+- Classic player health and power percentages appear inside their bars.
+- Blue quest-objective nameplates use a darker shade in Classic.
+- Aggro glow illuminates the complete Classic Rare/Elite decoration.
 
 ## 0.1.0 (2026-10-03)
 
