@@ -63,7 +63,9 @@ ns.ClassicRing = {
     cropW = 112, cropH = 100,          -- crop size (art px)
     portraitCX = 74, portraitCY = 44,  -- portrait centre inside the PLAYER (mirrored) crop
     uLeft = 1, uRight = 0.5625, vTop = 0, vBottom = 0.78125, -- player (mirrored) texcoords
-    scale = 0.80,                      -- portraitSize * scale / 64
+    -- 0.80 left the sheet opening ~12% wider than the KUI portrait border
+    -- (measured on a KUI-style Player frame): 0.70 seats the rim on it.
+    scale = 0.70,                      -- portraitSize * scale / 64
     -- Centre of the sheet's own empty level circle, relative to the portrait centre
     -- (art px, +x right, +y up): the stock player level ornament sits at (56, 67 from top)
     -- in the 232x100 art while the portrait centre is (74, 44).
