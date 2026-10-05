@@ -202,6 +202,7 @@ local function RestoreGroupLootRollVisibility()
     -- Keep that anchor available while a roll is active, even if another KUI
     -- alert filter hid it previously.
     local alertFrame = _G.AlertFrame
+    SafeSetAlpha(alertFrame, 1)
     if alertFrame and alertFrame.IsShown and not alertFrame:IsShown() and alertFrame.Show then
         pcall(alertFrame.Show, alertFrame)
     end

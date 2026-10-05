@@ -164,15 +164,26 @@ local tostring = _G.tostring
 local type = _G.type
 local UIParent = _G.UIParent
 
+local LootRollGuard = { active = {}, presented = {} }
 local function HasActiveGroupLootRoll()
+    for rollID, deadline in pairs(LootRollGuard.active) do
+        if deadline > _G.GetTime() then return true end
+        LootRollGuard.active[rollID] = nil
+        LootRollGuard.presented[rollID] = nil
+    end
     local getter = _G.GetActiveLootRollIDs
     if type(getter) == "function" then
         local ok, ids = pcall(getter)
-        if ok and type(ids) == "table" and #ids > 0 then
+        if ok and type(ids) == "table" and next(ids) then
             return true
         end
     end
 
+    local api = _G.C_Loot
+    if api and type(api.GetActiveLootRollIDs) == "function" then
+        local ok, ids = pcall(api.GetActiveLootRollIDs)
+        if ok and type(ids) == "table" and next(ids) then return true end
+    end
     local container = _G.GroupLootContainer
     if container and type(container.rollFrames) == "table" then
         for _, frame in pairs(container.rollFrames) do
@@ -182,13 +193,7 @@ local function HasActiveGroupLootRoll()
         end
     end
 
-    -- BlizzardFrames.lua's own copy of this same check (used to keep
-    -- GroupLootContainer visible against this very same "hide alerts"
-    -- feature) also checks GroupLootFrame1-4 directly -- this copy didn't,
-    -- so a roll only detectable through those (some loot-method/client
-    -- combinations) would pass ShouldHideAlerts and hide AlertFrame mid-roll,
-    -- taking GroupLootContainer down with it (it's anchored through
-    -- AlertFrame). Matching the more complete check here.
+    -- Some clients expose the native roll frames without a container list.
     for index = 1, 4 do
         local frame = _G["GroupLootFrame" .. index]
         if frame and frame.IsShown and frame:IsShown() then
@@ -205,6 +210,72 @@ local function ShouldHideAlerts(db)
         and db.visibility.hideAlerts
         and not HasActiveGroupLootRoll()
 end
+
+-- A roll can start while AlertFrame is hidden and before rollFrames is filled.
+-- Keep the manager available throughout that bootstrap, and recover only a
+-- still-pending native roll. Need/Greed/Pass handlers stay owned by Blizzard.
+function LootRollGuard:Restore()
+    local profile = KT.db and KT.db.profile and KT.db.profile.enhancements
+    if not (profile and profile.enable ~= false and profile.visibility and profile.visibility.hideAlerts) then return end
+    if not HasActiveGroupLootRoll() then return end
+    local function Reveal(frame)
+        if not frame then return end
+        if frame.SetAlpha then frame:SetAlpha(1) end
+        if frame.Show then frame:Show() end
+    end
+    Reveal(_G.AlertFrame)
+    local container = _G.GroupLootContainer
+    for rollID in pairs(self.active) do
+        if not self.presented[rollID] then
+            local found = false
+            if container and type(container.rollFrames) == "table" then
+                for _, frame in pairs(container.rollFrames) do
+                    if frame and frame.rollID == rollID then found = true; Reveal(frame) end
+                end
+            end
+            for i = 1, 4 do
+                local frame = _G["GroupLootFrame" .. i]
+                if frame and frame.rollID == rollID then
+                    local left = _G.GetLootRollTimeLeft and _G.GetLootRollTimeLeft(rollID)
+                    if type(left) == "number" and left > 0 then found = true; Reveal(frame) end
+                end
+            end
+            if not found and container and type(_G.GroupLootContainer_AddRoll) == "function"
+                and type(_G.GetLootRollTimeLeft) == "function" then
+                local left = _G.GetLootRollTimeLeft(rollID)
+                if type(left) == "number" and left > 0 then
+                    _G.GroupLootContainer_AddRoll(rollID, left)
+                    if type(container.rollFrames) == "table" then
+                        for _, frame in pairs(container.rollFrames) do
+                            if frame and frame.rollID == rollID then Reveal(frame); found = true end
+                        end
+                    end
+                end
+            end
+            if found then self.presented[rollID] = true end
+        end
+    end
+    if container and type(container.rollFrames) == "table" and next(container.rollFrames) then Reveal(container) end
+end
+LootRollGuard.events = CreateFrame("Frame")
+LootRollGuard.events:RegisterEvent("START_LOOT_ROLL")
+LootRollGuard.events:RegisterEvent("CANCEL_LOOT_ROLL")
+LootRollGuard.events:RegisterEvent("CANCEL_ALL_LOOT_ROLLS")
+LootRollGuard.events:SetScript("OnEvent", function(_, event, rollID, rollTime)
+    if event == "CANCEL_ALL_LOOT_ROLLS" then
+        wipe(LootRollGuard.active)
+        wipe(LootRollGuard.presented)
+    elseif event == "CANCEL_LOOT_ROLL" then
+        LootRollGuard.active[rollID] = nil
+        LootRollGuard.presented[rollID] = nil
+    elseif type(rollID) == "number" and type(rollTime) == "number" and rollTime > 0 then
+        LootRollGuard.presented[rollID] = nil
+        LootRollGuard.active[rollID] = _G.GetTime() + rollTime / 1000
+        for _, delay in ipairs({ 0, 0.1, 0.5 }) do
+            _G.C_Timer.After(delay, function() LootRollGuard:Restore() end)
+        end
+    end
+end)
 
 local function LText(text)
     if type(text) ~= "string" then
