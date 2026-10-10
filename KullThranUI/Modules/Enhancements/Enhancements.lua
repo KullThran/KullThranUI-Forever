@@ -35,9 +35,7 @@ function Mod:ApplyForeverCompatibility(db)
         return
     end
 
-    if db.mplusTracker then
-        db.mplusTracker.enabled = false
-    end
+    -- mplusTracker is reused by the normal-dungeon HUD in this build.
     if db.dungeonHistory then
         db.dungeonHistory.enabled = false
         db.dungeonHistory.autoShow = false
@@ -441,7 +439,7 @@ local DEFAULTS = {
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 120 },
     },
     mplusTracker = {
-        enabled = false,
+        enabled = true,
         insertKeystoneAutomatically = false,
         showMillisecondsWhenDungeonCompleted = false,
         showRemainingTimeOnly = false,
@@ -1042,6 +1040,14 @@ function Mod:GetDB()
             enhancements.combatTimer.enabled = false
         end
         enhancements._foreverCombatTimerDefault20260919 = true
+    end
+    -- Older Forever builds forced mplusTracker.enabled to false on every load,
+    -- and MergeDefaults saved that value. Turn the Dungeon Timer on once so it
+    -- follows its new default; later choices in the options are kept.
+    if not enhancements._foreverDungeonTimerDefault20261010 then
+        enhancements.mplusTracker = enhancements.mplusTracker or {}
+        enhancements.mplusTracker.enabled = true
+        enhancements._foreverDungeonTimerDefault20261010 = true
     end
     local groups = enhancements.groups
     if groups then

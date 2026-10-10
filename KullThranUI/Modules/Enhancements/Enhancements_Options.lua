@@ -230,7 +230,7 @@ local function GetActiveCategory()
     local db = DB()
     db.ui = db.ui or {}
     local key = db.ui.activeEnhancementCategory
-    if not key or key == "timer" then
+    if not key then
         key = "instance"
         db.ui.activeEnhancementCategory = key
     end
@@ -240,7 +240,7 @@ end
 local function SetActiveCategory(key)
     local db = DB()
     db.ui = db.ui or {}
-    db.ui.activeEnhancementCategory = key == "timer" and "instance" or key
+    db.ui.activeEnhancementCategory = key
 end
 
 local function GetSystemSectionState(key, defaultOpen)
@@ -258,7 +258,7 @@ local function SetSystemSectionState(key, value)
     db.ui.activeEnhancementSystemSection = value and key or nil
 end
 
-local CATEGORY_ORDER = { "instance", "damage", "automation", "interface", "system" }
+local CATEGORY_ORDER = { "instance", "damage", "timer", "automation", "interface", "system" }
 
 local CATEGORY_META = {
     instance = {
@@ -270,8 +270,8 @@ local CATEGORY_META = {
         description = LText("Combat rankings, display modes, sessions, bars, and meter layout."),
     },
     timer = {
-        title = LText("Mythic+ Timer"),
-        description = LText("Per-pull combat timing, live preview, colors, typography, and warnings."),
+        title = LText("Dungeon Timer"),
+        description = LText("Elapsed dungeon time, bosses, party deaths, live preview, and appearance."),
     },
     automation = {
         title = LText("Automation & Social"),
@@ -718,7 +718,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         deaths:SetTextColor(dc.r, dc.g, dc.b, dc.a or 1)
         deaths:ClearAllPoints()
         deaths:SetPoint("TOPRIGHT", preview, "TOPRIGHT", -pad, -top)
-        deaths:SetText(string.format("%d Deaths (-%s)", 2, "00:10"))
+        deaths:SetText("Normal  |  2 Deaths")
         top = top + (c.deathsFontSize or 13) + 4
 
         local trc = c.timerRunningColor or { r = 1, g = 0.808, b = 0.714, a = 1 }
@@ -734,32 +734,19 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         timerTotal:SetTextColor(trc.r, trc.g, trc.b, 0.72)
         timerTotal:Hide()
 
-        if c.showRemainingTimeOnly == true then
-            timerRemaining:ClearAllPoints()
-            timerRemaining:SetPoint("TOPRIGHT", preview, "TOPRIGHT", -pad, -top)
-            timerRemaining:SetText("10:00")
-            timerRemaining:Show()
-            top = top + math.max(timerSize, 18) + 1
-            timerTotal:ClearAllPoints()
-            timerTotal:SetPoint("TOPRIGHT", preview, "TOPRIGHT", -pad, -top)
-            timerTotal:SetText("30:00")
-            timerTotal:Show()
-            top = top + math.max(9, math.floor(timerSize * 0.42)) + 3
-        else
             timer:ClearAllPoints()
             timer:SetPoint("TOPRIGHT", preview, "TOPRIGHT", -pad, -top)
-            timer:SetText("20:00 / 30:00")
+            timer:SetText("20:00")
             timer:Show()
             top = top + math.max(timerSize, 18) + 4
-        end
         local kc = c.keyColor or { r = 0.761, g = 0, b = 1, a = 1 }
         local kdc = c.keyDetailsColor or { r = 1, g = 0.804, b = 0.569, a = 1 }
         key:SetFont(ResolveFont(c, "keyFont"), c.keyFontSize or 14, c.keyFontFlags or "OUTLINE")
         key:SetTextColor(kc.r, kc.g, kc.b, 1)
-        key:SetText("[10]")
+        key:SetText("Forever Dungeon")
         keyDetails:SetFont(ResolveFont(c, "keyDetailsFont"), c.keyDetailsFontSize or 11, c.keyDetailsFontFlags or "OUTLINE")
         keyDetails:SetTextColor(kdc.r, kdc.g, kdc.b, 1)
-        keyDetails:SetText("Tyrannical - Fortified")
+        keyDetails:SetText("")
         key:ClearAllPoints()
         keyDetails:ClearAllPoints()
         keyRow:ClearAllPoints()
@@ -788,35 +775,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         end
         local gap = 2
         local availW = width - pad * 2
-        local frac1, frac2, frac3 = 0.6, 0.2, 0.2
-        local w1 = math.max(20, math.floor((availW - gap * 2) * frac1))
-        local w2 = math.max(20, math.floor((availW - gap * 2) * frac2))
-        local w3 = math.max(20, availW - gap * 2 - w1 - w2)
-        local colors = {
-            c.bar1Color or { r = 0, g = 1, b = 0.478, a = 1 },
-            c.bar2Color or { r = 0, g = 0.749, b = 1, a = 1 },
-            c.bar3Color or { r = 0.796, g = 0, b = 1, a = 1 },
-        }
-        local widths = { w1, w2, w3 }
-        local x = pad
-        for i = 1, 3 do
-            local seg = segments[i]
-            seg.bar:SetStatusBarTexture(texturePath)
-            local segmentColor = colors[i]
-            seg.bar:SetStatusBarColor(segmentColor.r, segmentColor.g, segmentColor.b, segmentColor.a or 1)
-            seg.bar:ClearAllPoints()
-            seg.bar:SetPoint("TOPLEFT", preview, "TOPLEFT", x, -top)
-            seg.bar:SetSize(widths[i], barH)
-            seg.bar:SetMinMaxValues(0, 1)
-            seg.bar:SetValue(0.42)
-            seg.text:SetFont(ResolveFont(c, "bar" .. i .. "Font", "timerFont"), math.max(10, (c.timerFontSize or 22) * 0.55), "OUTLINE")
-            seg.text:SetTextColor(trc.r, trc.g, trc.b, 1)
-            seg.text:SetText(string.format("%d:%02d", i * 4, 0))
-            seg.text:ClearAllPoints()
-            seg.text:SetPoint("BOTTOMRIGHT", seg.bar, "BOTTOMRIGHT", -2, 1)
-            x = x + widths[i] + gap
-        end
-        top = top + barH + 14
+        for _, segment in ipairs(segments) do segment.bar:Hide(); segment.text:Hide() end
 
         -- Forces
         local fc = c.forcesBarColor or { r = 0.733, g = 0.62, b = 0.133, a = 1 }
@@ -826,17 +785,17 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         forces:SetPoint("TOPLEFT", preview, "TOPLEFT", pad, -top)
         forces:SetSize(availW, barH)
         forces:SetMinMaxValues(0, 1)
-        forces:SetValue(0.82)
+        forces:SetValue(2 / 3)
         local glowC = c.forcesGlowColor or { r = 1, g = 0.33, b = 0.08, a = 0.8 }
         forcesGlow:SetStatusBarTexture(texturePath)
         forcesGlow:SetStatusBarColor(glowC.r, glowC.g, glowC.b, glowC.a or 0.8)
         forcesGlow:SetMinMaxValues(0, 1)
         forcesGlow:SetValue(0.82)
-        forcesGlow:SetAlpha(c.showForcesGlow == true and 1 or 0)
+        forcesGlow:SetAlpha(0)
         local forcesC = c.forcesColor or { r = 1, g = 1, b = 1, a = 1 }
         forcesText:SetFont(ResolveFont(c, "forcesFont"), c.forcesFontSize or 11, c.forcesFontFlags or "OUTLINE")
         forcesText:SetTextColor(forcesC.r, forcesC.g, forcesC.b, 1)
-        forcesText:SetText(LText("Forces") .. ": 82.33%")
+        forcesText:SetText(LText("Bosses") .. ": 2 / 3")
         forcesText:ClearAllPoints()
         forcesText:SetWidth(math.max(1, availW - 6))
         forcesText:SetHeight(math.max(barH, c.forcesFontSize or 11))
@@ -897,6 +856,17 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
     end)
     y = y + h + 8
 
+    _, h = W:Button(container, LText("Finish Dungeon Run"), -y, function()
+        if Mod.FinishDungeonRun then Mod:FinishDungeonRun() end
+    end)
+    y = y + h
+    _, h = W:Button(container, LText("Restart Dungeon Run"), -y, function()
+        if Mod.RestartDungeonRun then Mod:RestartDungeonRun() end
+    end)
+    y = y + h + 8
+    _, h = W:Label(container, LText("Starts on dungeon entry. Pauses outside. If the client cannot report completion, use Finish Dungeon Run."), -y, 10)
+    y = y + h + 4
+
     local function RefreshTracker()
         if Mod.RefreshMythicPlusTracker then
             Mod:RefreshMythicPlusTracker()
@@ -933,14 +903,8 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
             by = by + rowHeight
         end
 
-        AddToggle("Enable Mythic+ Tracker", function() return config.enabled == true end, function(value) config.enabled = value and true or false end)
-        AddToggle("Insert Keystone Automatically", function() return config.insertKeystoneAutomatically end, function(value) config.insertKeystoneAutomatically = value end)
-        AddToggle("Show MS (milliseconds) on Complete", function() return config.showMillisecondsWhenDungeonCompleted end, function(value) config.showMillisecondsWhenDungeonCompleted = value end)
-        AddToggle("Show Remaining Time Only", function() return config.showRemainingTimeOnly == true end, function(value) config.showRemainingTimeOnly = value and true or false end)
-        AddToggle("Show Tooltip Forces Count", function() return config.showTooltipCount ~= false end, function(value) config.showTooltipCount = value end)
-        AddToggle("Show Deaths Tooltip (Hover)", function() return config.showDeathsTooltip ~= false end, function(value) config.showDeathsTooltip = value end)
+        AddToggle("Enable Dungeon Tracker", function() return config.enabled == true end, function(value) config.enabled = value and true or false end)
         AddToggle("Show Tracker Background", function() return config.showBackground == true end, function(value) config.showBackground = value and true or false end)
-        AddToggle("Show Forces Glow", function() return config.showForcesGlow == true end, function(value) config.showForcesGlow = value and true or false end)
 
         _, rowHeight = W:Slider(parent, LText("Scale"), -by,
             function() return config.scale or 1 end,
@@ -969,11 +933,10 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
                 8, 48, 1)
             by = by + rowHeight
         end
-        AddSize("Key Level Font Size", "keyFontSize", 16)
-        AddSize("Key Details Font Size", "keyDetailsFontSize", 13)
+        AddSize("Dungeon Name Font Size", "keyFontSize", 16)
+        AddSize("Dungeon Details Font Size", "keyDetailsFontSize", 13)
         AddSize("Timer Font Size", "timerFontSize", 26)
-        AddSize("Forces Font Size", "forcesFontSize", 13)
-        AddSize("Deaths Font Size", "deathsFontSize", 15)
+        AddSize("Boss Progress Font Size", "forcesFontSize", 13)
         AddSize("Objectives Font Size", "objectivesFontSize", 12)
         return by
     end)
@@ -994,9 +957,6 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
         end
 
         AddFontChoice("Tracker Font", "globalFont")
-        AddFontChoice("Chest +3 Font", "bar1Font", "timerFont")
-        AddFontChoice("Chest +2 Font", "bar2Font", "timerFont")
-        AddFontChoice("Chest +1 Font", "bar3Font", "timerFont")
         AddFontChoice("Mobs Font", "forcesFont")
         by = by + 6
 
@@ -1014,28 +974,23 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
             by = by + rowHeight
         end
         AddColor("backgroundColor", LText("Background Color"), { r = 0.01, g = 0.01, b = 0.015, a = 0 })
-        AddColor("keyColor", LText("Key Level Color"), { r = 0.761, g = 0, b = 1, a = 1 })
-        AddColor("keyDetailsColor", LText("Key Details Color"), { r = 1, g = 0.804, b = 0.569, a = 1 })
+        AddColor("keyColor", LText("Dungeon Name Color"), { r = 0.761, g = 0, b = 1, a = 1 })
+        AddColor("keyDetailsColor", LText("Dungeon Details Color"), { r = 1, g = 0.804, b = 0.569, a = 1 })
         AddColor("timerRunningColor", LText("Timer Running Color"), { r = 1, g = 0.808, b = 0.714, a = 1 })
         AddColor("timerSuccessColor", LText("Timer Success Color"), { r = 0.118, g = 1, b = 0.714, a = 1 })
-        AddColor("timerExpiredColor", LText("Timer Expired Color"), { r = 1, g = 0.16, b = 0.18, a = 1 })
         AddColor("completedObjectivesColor", LText("Completed Objectives Color"), { r = 0, g = 1, b = 0.14, a = 1 })
         AddColor("deathsColor", LText("Deaths Color"), { r = 1, g = 0, b = 0.412, a = 1 })
         return by
     end)
 
-    AddOptionBlock(columns, "right", LText("Forces & Segment Colors"), function(parent)
+    AddOptionBlock(columns, "right", LText("Boss Progress Colors"), function(parent)
         local by, rowHeight = 0, 0
         local function AddColor(key, label, default)
             rowHeight = AddColorSetting(parent, key, label, default, by)
             by = by + rowHeight
         end
-        AddColor("forcesColor", LText("Forces Text Color"), { r = 1, g = 1, b = 1, a = 1 })
-        AddColor("forcesBarColor", LText("Forces Bar Color"), { r = 0.733, g = 0.62, b = 0.133, a = 1 })
-        AddColor("forcesGlowColor", LText("Forces Glow Color"), { r = 1, g = 0.33, b = 0.08, a = 0.8 })
-        AddColor("bar1Color", LText("+3 Segment Color"), { r = 0, g = 1, b = 0.478, a = 1 })
-        AddColor("bar2Color", LText("+2 Segment Color"), { r = 0, g = 0.749, b = 1, a = 1 })
-        AddColor("bar3Color", LText("+1 Segment Color"), { r = 0.796, g = 0, b = 1, a = 1 })
+        AddColor("forcesColor", LText("Boss Progress Text Color"), { r = 1, g = 1, b = 1, a = 1 })
+        AddColor("forcesBarColor", LText("Boss Progress Bar Color"), { r = 0.733, g = 0.62, b = 0.133, a = 1 })
         return by
     end)
 
@@ -2359,7 +2314,7 @@ local CATEGORY_SECTIONS = {
         { column = "left", title = LText("Damage Meter"), build = BuildDamageMeterBlock },
     },
     timer = {
-        { column = "left", title = LText("Mythic+ Keystones Tracker"), build = BuildMythicPlusTrackerBlock },
+        { column = "left", title = LText("Forever Dungeon Tracker"), build = BuildMythicPlusTrackerBlock },
     },
     automation = {
         { column = "left", title = LText("Automation"), build = BuildAutomationBlock },

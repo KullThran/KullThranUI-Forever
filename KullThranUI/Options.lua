@@ -3620,7 +3620,7 @@ local function CreateMenuFrame()
                     -- so make the feature discoverable even when that tab is not active.
                     AddIndexedText(LText("Damage Meter"))
                     AddIndexedText(LText("Damage Meter Settings"))
-                    AddIndexedText(LText("Mythic+ Timer"))
+                    AddIndexedText(LText("Dungeon Timer"))
                     AddIndexedText(LText("Live Preview"))
                 end
                 pcall(page.builder, dummyFrame, proxyW)
