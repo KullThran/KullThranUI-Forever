@@ -718,7 +718,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         deaths:SetTextColor(dc.r, dc.g, dc.b, dc.a or 1)
         deaths:ClearAllPoints()
         deaths:SetPoint("TOPRIGHT", preview, "TOPRIGHT", -pad, -top)
-        deaths:SetText("Normal  |  2 Deaths")
+        deaths:SetText(LText("Normal") .. "  |  " .. string.format(LText("%d Deaths"), 2))
         top = top + (c.deathsFontSize or 13) + 4
 
         local trc = c.timerRunningColor or { r = 1, g = 0.808, b = 0.714, a = 1 }
@@ -743,7 +743,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         local kdc = c.keyDetailsColor or { r = 1, g = 0.804, b = 0.569, a = 1 }
         key:SetFont(ResolveFont(c, "keyFont"), c.keyFontSize or 14, c.keyFontFlags or "OUTLINE")
         key:SetTextColor(kc.r, kc.g, kc.b, 1)
-        key:SetText("Forever Dungeon")
+        key:SetText(LText("Forever Dungeon"))
         keyDetails:SetFont(ResolveFont(c, "keyDetailsFont"), c.keyDetailsFontSize or 11, c.keyDetailsFontFlags or "OUTLINE")
         keyDetails:SetTextColor(kdc.r, kdc.g, kdc.b, 1)
         keyDetails:SetText("")
@@ -795,7 +795,7 @@ local function CreateMythicPlusLivePreview(container, startY, db)
         local forcesC = c.forcesColor or { r = 1, g = 1, b = 1, a = 1 }
         forcesText:SetFont(ResolveFont(c, "forcesFont"), c.forcesFontSize or 11, c.forcesFontFlags or "OUTLINE")
         forcesText:SetTextColor(forcesC.r, forcesC.g, forcesC.b, 1)
-        forcesText:SetText(LText("Bosses") .. ": 2 / 3")
+        forcesText:SetText(string.format(LText("Bosses: %d / %d"), 2, 3))
         forcesText:ClearAllPoints()
         forcesText:SetWidth(math.max(1, availW - 6))
         forcesText:SetHeight(math.max(barH, c.forcesFontSize or 11))
@@ -957,7 +957,7 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
         end
 
         AddFontChoice("Tracker Font", "globalFont")
-        AddFontChoice("Mobs Font", "forcesFont")
+        AddFontChoice("Boss Progress Font", "forcesFont")
         by = by + 6
 
         _, rowHeight = W:Dropdown(parent, LText("Bar Texture"), -by, GetTrackerTextureValues,
@@ -967,7 +967,7 @@ local function BuildMythicPlusTrackerBlock(container, W, db)
         by = by + rowHeight
         return by
     end)
-    AddOptionBlock(columns, "left", LText("Timer & Key Colors"), function(parent)
+    AddOptionBlock(columns, "left", LText("Timer & Dungeon Colors"), function(parent)
         local by, rowHeight = 0, 0
         local function AddColor(key, label, default)
             rowHeight = AddColorSetting(parent, key, label, default, by)

@@ -19,6 +19,13 @@ local function Plain(value)
     return value
 end
 
+-- Every visible string goes through the locale tables (Locales/Modules/DungeonTimer.lua).
+local function L(text)
+    local locale = KT.GetLocale and KT:GetLocale()
+    local value = locale and locale[text]
+    return type(value) == "string" and value ~= "" and value or text
+end
+
 local function Config()
     local db = Mod:GetDB()
     db.mplusTracker = db.mplusTracker or {}
@@ -151,14 +158,15 @@ local function Render()
         text:Show()
         y = y + size + 5
     end
-    Row(f.title, run.name or "Dungeon", "keyFont", c.keyFontSize or 16, c.keyColor or accent)
+    Row(f.title, run.name or L("Dungeon"), "keyFont", c.keyFontSize or 16, c.keyColor or accent)
     Row(f.timer, Clock(Elapsed()), "timerFont", c.timerFontSize or 26,
         run.completed and c.timerSuccessColor or c.timerRunningColor)
-    Row(f.details, (run.completed and "Completed" or (run.difficultyName or "Normal")) .. "  |  " .. (run.deaths or 0) .. " Deaths",
+    Row(f.details, (run.completed and L("Dungeon Completed") or (run.difficultyName or L("Normal"))) .. "  |  "
+        .. string.format(L("%d Deaths"), run.deaths or 0),
         "keyDetailsFont", c.keyDetailsFontSize or 13, c.keyDetailsColor)
     local killed, total = BossCount(), run.total or 0
-    Row(f.progressText, total > 0 and string.format("Bosses: %d / %d", killed, total)
-        or string.format("Bosses defeated: %d", killed), "forcesFont", c.forcesFontSize or 13, c.forcesColor)
+    Row(f.progressText, total > 0 and string.format(L("Bosses: %d / %d"), killed, total)
+        or string.format(L("Bosses defeated: %d"), killed), "forcesFont", c.forcesFontSize or 13, c.forcesColor)
     f.progress:ClearAllPoints()
     f.progress:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -y)
     f.progress:SetSize(width, c.barHeight or 10)
@@ -170,7 +178,7 @@ local function Render()
     for i, text in ipairs(f.objectives) do
         local boss = run.bosses[i]
         if boss then
-            Row(text, (boss.killed and "|TInterface\\RaidFrame\\ReadyCheck-Ready:12|t " or "") .. boss.name
+            Row(text, (boss.killed and "|TInterface\\RaidFrame\\ReadyCheck-Ready:12|t " or "") .. (boss.label and L(boss.label) or boss.name)
                 .. (boss.split and "  " .. Clock(boss.split) or ""), "objectivesFont", c.objectivesFontSize or 12,
                 boss.killed and c.completedObjectivesColor or c.objectivesColor)
         else text:Hide() end
@@ -234,7 +242,10 @@ local function RecordKill(id, name)
     for _, boss in ipairs(run.bosses) do
         if (id and boss.id == id) or (name and boss.name == name) then found = boss; break end
     end
-    if not found then found = { id = id, name = name or "Boss" }; run.bosses[#run.bosses + 1] = found end
+    if not found then
+        found = { id = id, name = name, label = not name and "Boss" or nil }
+        run.bosses[#run.bosses + 1] = found
+    end
     if not found.killed then found.killed = true; found.split = Elapsed() end
     local knownKilled = 0
     for _, boss in ipairs(run.bosses) do if boss.known and boss.killed then knownKilled = knownKilled + 1 end end
@@ -265,10 +276,10 @@ end
 function Mod:GetMythicPlusTrackerFrame() return Build() end
 function Mod:RunMythicPlusTrackerTest()
     testing = true; simulation = nil
-    run = { name = "Forever Dungeon", difficultyName = "Normal", started = Now() - 600,
+    run = { name = L("Forever Dungeon"), started = Now() - 600,
         elapsed = 0, deaths = 2, total = 3, bosses = {
-            { name = "First Boss", killed = true, split = 200 },
-            { name = "Second Boss", killed = true, split = 400 }, { name = "Final Boss" } } }
+            { label = "First Boss", killed = true, split = 200 },
+            { label = "Second Boss", killed = true, split = 400 }, { label = "Final Boss" } } }
     EnsureTicker()
     Render()
 end
@@ -278,19 +289,19 @@ function Mod:RunDungeonSimulation(step)
     testing = true
     local token = {}
     simulation = token
-    run = { name = "Simulated Dungeon", difficultyName = "Normal", started = Now(), elapsed = 0, deaths = 0,
+    run = { name = L("Simulated Dungeon"), started = Now(), elapsed = 0, deaths = 0,
         total = 3, completed = false, bosses = {
-            { name = "First Boss", id = 1, known = true }, { name = "Second Boss", id = 2, known = true },
-            { name = "Final Boss", id = 3, known = true } } }
+            { label = "First Boss", id = 1, known = true }, { label = "Second Boss", id = 2, known = true },
+            { label = "Final Boss", id = 3, known = true } } }
     dead = {}
     EnsureTicker()
     Render()
     step = tonumber(step) or 4
     local script = {
-        function() RecordKill(1, "First Boss") end,
+        function() RecordKill(1) end,
         function() run.deaths = run.deaths + 1 end,
-        function() RecordKill(2, "Second Boss") end,
-        function() RecordKill(3, "Final Boss") end,
+        function() RecordKill(2) end,
+        function() RecordKill(3) end,
     }
     for i, action in ipairs(script) do
         C_Timer.After(step * i, function()
@@ -317,7 +328,7 @@ end
 function Mod:RegisterMythicPlusTrackerMover()
     if self.mythicPlusTrackerMoverRegistered then return end
     KT:RegisterMovableElements({{
-        key = "ENH_MYTHIC_PLUS_TRACKER", label = "Dungeon Timer", group = "Enhancements",
+        key = "ENH_MYTHIC_PLUS_TRACKER", label = L("Dungeon Timer"), group = "Enhancements",
         getFrame = Build, getSize = function() local f = Build(); return f:GetWidth(), f:GetHeight() end,
         isHidden = function() return false end,
         loadPosition = function() return Config().position or { point = "RIGHT", relativePoint = "RIGHT", x = -16, y = 224 } end,
@@ -380,8 +391,9 @@ KT:RegisterChatCommand("ktdungeon", function(message)
     elseif command == "finish" then Mod:FinishDungeonRun()
     elseif command == "status" then
         local s = Mod:GetDungeonTrackerStatus()
-        KT:Print(string.format("Dungeon Timer: enabled=%s module=%s ready=%s instance=%s (%s, %s) running=%s completed=%s time=%s shown=%s",
-            tostring(s.enabled), tostring(s.moduleEnabled), tostring(s.initialized), tostring(s.instance),
-            tostring(s.kind), tostring(s.difficulty), tostring(s.running), tostring(s.completed), Clock(s.elapsed), tostring(s.shown)))
-    else KT:Print("/ktdungeon test | sim | stop | status | reset | finish") end
+        local function YesNo(value) return value and L("Yes") or L("No") end
+        KT:Print(string.format(L("Dungeon Timer status: enabled %s, module %s, ready %s, instance %s (%s, %s), running %s, completed %s, time %s, shown %s"),
+            YesNo(s.enabled), YesNo(s.moduleEnabled), YesNo(s.initialized), tostring(s.instance or "-"),
+            tostring(s.kind or "-"), tostring(s.difficulty or "-"), YesNo(s.running), YesNo(s.completed), Clock(s.elapsed), YesNo(s.shown)))
+    else KT:Print(L("Dungeon Timer commands: /ktdungeon test | sim | stop | status | reset | finish")) end
 end)

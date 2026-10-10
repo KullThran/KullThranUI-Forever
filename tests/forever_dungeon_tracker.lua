@@ -114,6 +114,49 @@ runTimers();assert(mod.mplusTrackerFrame.details.text:find("Completed",1,true) a
 assert(mod.mplusTrackerFrame.progressText.text=="Bosses: 3 / 3" and db.mplusTracker.dungeonRun==saved)
 callbacks.ktdungeon("stop");assert(mod.mplusTrackerFrame.title.text=="Test Dungeon")
 local status=mod:GetDungeonTrackerStatus();assert(status.enabled and status.kind=="party" and status.shown)
+-- Every Dungeon Timer string is translated in all supported languages, and the
+-- HUD, simulation and slash output render in the client language.
+local function loadLocales()
+ local lns={}
+ for line in io.lines(root.."/KullThranUI/KullThranUI.toc") do
+  line=line:gsub("\r","")
+  if line:match("^Locales\\") then
+   local h=io.open(root.."/KullThranUI/"..line:gsub("\\","/"))
+   if h then local c=assert(loadstring(h:read("*a"),line));h:close();c("KullThranUI",lns) end
+  end
+ end
+ return lns.Locales
+end
+local locales=loadLocales()
+local used={}
+for _,file in ipairs({"/KullThranUI/Modules/Enhancements/Enhancements_ForeverDungeonTracker.lua","/KullThranUI/Modules/Enhancements/Enhancements_Options.lua"}) do
+ local h=assert(io.open(root..file));local src=h:read("*a"):gsub("\r\n","\n");h:close()
+ if file:find("Options") then
+  local a=assert(src:find("local function CreateMythicPlusLivePreview",1,true))
+  local b=assert(src:find("\nend\n",assert(src:find("local function BuildMythicPlusTrackerBlock",a,true)),true))
+  src=src:sub(a,b)..'LText("Dungeon Timer") LText("Elapsed dungeon time, bosses, party deaths, live preview, and appearance.") LText("Forever Dungeon Tracker")'
+ end
+ for key in src:gmatch('L%("([^"]+)"%)') do used[key]=true end
+ for key in src:gmatch('LText%("([^"]+)"%)') do used[key]=true end
+ for key in src:gmatch('Add%a+%("([^"]+)"') do used[key]=true end
+ for key in src:gmatch('label = "([^"]+)"') do used[key]=true end
+end
+local sameOk={Dungeon=true,Boss=true,Normal=true,No=true,["Bar Texture"]=true}
+for key in pairs(used) do
+ for _,lang in ipairs({"esES","deDE","frFR","itIT","ptBR","ruRU","koKR","zhCN","zhTW"}) do
+  local v=locales[lang][key]
+  assert(type(v)=="string" and v~="",lang.." missing: "..key)
+  assert(v~=key or sameOk[key] or not key:find("Dungeon") and not key:find("Boss"),lang.." untranslated: "..key)
+ end
+end
+kt.GetLocale=function() return locales.esES end
+callbacks.ktdungeon("sim 2");runTimers()
+assert(mod.mplusTrackerFrame.title.text=="Mazmorra simulada" and mod.mplusTrackerFrame.progressText.text=="Jefes: 3 / 3")
+assert(mod.mplusTrackerFrame.details.text=="Mazmorra completada  |  1 muertes" and mod.mplusTrackerFrame.objectives[1].text:find("Primer jefe",1,true))
+local printed;kt.Print=function(_,msg) printed=msg end
+callbacks.ktdungeon("status");assert(printed:find("^Estado del temporizador de mazmorra"))
+callbacks.ktdungeon("");assert(printed:find("^Comandos del temporizador de mazmorra"))
+callbacks.ktdungeon("stop");kt.GetLocale=nil;kt.Print=function() end
 -- Navigation must retain timer selection; the old Forever redirect removed it.
 local file=assert(io.open(root.."/KullThranUI/Modules/Enhancements/Enhancements_Options.lua"))
 local options=file:read("*a"):gsub("\r\n","\n");file:close()
@@ -136,4 +179,4 @@ assert(enhancementsDB({}).mplusTracker.enabled==true)
 local old={enhancements={mplusTracker={enabled=false}}}
 assert(enhancementsDB(old).mplusTracker.enabled==true)
 old.enhancements.mplusTracker.enabled=false;assert(enhancementsDB(old).mplusTracker.enabled==false)
-print("PASS: Forever dungeon lifecycle, reload, boss splits, deaths, completion, pause/resume, preview isolation, mover, profile switch, secret payloads, journal lookup, simulation and default migration")
+print("PASS: Forever dungeon lifecycle, reload, boss splits, deaths, completion, pause/resume, preview isolation, mover, profile switch, secret payloads, journal lookup, simulation, default migration and translations")
