@@ -6395,6 +6395,79 @@ local function SetupUnitIndicators(frame, unit)
         frame._kuiPvPShadow = shadow
     end
 
+    -- Only textures are touched here (nothing protected), so it also runs in
+    -- combat: otherwise a PvP badge from the previous target stays on a mob.
+    local function RefreshPvPIcon(u, profile, renderedTheme)
+    local pvpFaction = (profile and profile.showPvPIcon ~= false
+        and (u == "player" or u == "target"))
+        and SafeUnitPvPFaction(u) or nil
+    -- The backdrop circle defaults OFF for kui
+    -- style, with its own toggle so kui users can still turn it on.
+    -- The seed()+one-time-migration default (seed only
+    -- runs on an explicit theme switch, same rule as every other
+    -- seeded field in this module; the migration only runs once,
+    -- guarded by its own flag) still left it visible for an existing
+    -- kui profile -- rather than chase why that one-shot missed it,
+    -- recompute the real default here every refresh: once the user has
+    -- explicitly toggled it (profile.showPvPCircle is no longer nil),
+    -- that choice always wins; until then, it follows the CURRENT
+    -- theme directly instead of trusting a historical snapshot.
+    local showPvPCircle
+    if renderedTheme == "kui" then
+        -- kui style never draws the backdrop circle (icon gets a shadow instead).
+        showPvPCircle = false
+    elseif profile and profile.showPvPCircle ~= nil then
+        showPvPCircle = profile.showPvPCircle
+    else
+        showPvPCircle = renderedTheme ~= "kui"
+    end
+    -- Temporary debug: cache the real inputs behind the PvP circle
+    -- visibility on kui for the debug dump.
+    frame._ktDebugPvPCircleProfileVal = tostring(profile and profile.showPvPCircle)
+    frame._ktDebugPvPCircleRenderedTheme = tostring(renderedTheme)
+    frame._ktDebugPvPCircleComputed = tostring(showPvPCircle)
+    -- PvP icon style: "modern" (ours) or "classic" (stock banner, cropped to
+    -- the 42/64 art area).  Default: the
+    -- Classic style in the Classic theme, ours everywhere else.
+    local pvpStyle
+    if profile then
+        if u == "target" then pvpStyle = profile.pvpIconStyleTarget
+        else pvpStyle = profile.pvpIconStyle end
+    end
+    if pvpStyle ~= "modern" and pvpStyle ~= "classic" then
+        pvpStyle = (renderedTheme == "classic") and "classic" or "modern"
+    end
+    if pvpFaction == "Horde" or pvpFaction == "Alliance" then
+        if pvpStyle == "classic" then
+            frame._kuiPvPIcon:SetSize(28, 28)
+            frame._kuiPvPIcon:SetTexture("Interface\\TargetingFrame\\UI-PVP-" .. pvpFaction)
+            frame._kuiPvPIcon:SetTexCoord(0, 0.65625, 0, 0.65625)
+            frame._kuiPvPShadow:Hide()
+            -- The stock banner has its own plate: no backdrop circle.
+            frame._kuiPvPCircle:Hide()
+            frame._kuiPvPCircleBorder:Hide()
+        else
+            frame._kuiPvPIcon:SetSize(16, 16)
+            frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
+            frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
+            frame._kuiPvPShadow:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
+            frame._kuiPvPShadow:SetShown(renderedTheme == "kui")
+            frame._kuiPvPCircle:SetShown(showPvPCircle)
+            frame._kuiPvPCircleBorder:SetShown(showPvPCircle)
+        end
+        frame._kuiPvPIcon:Show()
+    else
+        -- PvP disabled or no faction on this
+        -- unit removes the backdrop circle (and its border) too, never
+        -- independently.
+        frame._kuiPvPIcon:Hide()
+        frame._kuiPvPShadow:Hide()
+        frame._kuiPvPCircle:Hide()
+        frame._kuiPvPCircleBorder:Hide()
+    end
+    if ns.KUIOrnaments then pcall(ns.KUIOrnaments.ApplyPvPCircle, frame) end
+    end
+
     local function RefreshForeverMetadata()
         local themes = KT.VisualThemes
         if themes and themes.UpdateUnitFrameNameReaction then
@@ -6403,7 +6476,10 @@ local function SetupUnitIndicators(frame, unit)
         -- This pass adjusts protected geometry. PLAYER_REGEN_ENABLED below
         -- refreshes it using the current unit and settings after combat.
         if InCombatLockdown() then
-            ns.RefreshLevelBadgeVisibility(frame, frame.unit or unit, db and db.profile)
+            local cu, cp = frame.unit or unit, db and db.profile
+            RefreshPvPIcon(cu, cp, KT.VisualThemes and KT.VisualThemes.GetRenderedTheme
+                and KT.VisualThemes:GetRenderedTheme())
+            ns.RefreshLevelBadgeVisibility(frame, cu, cp)
             return
         end
         local u = frame.unit or (frame.GetAttribute and frame:GetAttribute("unit")) or unit
@@ -6800,74 +6876,7 @@ local function SetupUnitIndicators(frame, unit)
         if (u == "player" or u == "target") and ns.BarFrameArt and ns.BarFrameArt.Update then
             pcall(ns.BarFrameArt.Update, frame, u)
         end
-        local pvpFaction = (profile and profile.showPvPIcon ~= false
-            and (u == "player" or u == "target"))
-            and SafeUnitPvPFaction(u) or nil
-        -- The backdrop circle defaults OFF for kui
-        -- style, with its own toggle so kui users can still turn it on.
-        -- The seed()+one-time-migration default (seed only
-        -- runs on an explicit theme switch, same rule as every other
-        -- seeded field in this module; the migration only runs once,
-        -- guarded by its own flag) still left it visible for an existing
-        -- kui profile -- rather than chase why that one-shot missed it,
-        -- recompute the real default here every refresh: once the user has
-        -- explicitly toggled it (profile.showPvPCircle is no longer nil),
-        -- that choice always wins; until then, it follows the CURRENT
-        -- theme directly instead of trusting a historical snapshot.
-        local showPvPCircle
-        if renderedTheme == "kui" then
-            -- kui style never draws the backdrop circle (icon gets a shadow instead).
-            showPvPCircle = false
-        elseif profile and profile.showPvPCircle ~= nil then
-            showPvPCircle = profile.showPvPCircle
-        else
-            showPvPCircle = renderedTheme ~= "kui"
-        end
-        -- Temporary debug: cache the real inputs behind the PvP circle
-        -- visibility on kui for the debug dump.
-        frame._ktDebugPvPCircleProfileVal = tostring(profile and profile.showPvPCircle)
-        frame._ktDebugPvPCircleRenderedTheme = tostring(renderedTheme)
-        frame._ktDebugPvPCircleComputed = tostring(showPvPCircle)
-        -- PvP icon style: "modern" (ours) or "classic" (stock banner, cropped to
-        -- the 42/64 art area).  Default: the
-        -- Classic style in the Classic theme, ours everywhere else.
-        local pvpStyle
-        if profile then
-            if u == "target" then pvpStyle = profile.pvpIconStyleTarget
-            else pvpStyle = profile.pvpIconStyle end
-        end
-        if pvpStyle ~= "modern" and pvpStyle ~= "classic" then
-            pvpStyle = (renderedTheme == "classic") and "classic" or "modern"
-        end
-        if pvpFaction == "Horde" or pvpFaction == "Alliance" then
-            if pvpStyle == "classic" then
-                frame._kuiPvPIcon:SetSize(28, 28)
-                frame._kuiPvPIcon:SetTexture("Interface\\TargetingFrame\\UI-PVP-" .. pvpFaction)
-                frame._kuiPvPIcon:SetTexCoord(0, 0.65625, 0, 0.65625)
-                frame._kuiPvPShadow:Hide()
-                -- The stock banner has its own plate: no backdrop circle.
-                frame._kuiPvPCircle:Hide()
-                frame._kuiPvPCircleBorder:Hide()
-            else
-                frame._kuiPvPIcon:SetSize(16, 16)
-                frame._kuiPvPIcon:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
-                frame._kuiPvPIcon:SetTexCoord(0, 1, 0, 1)
-                frame._kuiPvPShadow:SetTexture(PVP_ICON_PATH .. pvpFaction .. ".png")
-                frame._kuiPvPShadow:SetShown(renderedTheme == "kui")
-                frame._kuiPvPCircle:SetShown(showPvPCircle)
-                frame._kuiPvPCircleBorder:SetShown(showPvPCircle)
-            end
-            frame._kuiPvPIcon:Show()
-        else
-            -- PvP disabled or no faction on this
-            -- unit removes the backdrop circle (and its border) too, never
-            -- independently.
-            frame._kuiPvPIcon:Hide()
-            frame._kuiPvPShadow:Hide()
-            frame._kuiPvPCircle:Hide()
-            frame._kuiPvPCircleBorder:Hide()
-        end
-        if ns.KUIOrnaments then pcall(ns.KUIOrnaments.ApplyPvPCircle, frame) end
+        RefreshPvPIcon(u, profile, renderedTheme)
         if frame._kuiClassicRingTex then frame._kuiClassicRingTex:Hide() end
         if ns.KUIOrnaments then ns.KUIOrnaments.HideClassicDragon(frame._kuiClassicRingTex) end
         if not (renderedTheme == "classic" or classicKit) then frame._ktClassicSheetPath = nil end

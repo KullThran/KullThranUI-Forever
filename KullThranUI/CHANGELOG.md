@@ -37,6 +37,8 @@ Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/file
 - Teleport Menu shows destination names in your client's language.
 - Minimap layout refreshes with your current settings after combat.
 - Tooltip, Installer previews, Inspect, Minimap and Aura Reminders texts are now translated in every supported language.
+- Unit Frames: the PvP icon of the previous target no longer stays on the frame when you switch targets in combat.
+- Cast Bar: chaining fast casts no longer hides the first cast halfway through.
 
 ## 0.1.2 (2026-10-06) - Beta
 
