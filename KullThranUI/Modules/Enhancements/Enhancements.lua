@@ -522,6 +522,20 @@ local DEFAULTS = {
         fadeOut = 0.35,
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 120 },
     },
+    debuffTracker = {
+        enabled = false,
+        iconSize = 30,
+        spacing = 2,
+        scale = 1,
+        growth = "RIGHT",
+        showTimers = true,
+        glowMissing = true,
+        missingAlpha = 0.5,
+        groupOnly = true,
+        hidden = {},
+        custom = {},
+        position = { point = "CENTER", relativePoint = "CENTER", x = 270, y = -278 },
+    },
     mplusTracker = {
         enabled = true,
         insertKeystoneAutomatically = false,
@@ -2169,6 +2183,10 @@ function Mod:OnEnable()
     if self.InitializeMythicPlusTracker and enhancementsDB.mplusTracker
         and enhancementsDB.mplusTracker.enabled == true then
         self:InitializeMythicPlusTracker()
+    end
+    if self.InitializeDebuffTracker and enhancementsDB.debuffTracker
+        and enhancementsDB.debuffTracker.enabled == true then
+        self:InitializeDebuffTracker()
     end
     if self:IsForeverFeatureAvailable("dungeonHistory") then
         if self.InitializeDungeonHistory then

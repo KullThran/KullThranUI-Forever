@@ -258,7 +258,7 @@ local function SetSystemSectionState(key, value)
     db.ui.activeEnhancementSystemSection = value and key or nil
 end
 
-local CATEGORY_ORDER = { "instance", "damage", "timer", "automation", "interface", "system" }
+local CATEGORY_ORDER = { "instance", "damage", "timer", "debuffs", "automation", "interface", "system" }
 
 local CATEGORY_META = {
     instance = {
@@ -272,6 +272,10 @@ local CATEGORY_META = {
     timer = {
         title = LText("Dungeon Timer"),
         description = LText("Elapsed dungeon time, bosses, party deaths, live preview, and appearance."),
+    },
+    debuffs = {
+        title = LText("Debuff Tracker"),
+        description = LText("Important debuffs your target is missing, with timers while they are active."),
     },
     automation = {
         title = LText("Automation & Social"),
@@ -291,6 +295,7 @@ local CATEGORY_ICONS = {
     instance = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\Dungeon&Raids.tga",
     damage = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\DamageMeter.tga",
     timer = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\MythicPlusTimer.tga",
+    debuffs = "Interface\Icons\Ability_Warrior_Sunder",
     automation = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\Automation&Social.tga",
     interface = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\Interface&Combat.tga",
     system = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\EnhacementsIcons\\SystemTuning.tga",
@@ -300,6 +305,7 @@ local CATEGORY_ICON_COLORS = {
     instance = { 1.00, 0.82, 0.10 }, -- yellow
     damage = { 1.00, 0.12, 0.12 }, -- red
     timer = { 0.72, 0.28, 1.00 }, -- purple
+    debuffs = { 1.00, 0.45, 0.10 }, -- orange
     automation = { 0.20, 1.00, 0.35 }, -- green
     interface = { 0.20, 0.55, 1.00 }, -- blue
     system = { 1.00, 1.00, 1.00 }, -- white
@@ -2319,6 +2325,109 @@ local function BuildDungeonHistoryBlock(container, W, db)
     return y + h + 6
 end
 
+local function BuildDebuffTrackerBlock(container, W, db)
+    db.debuffTracker = db.debuffTracker or {}
+    local config = db.debuffTracker
+    local y, h = 0, 0
+    local function RefreshTracker()
+        if Mod.RefreshDebuffTracker then Mod:RefreshDebuffTracker() end
+    end
+
+    _, h = W:Toggle(container, LText("Enable Debuff Tracker"), -y,
+        function() return config.enabled == true end,
+        function(value) config.enabled = value and true or false; RefreshTracker() end)
+    y = y + h
+    _, h = W:Toggle(container, LText("Only Debuffs Your Group Can Apply"), -y,
+        function() return config.groupOnly ~= false end,
+        function(value) config.groupOnly = value and true or false; RefreshTracker() end)
+    y = y + h
+    _, h = W:Toggle(container, LText("Show Timers"), -y,
+        function() return config.showTimers ~= false end,
+        function(value) config.showTimers = value and true or false; RefreshTracker() end)
+    y = y + h
+    _, h = W:Toggle(container, LText("Glow Missing Debuffs"), -y,
+        function() return config.glowMissing ~= false end,
+        function(value) config.glowMissing = value and true or false; RefreshTracker() end)
+    y = y + h
+    _, h = W:Slider(container, LText("Icon Size"), -y,
+        function() return config.iconSize or 30 end,
+        function(value) config.iconSize = value; RefreshTracker() end,
+        16, 64, 1)
+    y = y + h
+    _, h = W:Slider(container, LText("Icon Spacing"), -y,
+        function() return config.spacing or 2 end,
+        function(value) config.spacing = value; RefreshTracker() end,
+        0, 12, 1)
+    y = y + h
+    _, h = W:Slider(container, LText("Scale"), -y,
+        function() return config.scale or 1 end,
+        function(value) config.scale = value; RefreshTracker() end,
+        0.5, 2, 0.05)
+    y = y + h
+    _, h = W:Slider(container, LText("Missing Debuff Opacity"), -y,
+        function() return config.missingAlpha or 0.5 end,
+        function(value) config.missingAlpha = value; RefreshTracker() end,
+        0.1, 1, 0.05)
+    y = y + h
+    _, h = W:Dropdown(container, LText("Growth Direction"), -y,
+        {
+            RIGHT = LText("Right"),
+            LEFT = LText("Left"),
+            UP = LText("Up"),
+            DOWN = LText("Down"),
+        },
+        function() return config.growth or "RIGHT" end,
+        function(value) config.growth = value; RefreshTracker() end,
+        { "RIGHT", "LEFT", "UP", "DOWN" })
+    y = y + h + 6
+    _, h = W:Button(container, LText("Preview Tracker"), -y, function()
+        if Mod.RunDebuffTrackerTest then Mod:RunDebuffTrackerTest() end
+    end)
+    y = y + h
+    _, h = W:Button(container, LText("Stop Preview"), -y, function()
+        if Mod.StopDebuffTrackerTest then Mod:StopDebuffTrackerTest() end
+    end)
+    y = y + h + 6
+    _, h = W:Label(container, LText("In combat the client hides enemy aura data. Debuffs seen before the pull keep updating; the others show a question mark. Check your client with /ktdebuffs diag."), -y, 10)
+    return y + h + 6
+end
+
+local function BuildDebuffListBlock(container, W, db)
+    db.debuffTracker = db.debuffTracker or {}
+    local config = db.debuffTracker
+    config.hidden = config.hidden or {}
+    local y, h = 0, 0
+    local function RefreshTracker()
+        if Mod.RefreshDebuffTracker then Mod:RefreshDebuffTracker() end
+    end
+
+    for _, entry in ipairs(Mod.GetDebuffTrackerEntries and Mod:GetDebuffTrackerEntries() or {}) do
+        if entry.custom then
+            _, h = W:Label(container, entry.name, -y, 11)
+        else
+            local key = entry.key
+            _, h = W:Toggle(container, entry.name, -y,
+                function() return config.hidden[key] ~= true end,
+                function(value) config.hidden[key] = (not value) and true or nil; RefreshTracker() end)
+        end
+        y = y + h
+    end
+    y = y + 6
+    _, h = W:Input(container, LText("Add Custom Debuff (name or spell ID)"), -y,
+        function() return "" end,
+        function(value)
+            if Mod.AddDebuffTrackerCustom and Mod:AddDebuffTrackerCustom(value) then
+                Refresh({ rebuild = true })
+            end
+        end)
+    y = y + h
+    _, h = W:Button(container, LText("Remove Custom Debuffs"), -y, function()
+        if Mod.ClearDebuffTrackerCustom then Mod:ClearDebuffTrackerCustom() end
+        Refresh({ rebuild = true })
+    end)
+    return y + h + 6
+end
+
 local CATEGORY_SECTIONS = {
     instance = {
         { column = "left", title = LText("Dungeon History"), build = BuildDungeonHistoryBlock, feature = "dungeonHistory" },
@@ -2332,6 +2441,10 @@ local CATEGORY_SECTIONS = {
     },
     timer = {
         { column = "left", title = LText("Forever Dungeon Tracker"), build = BuildMythicPlusTrackerBlock },
+    },
+    debuffs = {
+        { column = "left", title = LText("Debuff Tracker"), build = BuildDebuffTrackerBlock },
+        { column = "right", title = LText("Tracked Debuffs"), build = BuildDebuffListBlock },
     },
     automation = {
         { column = "left", title = LText("Automation"), build = BuildAutomationBlock },
