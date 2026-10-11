@@ -173,7 +173,7 @@ function KT:BuildExtendedFontsColors(sc, W, y)
         {"Minimap Statistics","minimap","statsFontSize","statsFontOutline",11},
         {"Tooltip","tooltip","fontSize","fontOutline",12},
         {"Cast Bar","castbar","fontSize","fontOutline",12},
-        {"Dragon Riding","dragonRiding","fontSize","fontOutline",12},
+        {"Flight Master","flightMaster","fontSize","fontOutline",12},
         {"Experience Bar","experienceBar","fontSize","fontOutline",12},
         {"Chat","chat","fontSize","fontOutline",12},
         {"Action Count","actionbars","fontSize","fontOutline",20},

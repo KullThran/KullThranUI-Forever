@@ -920,18 +920,38 @@ local function ResolveTexturePath(textureTable, key, fallback)
     return fallback or "Interface\\Buttons\\WHITE8x8"
 end
 
+-- Old KUI slots can retain the native fill saved by a previous style.
+-- Resolve KUI's default directly from its bundled asset, not a stale media cache.
+function ns.ResolveNameplateBarTexture(key)
+    local style = ns.NameplateStyle and ns.NameplateStyle()
+    if style == "kui" or style == nil then
+        if key == "Blizzard" or key == "Blizzard Raid Bar"
+            or key == "Interface\\TargetingFrame\\UI-StatusBar" then
+            key = "Melli Reforged"
+        end
+        if key == "Melli Reforged" then
+            return "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\CustomTextures\\MelliReforged.tga"
+        end
+    end
+    if key == "Melli Dark" then
+        return "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"
+    end
+    return ResolveTexturePath(ns.healthBarTextures, key, "Interface\\Buttons\\WHITE8x8")
+end
+
 local function ApplyHealthBarTexture(plate)
     local health = plate.health
     if not health then return end
-    local texKey = (db and db.healthBarTexture) or defaults.healthBarTexture or "none"
+    local textureDB = KullThranUINameplatesDB or db
+    local texKey = (textureDB and textureDB.healthBarTexture) or defaults.healthBarTexture or "none"
     if plate and plate.unit and not UnitCanAttack("player", plate.unit) then
         if UnitIsPlayer(plate.unit) then
-            texKey = (db and db.friendlyPlayerHealthTexture) or defaults.friendlyPlayerHealthTexture or "Melli Reforged"
+            texKey = (textureDB and textureDB.friendlyPlayerHealthTexture) or defaults.friendlyPlayerHealthTexture or "Melli Reforged"
         else
-            texKey = (db and db.friendlyNPCHealthTexture) or defaults.friendlyNPCHealthTexture or "Melli Reforged"
+            texKey = (textureDB and textureDB.friendlyNPCHealthTexture) or defaults.friendlyNPCHealthTexture or "Melli Reforged"
         end
     end
-    local path   = ResolveTexturePath(ns.healthBarTextures, texKey, "Interface\\Buttons\\WHITE8x8")
+    local path   = ns.ResolveNameplateBarTexture(texKey)
     health:SetStatusBarTexture(path)
 end
 ns.ApplyHealthBarTexture = ApplyHealthBarTexture
@@ -939,8 +959,9 @@ ns.ApplyHealthBarTexture = ApplyHealthBarTexture
 local function ApplyCastBarTexture(plate)
     local cast = plate and plate.cast
     if not cast then return end
-    local texKey = (db and db.castBarTexture) or defaults.castBarTexture or "none"
-    cast:SetStatusBarTexture(ResolveTexturePath(ns.healthBarTextures, texKey, "Interface\\Buttons\\WHITE8x8"))
+    local textureDB = KullThranUINameplatesDB or db
+    local texKey = (textureDB and textureDB.castBarTexture) or defaults.castBarTexture or "none"
+    cast:SetStatusBarTexture(ns.ResolveNameplateBarTexture(texKey))
 end
 ns.ApplyCastBarTexture = ApplyCastBarTexture
 
@@ -3601,11 +3622,16 @@ end
 -- (StatusBar uniforme) y recursos de tipo pip (texturas individuales).
 -- Los 3 recursos de barra se manejan con ns._BarResourceDefs para
 -- eliminar la duplicación de bloques casi-idénticos.
+local function ShouldDisplayClassPower()
+    return not classPowerFormReq
+        or (type(GetShapeshiftFormID) == "function" and GetShapeshiftFormID() == classPowerFormReq)
+end
+
 local function UpdateClassPowerOnPlate(plate)
     if not plate or not plate._cpPips then return end
 
     -- Sin tipo de recurso activo: ocultar todo y salir
-    if not classPowerType then
+    if not classPowerType or not ShouldDisplayClassPower() then
         for i = 1, #plate._cpPips do
             plate._cpPips[i]:Hide()
             if plate._cpPips[i]._bg then plate._cpPips[i]._bg:Hide() end
@@ -3829,16 +3855,12 @@ end
 -- Retorna el offset Y extra que los elementos sobre la barra de vida necesitan
 -- para librar los pips de class power (cuando están arriba y visibles).
 GetClassPowerTopPush = function(plate)
-    if not GetShowClassPower() or not classPowerType then return 0 end
+    if not GetShowClassPower() or not classPowerType or not ShouldDisplayClassPower() then return 0 end
     if GetClassPowerPos() ~= "top" then return 0 end
     if not plate or not plate.unit or not UnitIsUnit(plate.unit, "target") then return 0 end
     local cpScale = GetClassPowerScale()
     local cpYOff = GetClassPowerYOffset()
     return CP_PIP_H * cpScale + cpYOff
-end
-
-local function ShouldDisplayClassPower()
-    return not classPowerFormReq or GetShapeshiftFormID() == classPowerFormReq
 end
 
 local function RefreshClassPowerPlates(repositionTopElements)
@@ -4053,7 +4075,11 @@ ns.RefreshClassPower = RefreshClassPowerFull
 -- saturan sin usar una closure auxiliar; math.min/max son más directos.
 local function DarkenColor(r, g, b, factor)
     local s = tonumber(factor)
-    if not s or s <= 0 or s > 1 then s = 0.60 end
+    if not s or s <= 0 or s > 1 then
+        local style = ns.NameplateStyle and ns.NameplateStyle()
+        -- Keep idle KUI bars readable while retaining their combat contrast.
+        s = (style == "kui") and 0.85 or 1
+    end
     return math.min(1, math.max(0, r * s)),
            math.min(1, math.max(0, g * s)),
            math.min(1, math.max(0, b * s))
@@ -5344,14 +5370,24 @@ function NameplateFrame:UpdateHealthBounds()
 end
 -- Brightens the final resolved color without changing its semantic state.
 local function BrightenNameplateColor(r, g, b)
+    if issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b)) then
+        return r, g, b
+    end
     local theme = ns.NameplateStyle and ns.NameplateStyle()
-    local gain = (theme == "classic" and 1.5) or (theme == "forever" and 0.95)
-        or (theme == "retail" and 0.95) or 1.30
-    local lift = (theme == "classic") and 0.02
-        or ((theme == "forever" or theme == "retail") and 0) or 0.06
-    return math.min(1, (r or 0) * gain + lift),
-        math.min(1, (g or 0) * gain + lift),
-        math.min(1, (b or 0) * gain + lift)
+    local native = theme == "classic" or theme == "forever" or theme == "retail"
+    local gain = theme == "classic" and 1.5 or (native and 1.10 or 1.30)
+    local lift = native and 0.02 or 0.06
+    r, g, b = math.min(1, (r or 0) * gain + lift),
+        math.min(1, (g or 0) * gain + lift), math.min(1, (b or 0) * gain + lift)
+    if native then
+        -- Group threat colours must remain readable without changing their hue.
+        local peak = math.max(r, g, b)
+        if peak > 0 and peak < 0.75 then
+            local boost = 0.75 / peak
+            r, g, b = r * boost, g * boost, b * boost
+        end
+    end
+    return r, g, b
 end
 
 -- Aplica el color de la barra de vida según GetReactionColor (8 niveles
@@ -5587,7 +5623,13 @@ function NameplateFrame:UpdateName()
         return
     end
 
-    local displayName = UnitName(unit)
+    local core = ns.KT or _G.KT or KullThranUI
+    local displayName
+    if core and core.GetUnitDisplayName then
+        displayName = core:GetUnitDisplayName(unit)
+    else
+        displayName = UnitName(unit)
+    end
     if ns._IsSecretValue(displayName) then
         -- Forever can expose the visible name as a secret string during
         -- restricted combat. Pass it straight to the FontString, but never
@@ -5657,11 +5699,16 @@ function NameplateFrame:UpdateLevelAnchor()
     ns._AuraLayout.CommitArrowAnchors(self)
 end
 -- Muestra/oculta el nivel de la unidad con estilo y posición independientes.
+function ns.HideRetailKuiLevel()
+    return KT.IS_FOREVER ~= true and (not ns.NameplateStyle or ns.NameplateStyle() == "kui")
+end
+
 function NameplateFrame:UpdateLevel()
     if not self.level then return end
 
     local unit = SyncPlateUnitToken(self)
-    if not unit or GetLevelConfigValue("showLevel") == false then
+    local hideRetailKuiLevel = ns.HideRetailKuiLevel()
+    if not unit or hideRetailKuiLevel or GetLevelConfigValue("showLevel") == false then
         self._displayLevelText = nil
         self.level:SetText("")
         self.level:Hide()

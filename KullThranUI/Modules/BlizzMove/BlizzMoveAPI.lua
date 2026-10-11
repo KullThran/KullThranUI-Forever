@@ -7,6 +7,10 @@ local string_match = _G.string.match;
 local name = "BlizzMove";
 ---@type BlizzMove
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
+local function Loc(text)
+    local L = KT and KT.GetLocale and KT:GetLocale();
+    return (L and L[text]) or text;
+end
 local BlizzMove = KT:GetModule(name, true)
 if not BlizzMove then return; end
 
@@ -38,7 +42,7 @@ end
 function BlizzMoveAPI:ToggleDebugPrints()
     BlizzMove.DB.DebugPrints = not BlizzMove.DB.DebugPrints;
 
-    BlizzMove:Print("Debug prints have been:", (BlizzMove.DB.DebugPrints and "Enabled") or "Disabled");
+    BlizzMove:Print((BlizzMove.DB.DebugPrints and Loc("Debug prints have been enabled.")) or Loc("Debug prints have been disabled."));
 end
 
 --- @param framesTable BlizzMoveAPI_FrameTable

@@ -401,7 +401,7 @@ initFrame:SetScript("OnEvent", function(self)
             title:SetFont(KT.FONT_PATH or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
             title:SetTextColor(1, 1, 1, 1)
             title:SetPoint("TOPLEFT", 10, -10)
-            title:SetText(opts.title or "")
+            title:SetText(LText(opts.title or ""))
 
             local controls = {}
             local y = -32
@@ -427,7 +427,7 @@ initFrame:SetScript("OnEvent", function(self)
                     label:SetFont(KT.FONT_PATH or "Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
                     label:SetTextColor(1, 1, 1, 0.85)
                     label:SetPoint("TOPLEFT", 10, y)
-                    label:SetText(row.label or "")
+                    label:SetText(LText(row.label or ""))
 
                     local valueFS = f:CreateFontString(nil, "OVERLAY")
                     valueFS:SetFont(KT.FONT_PATH or "Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
@@ -674,7 +674,7 @@ initFrame:SetScript("OnEvent", function(self)
                 type = "toggle",
                 text = LText("Show Tick at Kick Ready Spot"),
                 tooltip =
-                "Shows a small white tick mark on the cast bar at the point where the cast will be when your interrupt comes off cooldown.",
+                LText("Shows a small white tick mark on the cast bar at the point where the cast will be when your interrupt comes off cooldown."),
                 getValue = function()
                     local db = DB()
                     if db and db.kickTickEnabled ~= nil then return db.kickTickEnabled end
@@ -1434,7 +1434,7 @@ initFrame:SetScript("OnEvent", function(self)
         castParts.targetFS:SetJustifyH("RIGHT")
         castParts.targetFS:SetWordWrap(false)
         castParts.targetFS:SetMaxLines(1)
-        castParts.targetFS:SetText(UnitName("player") or "Spell Target")
+        castParts.targetFS:SetText(UnitName("player") or LText("Spell Target"))
 
         -- Class power pips (cosmetic preview queries live class/spec resource count)
         -- Packed into a single table to stay under Lua's 60-upvalue limit.
@@ -1631,7 +1631,8 @@ initFrame:SetScript("OnEvent", function(self)
             levelFS:SetPoint("BOTTOMLEFT", health, "TOPLEFT",
                 tonumber(DBVal("levelXOffset")) or 24,
                 tonumber(DBVal("levelYOffset")) or 4)
-            if DBVal("showLevel") == false then
+            if DBVal("showLevel") == false or (KT.IS_FOREVER ~= true
+                and (not ns.NameplateStyle or ns.NameplateStyle() == "kui")) then
                 levelFS:Hide()
             else
                 levelFS:Show()
@@ -3248,7 +3249,7 @@ initFrame:SetScript("OnEvent", function(self)
                     local lvl = bar:CreateFontString(nil, "OVERLAY"); lvl:SetFont(PreviewFont(), 11, "OUTLINE")
                     lvl:SetPoint("LEFT", bar, "LEFT", 3, 0); lvl:SetText("60"); lvl:SetTextColor(1, 1, 1)
                     local nm = bar:CreateFontString(nil, "OVERLAY"); nm:SetFont(PreviewFont(), 8, "OUTLINE")
-                    nm:SetPoint("LEFT", bar, "LEFT", 21, 0); nm:SetText("Mob")
+                    nm:SetPoint("LEFT", bar, "LEFT", 21, 0); nm:SetText(LText("Mob"))
                     local pc = bar:CreateFontString(nil, "OVERLAY"); pc:SetFont(PreviewFont(), 8, "OUTLINE")
                     pc:SetPoint("RIGHT", bar, "RIGHT", -3, 0); pc:SetText("72%")
                 else
@@ -3281,7 +3282,7 @@ initFrame:SetScript("OnEvent", function(self)
                     local fs = bar:CreateFontString(nil, "OVERLAY")
                     fs:SetFont(PreviewFont(), 8, "OUTLINE")
                     fs:SetPoint("CENTER", bar, "CENTER", (key == "classic") and -6 or 0, 0)
-                    fs:SetText("Mob Name")
+                    fs:SetText(LText("Mob Name"))
                 end
 
                 -- cast bar under the health bar
@@ -3331,7 +3332,7 @@ initFrame:SetScript("OnEvent", function(self)
                 tile.key = st.key
                 tile.label = tile:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
                 tile.label:SetPoint("BOTTOM", tile, "BOTTOM", 0, 6)
-                tile.label:SetText(st.label)
+                tile.label:SetText(LText(st.label))
                 DrawSample(tile, st.key, i)
                 tile:SetScript("OnClick", function()
                     if st.key == Cur() and DB().nameplateStyle == st.key then return end
@@ -3366,7 +3367,7 @@ initFrame:SetScript("OnEvent", function(self)
                     Highlight()
                     -- 3) some of this (sizes, textures, anchors) only fully applies after a reload
                     StaticPopupDialogs["KT_NP_STYLE_RELOAD"] = {
-                        text = string.format(LText("Nameplate style changed to %s. Sizes and dimensions were reset to that style. Reload the interface to finish applying it?"), tostring(st.label)),
+                        text = string.format(LText("Nameplate style changed to %s. Sizes and dimensions were reset to that style. Reload the interface to finish applying it?"), tostring(LText(st.label))),
                         button1 = YES or "Yes", button2 = NO or "No",
                         OnAccept = function() ReloadUI() end,
                         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
@@ -3415,7 +3416,7 @@ initFrame:SetScript("OnEvent", function(self)
                 type = "toggle",
                 text = LText("Make Friendly Players Name Only"),
                 tooltip =
-                "Hide friendly player health bars and instead only see their names.\n\nRequires 'Simplified Friendly Nameplates' to be disabled in Blizzard's Nameplate settings (Esc > Options > Nameplates).",
+                LText("Hide friendly player health bars and instead only see their names.\n\nRequires 'Simplified Friendly Nameplates' to be disabled in Blizzard's Nameplate settings (Esc > Options > Nameplates)."),
                 getValue = function() return DBVal("friendlyPlayerNameOnly") ~= false end,
                 setValue = function(v)
                     DB().friendlyPlayerNameOnly = v
@@ -3424,14 +3425,14 @@ initFrame:SetScript("OnEvent", function(self)
                     KT:RefreshPage()
                 end,
                 disabled = friendlyPlayersOff,
-                disabledTooltip = "Show Friendly Player Nameplates"
+                disabledTooltip = LText("Show Friendly Player Nameplates")
             }); friendlyRow = _; y = y - h
 
         _, h = W:DualRow(parent, y,
             {
                 type = "toggle",
                 text = LText("Show Guild Under Friendly Players"),
-                tooltip = "Shows the player's guild name under friendly player nameplates (white text).",
+                tooltip = LText("Shows the player's guild name under friendly player nameplates (white text)."),
                 getValue = function() return DBVal("friendlyShowGuild") ~= false end,
                 setValue = function(v)
                     DB().friendlyShowGuild = v
@@ -3443,7 +3444,7 @@ initFrame:SetScript("OnEvent", function(self)
                     end
                 end,
                 disabled = friendlyPlayersOff,
-                disabledTooltip = "Show Friendly Player Nameplates"
+                disabledTooltip = LText("Show Friendly Player Nameplates")
             },
             { type = "label", text = "" }); y = y - h
 
@@ -3935,7 +3936,7 @@ initFrame:SetScript("OnEvent", function(self)
                     DB().showEnemyPets = v
                     if SetCVar then pcall(SetCVar, "nameplateShowEnemyPets", v and 1 or 0) end
                 end,
-                tooltip = "Toggle visibility of enemy pet nameplates."
+                tooltip = LText("Toggle visibility of enemy pet nameplates.")
             }); y = y - h
 
         _, h = W:Spacer(parent, y, 20); y = y - h
@@ -4222,7 +4223,7 @@ initFrame:SetScript("OnEvent", function(self)
                     DB().stackingEnabled = v
                     ns.RefreshStackingMotion()
                 end,
-                tooltip = "When enabled, nameplates stack vertically instead of overlapping."
+                tooltip = LText("When enabled, nameplates stack vertically instead of overlapping.")
             },
             {
                 type = "slider",
@@ -4237,7 +4238,7 @@ initFrame:SetScript("OnEvent", function(self)
                     ns.RefreshStackingBounds()
                 end,
                 tooltip =
-                "Adjusts the vertical spacing between stacked nameplates. 100% = default, lower = tighter, higher = more spread."
+                LText("Adjusts the vertical spacing between stacked nameplates. 100% = default, lower = tighter, higher = more spread.")
             }); y = y - h
 
         _, h = W:Spacer(parent, y, 20); y = y - h
@@ -4257,7 +4258,7 @@ initFrame:SetScript("OnEvent", function(self)
                     RefreshAllAuras()
                 end,
                 tooltip =
-                "This will display ALL of your debuffs on enemy nameplates, rather than only the important ones."
+                LText("This will display ALL of your debuffs on enemy nameplates, rather than only the important ones.")
             },
             {
                 type = "slider",
@@ -4270,7 +4271,7 @@ initFrame:SetScript("OnEvent", function(self)
                 setValue = function(v)
                     DB().castScale = v
                 end,
-                tooltip = "Scales enemy nameplates while they are casting. 100% = no change."
+                tooltip = LText("Scales enemy nameplates while they are casting. 100% = no change.")
             }); y = y - h
 
         -- Helper: pandemic glow is off when style is "None"
@@ -4332,7 +4333,7 @@ initFrame:SetScript("OnEvent", function(self)
             {
                 type = "toggle",
                 text = LText("Debuff Expiry Glow"),
-                tooltip = "Pulse debuff icons when they are about to expire on enemy nameplates.",
+                tooltip = LText("Pulse debuff icons when they are about to expire on enemy nameplates."),
                 getValue = function() return DBVal("debuffExpiryGlow") == true end,
                 setValue = function(v)
                     DB().debuffExpiryGlow = v
@@ -4353,7 +4354,7 @@ initFrame:SetScript("OnEvent", function(self)
                     RefreshAllAuras()
                 end,
                 disabled = expiryGlowOff,
-                disabledTooltip = "Debuff Expiry Glow"
+                disabledTooltip = LText("Debuff Expiry Glow")
             }); y = y - h
 
         _, h = W:DualRow(parent, y,
@@ -4370,7 +4371,7 @@ initFrame:SetScript("OnEvent", function(self)
                     RefreshAllAuras()
                     KT:RefreshPage()
                 end,
-                tooltip = "Uses the debuff type color when available, such as Magic, Curse, Disease or Poison."
+                tooltip = LText("Uses the debuff type color when available, such as Magic, Curse, Disease or Poison.")
             },
             nil); y = y - h
 
@@ -4703,7 +4704,7 @@ initFrame:SetScript("OnEvent", function(self)
                     C_Timer.After(0, function() KT:RefreshPage() end)
                 end,
                 order = dispelGlowOrder,
-                tooltip = "Highlights enemy buffs that your class can offensively dispel or soothe."
+                tooltip = LText("Highlights enemy buffs that your class can offensively dispel or soothe.")
             },
             {
                 type = "toggle",
@@ -4715,7 +4716,7 @@ initFrame:SetScript("OnEvent", function(self)
                     KT:RefreshPage()
                 end,
                 disabled = function() return dispelGlowOff() end,
-                tooltip = "Uses the native Magic/Enrage color instead of the custom color."
+                tooltip = LText("Uses the native Magic/Enrage color instead of the custom color.")
             }); y = y - h
 
         do
@@ -4764,7 +4765,7 @@ initFrame:SetScript("OnEvent", function(self)
                     UpdatePreview()
                     KT:RefreshPage()
                 end,
-                tooltip = "Shows up to 3 vertical markers on the health bar at configured health percentages."
+                tooltip = LText("Shows up to 3 vertical markers on the health bar at configured health percentages.")
             },
             {
                 type = "toggle",
@@ -4779,7 +4780,7 @@ initFrame:SetScript("OnEvent", function(self)
                     RefreshAllPlates()
                     UpdatePreview()
                 end,
-                tooltip = "When disabled, markers only display on your current target."
+                tooltip = LText("When disabled, markers only display on your current target.")
             }); y = y - h
 
         row, h = W:DualRow(parent, y,
@@ -4797,7 +4798,7 @@ initFrame:SetScript("OnEvent", function(self)
                     UpdatePreview()
                     KT:RefreshPage()
                 end,
-                tooltip = "When enabled, markers can be configured separately per specialization."
+                tooltip = LText("When enabled, markers can be configured separately per specialization.")
             },
             {
                 type = "slider",
@@ -4806,7 +4807,7 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 6,
                 step = 1,
                 disabled = markersOff,
-                disabledTooltip = "Enable Custom Health Markers",
+                disabledTooltip = LText("Enable Custom Health Markers"),
                 getValue = function()
                     local cfg = MarkerCfg()
                     return (cfg and cfg.width) or 2
@@ -4830,14 +4831,14 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 100,
                 step = 1,
                 disabled = markersOff,
-                disabledTooltip = "Enable Custom Health Markers",
+                disabledTooltip = LText("Enable Custom Health Markers"),
                 getValue = function() return GetMarkerSlotValue(MarkerCfg(), 1) end,
                 setValue = function(v)
                     SetMarkerSlotValue(MarkerCfg(), 1, v)
                     RefreshAllPlates()
                     UpdatePreview()
                 end,
-                tooltip = "Health percent threshold for marker #1. Set to 0 to clear."
+                tooltip = LText("Health percent threshold for marker #1. Set to 0 to clear.")
             },
             {
                 type = "slider",
@@ -4846,14 +4847,14 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 100,
                 step = 1,
                 disabled = markersOff,
-                disabledTooltip = "Enable Custom Health Markers",
+                disabledTooltip = LText("Enable Custom Health Markers"),
                 getValue = function() return GetMarkerSlotValue(MarkerCfg(), 2) end,
                 setValue = function(v)
                     SetMarkerSlotValue(MarkerCfg(), 2, v)
                     RefreshAllPlates()
                     UpdatePreview()
                 end,
-                tooltip = "Health percent threshold for marker #2. Set to 0 to clear."
+                tooltip = LText("Health percent threshold for marker #2. Set to 0 to clear.")
             }); y = y - h
 
         row, h = W:DualRow(parent, y,
@@ -4864,14 +4865,14 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 100,
                 step = 1,
                 disabled = markersOff,
-                disabledTooltip = "Enable Custom Health Markers",
+                disabledTooltip = LText("Enable Custom Health Markers"),
                 getValue = function() return GetMarkerSlotValue(MarkerCfg(), 3) end,
                 setValue = function(v)
                     SetMarkerSlotValue(MarkerCfg(), 3, v)
                     RefreshAllPlates()
                     UpdatePreview()
                 end,
-                tooltip = "Health percent threshold for marker #3. Set to 0 to clear."
+                tooltip = LText("Health percent threshold for marker #3. Set to 0 to clear.")
             },
             { type = "label", text = LText("Markers use % health (0 = off).") }); y = y - h
 
@@ -4918,7 +4919,7 @@ initFrame:SetScript("OnEvent", function(self)
                     DB().focusCastHeight = v
                     ns.RefreshAllSettings()
                 end,
-                tooltip = "Increases the cast bar height on your focus target's nameplate. 100% = normal height."
+                tooltip = LText("Increases the cast bar height on your focus target's nameplate. 100% = normal height.")
             },
             { type = "label", text = "" }); y = y - h
 
@@ -5473,7 +5474,7 @@ initFrame:SetScript("OnEvent", function(self)
                         KT:RefreshPage()
                     end,
                     disabled = friendlyPlayersOff,
-                    disabledTooltip = "Show Friendly Player Nameplates",
+                    disabledTooltip = LText("Show Friendly Player Nameplates"),
                 }); y = y - h
 
 
@@ -5491,7 +5492,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyPlateYOffset then ns.RefreshFriendlyPlateYOffset() end
                     end,
                     disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
-                    disabledTooltip = "Requires friendly health bars",
+                    disabledTooltip = LText("Requires friendly health bars"),
                 },
                 {
                     type = "slider",
@@ -5505,7 +5506,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyNameOnlyOffset then ns.RefreshFriendlyNameOnlyOffset() end
                     end,
                     disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") == false end,
-                    disabledTooltip = "Requires Name Only mode",
+                    disabledTooltip = LText("Requires Name Only mode"),
                 }); y = y - h
 
             _, h = W:DualRow(parent, y,
@@ -5521,7 +5522,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyPlateSize then ns.RefreshFriendlyPlateSize() end
                     end,
                     disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
-                    disabledTooltip = "Requires friendly health bars",
+                    disabledTooltip = LText("Requires friendly health bars"),
                 },
                 {
                     type = "slider",
@@ -5535,7 +5536,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyPlateSize then ns.RefreshFriendlyPlateSize() end
                     end,
                     disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
-                    disabledTooltip = "Requires friendly health bars",
+                    disabledTooltip = LText("Requires friendly health bars"),
                 }); y = y - h
 
             friendlyNPCDisplayRow, h = W:DualRow(parent, y,
@@ -5555,7 +5556,7 @@ initFrame:SetScript("OnEvent", function(self)
                 {
                     type = "toggle",
                     text = LText("Make Friendly NPCs Name Only"),
-                    tooltip = "Hide friendly NPC health bars and show only their names.",
+                    tooltip = LText("Hide friendly NPC health bars and show only their names."),
                     getValue = function() return DBVal("friendlyNPCNameOnly") ~= false end,
                     setValue = function(v)
                         DB().friendlyNPCNameOnly = v
@@ -5563,7 +5564,7 @@ initFrame:SetScript("OnEvent", function(self)
                         KT:RefreshPage()
                     end,
                     disabled = function() return DBVal("showFriendlyNPCs") ~= true end,
-                    disabledTooltip = "Show Friendly NPC Nameplates",
+                    disabledTooltip = LText("Show Friendly NPC Nameplates"),
                 }); y = y - h
 
             _, h = W:DualRow(parent, y,
@@ -5576,7 +5577,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyHealthText then ns.RefreshFriendlyHealthText() end
                     end,
                     disabled = function() return friendlyPlayersOff() or DBVal("friendlyPlayerNameOnly") ~= false end,
-                    disabledTooltip = "Requires friendly health bars",
+                    disabledTooltip = LText("Requires friendly health bars"),
                 },
                 { type = "label", text = "" }); y = y - h
 
@@ -5606,7 +5607,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if ns.RefreshFriendlyTextStyle then ns.RefreshFriendlyTextStyle() end
                     end,
                     disabled = friendlyPlayersOff,
-                    disabledTooltip = "Show Friendly Player Nameplates",
+                    disabledTooltip = LText("Show Friendly Player Nameplates"),
                 }); y = y - h
 
             friendlyPlayerAlignRow, h = W:DualRow(parent, y,
@@ -6806,7 +6807,7 @@ initFrame:SetScript("OnEvent", function(self)
             -- Wire getters/setters
             cogPopup._xGet = opts.xGet; cogPopup._xSet = opts.xSet
             cogPopup._yGet = opts.yGet; cogPopup._ySet = opts.ySet
-            cogPopup._titleFS:SetText(opts.title)
+            cogPopup._titleFS:SetText(LText(opts.title))
             if cogPopup._xTrack and cogPopup._xTrack.SetValue then
                 cogPopup._xTrack:SetValue(opts.xGet() or 0)
             end
@@ -6846,7 +6847,7 @@ initFrame:SetScript("OnEvent", function(self)
                 if cogPopup._sTrack and cogPopup._sTrack.SetValue then
                     cogPopup._sTrack:SetValue(opts.sizeGet() or opts.sizeMin or 0)
                 end
-                cogPopup._sLabel:SetText(opts.sizeLabel or "Size")
+                cogPopup._sLabel:SetText(LText(opts.sizeLabel or "Size"))
                 cogPopup._sLabel:Show()
                 if cogPopup._sTrack then cogPopup._sTrack:Show() end
                 if cogPopup._sValBox then cogPopup._sValBox:Show() end
@@ -6866,7 +6867,7 @@ initFrame:SetScript("OnEvent", function(self)
                     local entry = vals and vals[bi]
                     if entry then
                         btn._value = entry.value
-                        btn._lbl:SetText(entry.label)
+                        btn._lbl:SetText(LText(entry.label))
                         local active = (entry.value == cur)
                         btn._bg:SetColorTexture(
                             active and 0.973 or 0.15,
@@ -7037,7 +7038,7 @@ initFrame:SetScript("OnEvent", function(self)
                     }
                 end
                 local opts = {
-                    title = GetElementAtPosition(posKey) == "classification" and LText("Elite/Rare Indicator") or slotLabel .. " Slot Settings",
+                    title = GetElementAtPosition(posKey) == "classification" and LText("Elite/Rare Indicator") or string.format(LText("%s Slot Settings"), LText(slotLabel)),
                     xGet = function() return CorePosXGet(posKey) end,
                     xSet = function(v) CorePosXSet(posKey, v) end,
                     yGet = function() return CorePosYGet(posKey) end,
@@ -7403,7 +7404,7 @@ initFrame:SetScript("OnEvent", function(self)
                 if TextPosDisabled(slotKey) then return end
                 local sizeKey = slotKey .. "Size"
                 ShowCogPopup(self, {
-                    title = slotLabel .. " Settings",
+                    title = string.format(LText("%s Settings"), LText(slotLabel)),
                     xGet = function() return TextPosXGet(slotKey) end,
                     xSet = function(v) TextPosXSet(slotKey, v) end,
                     yGet = function() return TextPosYGet(slotKey) end,
@@ -7470,7 +7471,7 @@ initFrame:SetScript("OnEvent", function(self)
                 setValue = function(v) TextSlotSetValue("textSlotTop", v) end,
                 order = textElementOrder,
                 disabled = function() return DBVal("textSlotTop") == "none" end,
-                disabledTooltip = "This option requires a text to be assigned",
+                disabledTooltip = LText("This option requires a text to be assigned"),
                 labelOnlyDisabled = true
             },
             {
@@ -7481,7 +7482,7 @@ initFrame:SetScript("OnEvent", function(self)
                 setValue = function(v) TextSlotSetValue("textSlotRight", v) end,
                 order = textElementOrder,
                 disabled = function() return DBVal("textSlotRight") == "none" end,
-                disabledTooltip = "This option requires a text to be assigned",
+                disabledTooltip = LText("This option requires a text to be assigned"),
                 labelOnlyDisabled = true,
                 disabledValues = function(k) if (k == "healthPctNum" or k == "healthNumPct") and DBVal("textSlotCenter") == "enemyName" then return
                         "Disabled when Enemy Name is centered on the health bar due to overlapping text" end end
@@ -7501,7 +7502,7 @@ initFrame:SetScript("OnEvent", function(self)
                 setValue = function(v) TextSlotSetValue("textSlotLeft", v) end,
                 order = textElementOrder,
                 disabled = function() return DBVal("textSlotLeft") == "none" end,
-                disabledTooltip = "This option requires a text to be assigned",
+                disabledTooltip = LText("This option requires a text to be assigned"),
                 labelOnlyDisabled = true,
                 disabledValues = function(k) if (k == "healthPctNum" or k == "healthNumPct") and DBVal("textSlotCenter") == "enemyName" then return
                         "Disabled when Enemy Name is centered on the health bar due to overlapping text" end end
@@ -7514,7 +7515,7 @@ initFrame:SetScript("OnEvent", function(self)
                 setValue = function(v) TextSlotSetValue("textSlotCenter", v) end,
                 order = textElementOrder,
                 disabled = function() return DBVal("textSlotCenter") == "none" end,
-                disabledTooltip = "This option requires a text to be assigned",
+                disabledTooltip = LText("This option requires a text to be assigned"),
                 labelOnlyDisabled = true
             }); y = y - h
         MakeTextCogIcon(textRow2, "_leftRegion", "textSlotLeft", "Left Text")
@@ -7636,7 +7637,7 @@ initFrame:SetScript("OnEvent", function(self)
                     max = 6,
                     step = 1,
                     disabled = markersOff,
-                    disabledTooltip = "Enable Custom Health Markers",
+                    disabledTooltip = LText("Enable Custom Health Markers"),
                     getValue = function()
                         local cfg = MarkerCfg()
                         return (cfg and cfg.width) or 2
@@ -7660,7 +7661,7 @@ initFrame:SetScript("OnEvent", function(self)
                     max = 100,
                     step = 1,
                     disabled = markersOff,
-                    disabledTooltip = "Enable Custom Health Markers",
+                    disabledTooltip = LText("Enable Custom Health Markers"),
                     getValue = function() return GetMarkerSlotValue(MarkerCfg(), 1) end,
                     setValue = function(v)
                         SetMarkerSlotValue(MarkerCfg(), 1, v)
@@ -7675,7 +7676,7 @@ initFrame:SetScript("OnEvent", function(self)
                     max = 100,
                     step = 1,
                     disabled = markersOff,
-                    disabledTooltip = "Enable Custom Health Markers",
+                    disabledTooltip = LText("Enable Custom Health Markers"),
                     getValue = function() return GetMarkerSlotValue(MarkerCfg(), 2) end,
                     setValue = function(v)
                         SetMarkerSlotValue(MarkerCfg(), 2, v)
@@ -7692,7 +7693,7 @@ initFrame:SetScript("OnEvent", function(self)
                     max = 100,
                     step = 1,
                     disabled = markersOff,
-                    disabledTooltip = "Enable Custom Health Markers",
+                    disabledTooltip = LText("Enable Custom Health Markers"),
                     getValue = function() return GetMarkerSlotValue(MarkerCfg(), 3) end,
                     setValue = function(v)
                         SetMarkerSlotValue(MarkerCfg(), 3, v)
@@ -7907,12 +7908,12 @@ initFrame:SetScript("OnEvent", function(self)
                 type = "multiSwatch",
                 text = LText("Fill Color"),
                 disabled = classPowerDisabled,
-                disabledTooltip = "Show Class Resource",
+                disabledTooltip = LText("Show Class Resource"),
                 swatches = {
                     {
-                        tooltip = "Custom Color",
+                        tooltip = LText("Custom Color"),
                         disabled = classPowerDisabled,
-                        disabledTooltip = "Show Class Resource",
+                        disabledTooltip = LText("Show Class Resource"),
                         getValue = function()
                             local c = (DB() and DB().classPowerCustomColor) or defaults.classPowerCustomColor
                             return c.r, c.g, c.b
@@ -7939,9 +7940,9 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Class Colored",
+                        tooltip = LText("Class Colored"),
                         disabled = classPowerDisabled,
-                        disabledTooltip = "Show Class Resource",
+                        disabledTooltip = LText("Show Class Resource"),
                         getValue = function()
                             local _, ct = UnitClass("player")
                             if ct and RAID_CLASS_COLORS[ct] then
@@ -7972,7 +7973,7 @@ initFrame:SetScript("OnEvent", function(self)
                 type = "dropdown",
                 text = LText("Position"),
                 disabled = classPowerDisabled,
-                disabledTooltip = "Show Class Resource",
+                disabledTooltip = LText("Show Class Resource"),
                 values = { top = "Top", bottom = "Bottom" },
                 getValue = function() return DBVal("classPowerPos") or defaults.classPowerPos end,
                 setValue = function(v)
@@ -7988,7 +7989,7 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 3.0,
                 step = 0.1,
                 disabled = classPowerDisabled,
-                disabledTooltip = "Show Class Resource",
+                disabledTooltip = LText("Show Class Resource"),
                 getValue = function() return DBVal("classPowerScale") or defaults.classPowerScale end,
                 setValue = function(v)
                     DB().classPowerScale = v
@@ -8048,7 +8049,7 @@ initFrame:SetScript("OnEvent", function(self)
                 max = 10,
                 step = 1,
                 disabled = classPowerDisabled,
-                disabledTooltip = "Show Class Resource",
+                disabledTooltip = LText("Show Class Resource"),
                 getValue = function() return DBVal("classPowerGap") or defaults.classPowerGap end,
                 setValue = function(v)
                     DB().classPowerGap = v
@@ -8060,7 +8061,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Background Color"),
                 hasAlpha = true,
                 disabled = classPowerDisabled,
-                disabledTooltip = "Show Class Resource",
+                disabledTooltip = LText("Show Class Resource"),
                 getValue = function()
                     local c = (DB() and DB().classPowerBgColor) or defaults.classPowerBgColor
                     return c.r, c.g, c.b, c.a
@@ -8407,7 +8408,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Spell Target"),
                 swatches = {
                     {
-                        tooltip = "Custom Color",
+                        tooltip = LText("Custom Color"),
                         getValue = function() return DBColor("castTargetColor") end,
                         setValue = function(r, g, b)
                             DB().castTargetColor = { r = r, g = g, b = b }
@@ -8433,7 +8434,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Class Colored",
+                        tooltip = LText("Class Colored"),
                         getValue = function()
                             local _, ct = UnitClass("player")
                             if ct and RAID_CLASS_COLORS[ct] then
@@ -9544,7 +9545,7 @@ initFrame:SetScript("OnEvent", function(self)
             targetFS:SetJustifyH("RIGHT")
             targetFS:SetWordWrap(false)
             targetFS:SetMaxLines(1)
-            targetFS:SetText(isHalf and (UnitName("player") or "Target") or (UnitName("player") or "Spell Target"))
+            targetFS:SetText(isHalf and (UnitName("player") or LText("Target")) or (UnitName("player") or LText("Spell Target")))
             local useClassColor = defaults.castTargetClassColor
             local dbRef = DB()
             if dbRef and dbRef.castTargetClassColor ~= nil then useClassColor = dbRef.castTargetClassColor end
@@ -9790,7 +9791,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Enemy Types"),
                 swatches = {
                     {
-                        tooltip = "Enemies",
+                        tooltip = LText("Enemies"),
                         getValue = function() return DBColor("enemyInCombat") end,
                         setValue = function(r, g, b)
                             DB().enemyInCombat = { r = r, g = g, b = b }
@@ -9798,7 +9799,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Spell Casters",
+                        tooltip = LText("Spell Casters"),
                         getValue = function() return DBColor("caster") end,
                         setValue = function(r, g, b)
                             DB().caster = { r = r, g = g, b = b }
@@ -9806,7 +9807,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Mini-Bosses",
+                        tooltip = LText("Mini-Bosses"),
                         getValue = function() return DBColor("miniboss") end,
                         setValue = function(r, g, b)
                             DB().miniboss = { r = r, g = g, b = b }
@@ -9998,7 +9999,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Tank Threat"),
                 swatches = {
                     {
-                        tooltip = "Has Aggro",
+                        tooltip = LText("Has Aggro"),
                         getValue = function() return DBColor("tankHasAggro") end,
                         setValue = function(r, g, b)
                             DB().tankHasAggro = { r = r, g = g, b = b }
@@ -10006,7 +10007,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Losing Aggro",
+                        tooltip = LText("Losing Aggro"),
                         getValue = function() return DBColor("tankLosingAggro") end,
                         setValue = function(r, g, b)
                             DB().tankLosingAggro = { r = r, g = g, b = b }
@@ -10014,7 +10015,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Other Tank Has Aggro",
+                        tooltip = LText("Other Tank Has Aggro"),
                         getValue = function() return DBColor("tankOtherTankHasAggro") end,
                         setValue = function(r, g, b)
                             DB().tankOtherTankHasAggro = { r = r, g = g, b = b }
@@ -10022,7 +10023,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "No Aggro",
+                        tooltip = LText("No Aggro"),
                         getValue = function() return DBColor("tankNoAggro") end,
                         setValue = function(r, g, b)
                             DB().tankNoAggro = { r = r, g = g, b = b }
@@ -10036,7 +10037,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Non-Tank Threat"),
                 swatches = {
                     {
-                        tooltip = "Has Aggro",
+                        tooltip = LText("Has Aggro"),
                         getValue = function() return DBColor("dpsHasAggro") end,
                         setValue = function(r, g, b)
                             DB().dpsHasAggro = { r = r, g = g, b = b }
@@ -10044,7 +10045,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Near Aggro",
+                        tooltip = LText("Near Aggro"),
                         getValue = function() return DBColor("dpsNearAggro") end,
                         setValue = function(r, g, b)
                             DB().dpsNearAggro = { r = r, g = g, b = b }
@@ -10059,7 +10060,7 @@ initFrame:SetScript("OnEvent", function(self)
             {
                 type = "toggle",
                 text = LText("Enable Tank 'Has Aggro' Color"),
-                tooltip = "Shows a special color for non caster/mini-boss enemies when you have aggro on them.",
+                tooltip = LText("Shows a special color for non caster/mini-boss enemies when you have aggro on them."),
                 getValue = function()
                     local db = DB()
                     if db and db.tankHasAggroEnabled ~= nil then return db.tankHasAggroEnabled end
@@ -10113,17 +10114,17 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Interruptible | On CD | Uninterruptible"),
                 swatches = {
                     {
-                        tooltip = "Interruptible Cast",
+                        tooltip = LText("Interruptible Cast"),
                         getValue = function() return GetResolvedCastBarColor("interruptible") end,
                         setValue = function(r, g, b) ApplyCastBarStateColor("interruptible", r, g, b) end
                     },
                     {
-                        tooltip = "Interrupt On CD",
+                        tooltip = LText("Interrupt On CD"),
                         getValue = function() return GetResolvedCastBarColor("cooldown") end,
                         setValue = function(r, g, b) ApplyCastBarStateColor("cooldown", r, g, b) end
                     },
                     {
-                        tooltip = "Uninterruptible",
+                        tooltip = LText("Uninterruptible"),
                         getValue = function() return GetResolvedCastBarColor("uninterruptible") end,
                         setValue = function(r, g, b) ApplyCastBarStateColor("uninterruptible", r, g, b) end
                     },
@@ -10133,7 +10134,7 @@ initFrame:SetScript("OnEvent", function(self)
                 type = "toggle",
                 text = LText("Show Tick at Kick Ready Spot"),
                 tooltip =
-                "Shows a small white tick mark on the cast bar at the point where the cast will be when your interrupt comes off cooldown.",
+                LText("Shows a small white tick mark on the cast bar at the point where the cast will be when your interrupt comes off cooldown."),
                 getValue = function()
                     local db = DB()
                     if db and db.kickTickEnabled ~= nil then return db.kickTickEnabled end
@@ -10158,7 +10159,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Tank Threat"),
                 swatches = {
                     {
-                        tooltip = "Losing Aggro",
+                        tooltip = LText("Losing Aggro"),
                         getValue = function() return DBColor("tankLosingAggro") end,
                         setValue = function(r, g, b)
                             DB().tankLosingAggro = { r = r, g = g, b = b }
@@ -10166,7 +10167,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Other Tank Has Aggro",
+                        tooltip = LText("Other Tank Has Aggro"),
                         getValue = function() return DBColor("tankOtherTankHasAggro") end,
                         setValue = function(r, g, b)
                             DB().tankOtherTankHasAggro = { r = r, g = g, b = b }
@@ -10174,7 +10175,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "No Aggro",
+                        tooltip = LText("No Aggro"),
                         getValue = function() return DBColor("tankNoAggro") end,
                         setValue = function(r, g, b)
                             DB().tankNoAggro = { r = r, g = g, b = b }
@@ -10188,7 +10189,7 @@ initFrame:SetScript("OnEvent", function(self)
                 text = LText("Non-Tank Threat"),
                 swatches = {
                     {
-                        tooltip = "Has Aggro",
+                        tooltip = LText("Has Aggro"),
                         getValue = function() return DBColor("dpsHasAggro") end,
                         setValue = function(r, g, b)
                             DB().dpsHasAggro = { r = r, g = g, b = b }
@@ -10196,7 +10197,7 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     },
                     {
-                        tooltip = "Near Aggro",
+                        tooltip = LText("Near Aggro"),
                         getValue = function() return DBColor("dpsNearAggro") end,
                         setValue = function(r, g, b)
                             DB().dpsNearAggro = { r = r, g = g, b = b }
@@ -10218,7 +10219,7 @@ initFrame:SetScript("OnEvent", function(self)
             {
                 type = "toggle",
                 text = LText("Show Special \"Has Aggro\" Color"),
-                tooltip = "Shows a special color for non caster/mini-boss enemies when you have aggro on them.",
+                tooltip = LText("Shows a special color for non caster/mini-boss enemies when you have aggro on them."),
                 getValue = function()
                     local db = DB()
                     if db and db.tankHasAggroEnabled ~= nil then return db.tankHasAggroEnabled end
@@ -10277,7 +10278,7 @@ initFrame:SetScript("OnEvent", function(self)
                     end
                     KT:RefreshPage()
                 end,
-                tooltip = "Colors enemy nameplates for quest mobs you still need to kill."
+                tooltip = LText("Colors enemy nameplates for quest mobs you still need to kill.")
             },
             nil); y = y - h
 
@@ -10927,7 +10928,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoEnemyInCombat") ~= false end,
                 setValue = function(v) DB().autoEnemyInCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             },
             {
                 type = "toggle",
@@ -10935,7 +10936,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoEnemyOutOfCombat") ~= false end,
                 setValue = function(v) DB().autoEnemyOutOfCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             }); y = y - h
 
         _, h = W:DualRow(parent, y,
@@ -10945,7 +10946,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoFriendlyInCombat") ~= false end,
                 setValue = function(v) DB().autoFriendlyInCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             },
             {
                 type = "toggle",
@@ -10953,7 +10954,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoFriendlyOutOfCombat") ~= false end,
                 setValue = function(v) DB().autoFriendlyOutOfCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             }); y = y - h
 
         _, h = W:DualRow(parent, y,
@@ -10963,7 +10964,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoAlwaysShowInCombat") ~= false end,
                 setValue = function(v) DB().autoAlwaysShowInCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             },
             {
                 type = "toggle",
@@ -10971,7 +10972,7 @@ initFrame:SetScript("OnEvent", function(self)
                 getValue = function() return DBVal("autoAlwaysShowOutOfCombat") ~= false end,
                 setValue = function(v) DB().autoAlwaysShowOutOfCombat = v; KT:RefreshPage() end,
                 disabled = AutoOff,
-                disabledTooltip = "Enabled"
+                disabledTooltip = LText("Enabled")
             }); y = y - h
 
         _, h = W:Spacer(parent, y, 14); y = y - h
@@ -11110,7 +11111,7 @@ initFrame:SetScript("OnEvent", function(self)
     SLASH_KULLTHRANNAMEPLATES1 = "/knp"
     SlashCmdList.KULLTHRANNAMEPLATES = function(msg)
         if InCombatLockdown and InCombatLockdown() then
-            print("Cannot open options in combat")
+            print(LText("Cannot open options in combat"))
             return
         end
 

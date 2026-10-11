@@ -4,6 +4,12 @@ if not ns then return end
 
 local PP = (KullThranUI and KullThranUI.PP) or (KT and KT.PP)
 
+local function Loc(text)
+    local core = ns.KT or KullThranUI or KT
+    local L = core and core.GetLocale and core:GetLocale()
+    return (L and L[text]) or text
+end
+
 local function PixelPoint(frame, point, relativeTo, relativePoint, x, y)
     if PP and PP.Point then
         PP.Point(frame, point, relativeTo, relativePoint, x, y)
@@ -167,6 +173,13 @@ end
 UnitHealthPercent = function(...)
     local value = RawUnitAPI.UnitHealthPercent and RawUnitAPI.UnitHealthPercent(...)
     return IsAccessible(value) and type(value) == "number" and value or nil
+end
+-- Display name with the Forever surname; nil when it is not accessible.
+local function UnitDisplayName(unit)
+    local core = ns.KT or _G.KT or _G.KullThranUI
+    if not (core and core.GetUnitDisplayName) then return UnitName(unit) end
+    local value = core:GetUnitDisplayName(unit)
+    return IsAccessible(value) and type(value) == "string" and value or nil
 end
 GetGuildInfo = function(...)
     local value = RawUnitAPI.GetGuildInfo and RawUnitAPI.GetGuildInfo(...)
@@ -641,6 +654,7 @@ local function UpdateFriendlyPlayerLevel(nameplate, unit)
     local db = KullThranUINameplatesDB or {}
     if not nameplate or not unit or not IsFriendlyPlayerNameOnly()
         or db.showFriendlyPlayers == false or db.showLevel == false
+        or (ns.HideRetailKuiLevel and ns.HideRetailKuiLevel())
         or not IsFriendlyPlayerUnit(unit) then
         HideFriendlyPlayerLevel(nameplate)
         return
@@ -1006,7 +1020,7 @@ UpdateStableOverlayContent = function(overlay)
         or (GetFriendlyNPCNameTextSize() or NPC_OVERLAY_FONT_SIZE)
 
     StyleStableOverlayFont(overlay.name, nameSize)
-    overlay.name:SetText(UnitName(unit) or "")
+    overlay.name:SetText(UnitDisplayName(unit) or "")
 
     if isPlayer then
         local classColor
@@ -1020,7 +1034,8 @@ UpdateStableOverlayContent = function(overlay)
             overlay.name:SetTextColor(GetFriendlyPlayerNameColor())
         end
 
-        local levelText = db.showLevel ~= false and ns.GetNameplateLevelText
+        local levelText = not (ns.HideRetailKuiLevel and ns.HideRetailKuiLevel())
+            and db.showLevel ~= false and ns.GetNameplateLevelText
             and ns.GetNameplateLevelText(unit) or nil
         if levelText then
             ApplyFriendlyPlayerLevelStyle(overlay.level)
@@ -1171,7 +1186,7 @@ end
 
 local function PrintLayoutFrame(label, frame, fontString)
     if not frame then
-        print("|cff66ccffKNP debug|r " .. label .. ": unavailable")
+        print("|cff66ccffKNP debug|r " .. string.format(Loc("%s: unavailable"), tostring(label)))
         return
     end
 
@@ -1250,7 +1265,7 @@ end
 local function DumpFriendlyLayout(requestedUnit)
     local unit, nameplate = FindDebugNameplate(requestedUnit)
     if not nameplate then
-        print("|cff66ccffKNP debug|r Target or mouse over a visible nameplate first.")
+        print("|cff66ccffKNP debug|r " .. Loc("Target or mouse over a visible nameplate first."))
         return
     end
 
@@ -1643,6 +1658,7 @@ local function UpdateFriendlyBarLevel(plate)
         return
     end
     if not (level and name and unit) or db.showLevel == false
+        or (ns.HideRetailKuiLevel and ns.HideRetailKuiLevel())
         or db.showFriendlyPlayers == false or not IsFriendlyPlayerUnit(unit) then
         if level then
             level:SetText("")
@@ -1827,7 +1843,7 @@ end
 function FriendlyFrame:UpdateName()
     local unit = self.unit
     if not unit then return end
-    local unitName = UnitName(unit)
+    local unitName = UnitDisplayName(unit)
     self.name:SetText(unitName or "")
     if UnitIsPlayer(unit) then
         local db = KullThranUINameplatesDB

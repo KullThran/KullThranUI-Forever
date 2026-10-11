@@ -4,6 +4,11 @@ local KT = _G.KT
 local Mod = KT:NewModule("ActionBars", "AceEvent-3.0", "AceHook-3.0")
 local LSM = LibStub("LibSharedMedia-3.0", true)
 
+local function Loc(text)
+    local L = KT and KT.GetLocale and KT:GetLocale()
+    return (L and L[text]) or text
+end
+
 -- Cache globals
 local _G = _G
 local pairs, ipairs = pairs, ipairs
@@ -1736,7 +1741,8 @@ SLASH_KUIACTIONBARPAGINGDEBUG1 = "/kupdebug"
 SlashCmdList["KUIACTIONBARPAGINGDEBUG"] = function()
     local f = _kuiPagingFrame
     if not f then
-        print("|cffff4444[KUPDEBUG]|r _kuiPagingFrame does not exist -- EnsureKUIActionBarPaging never created it (likely the InCombatLockdown() guard skipped it with no retry, or it was never called at all).")
+        print("|cffff4444[KUPDEBUG]|r " .. string.format(Loc("%s does not exist: %s never created it (the %s guard probably skipped it with no retry, or it was never called)."),
+            "_kuiPagingFrame", "EnsureKUIActionBarPaging", "InCombatLockdown()"))
         return
     end
     local point, relTo, relPoint, x, y = f:GetPoint()
@@ -1765,7 +1771,7 @@ SlashCmdList["KUIACTIONBARPAGINGDEBUG"] = function()
                     tostring(lp), tostring(lRelPoint), tostring(lx), tostring(ly)))
         end
     else
-        print("|cffff4444[KUPDEBUG]|r Mod._classicActionBarCaps does not exist")
+        print("|cffff4444[KUPDEBUG]|r " .. string.format(Loc("%s does not exist."), "Mod._classicActionBarCaps"))
     end
 end
 
@@ -1785,7 +1791,7 @@ SlashCmdList["KTABDEBUG"] = function(arg)
                 btn = btn:GetParent(); guard = guard + 1
             end
         end
-        if not (btn and btn.GetName and btn:GetName()) then print("KUI AB: no button found (use /ktabdebug ActionButton1)") return end
+        if not (btn and btn.GetName and btn:GetName()) then print("KUI AB: " .. Loc("No button found (use /ktabdebug ActionButton1).")) return end
     local name = btn:GetName()
     local db = KT.db.profile.actionbars
     local shape = GetShapeForButton(name)
@@ -1807,6 +1813,6 @@ SlashCmdList["KTABDEBUG"] = function(arg)
         end
     end
     end
-    print("KUI AB: hover the button now, capturing in 3s...")
+    print("KUI AB: " .. string.format(Loc("Hover over the button now; capturing in %d seconds..."), 3))
     if arg and arg:match("%S") then run() else C_Timer.After(3, run) end
 end

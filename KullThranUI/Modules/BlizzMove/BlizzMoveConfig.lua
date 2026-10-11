@@ -18,7 +18,7 @@ local BlizzMove = KT:GetModule(name, true)
 if not BlizzMove then return; end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(name, true) or LibStub("AceLocale-3.0"):GetLocale("KullThranUI", true);
-if not L then L = setmetatable({}, { __index = function(t, k) return k end }) end
+if not L then L = setmetatable({}, { __index = function(t, k) local locale = KT and KT.GetLocale and KT:GetLocale(); return (locale and locale[k]) or k end }) end
 
 ---@type BlizzMoveAPI
 local BlizzMoveAPI = KT.BlizzMoveAPI;

@@ -609,7 +609,7 @@ function Bridge:CreateInsetTab(parent, key, label, x, icon)
         end
         if GameTooltip and self.key then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText((self.key == "stats" and "Stats") or "Progress")
+            GameTooltip:SetText(self.key == "stats" and LText("Stats") or LText("Progress"))
             GameTooltip:Show()
         end
     end)
@@ -1579,7 +1579,7 @@ function Bridge:BuildTextTabBar()
                 if lbl then lbl:SetTextColor(1, 1, 1, 1) end
                 if def.short then
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(locale.Progress or "Progress")
+                    GameTooltip:SetText(LText("Progress"))
                     GameTooltip:Show()
                 end
             end)

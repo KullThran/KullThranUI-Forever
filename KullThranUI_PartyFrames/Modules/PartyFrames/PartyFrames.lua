@@ -1582,7 +1582,12 @@ end
 
 local function MakeUnitLabel(unit)
     if not unit then return "" end
-    local name = UnitName and UnitName(unit)
+    local name
+    if KT.GetUnitDisplayName then
+        name = KT:GetUnitDisplayName(unit)
+    else
+        name = UnitName and UnitName(unit)
+    end
     return name or unit
 end
 
@@ -4893,7 +4898,7 @@ function Mod:UpdateArenaDR(frame)
                     icon.cooldown:Hide()
                     icon.duration:Hide()
                     local lvl = (i + off) % 3 == 0 and 2 or 1
-                    icon.drLevel:SetText(lvl >= 2 and 'IMM' or '1/2')
+                    icon.drLevel:SetText(lvl >= 2 and LText('IMM') or '1/2')
                     SetAuraIconBorderColor(icon, info.color[1], info.color[2], info.color[3], 1)
                     icon:ClearAllPoints()
                     if i == 1 then
@@ -4930,7 +4935,7 @@ function Mod:UpdateArenaDR(frame)
                 icon._auraExpirationTime = nil
                 icon.cooldown:Hide()
                 icon.duration:Hide()
-                icon.drLevel:SetText((state.level or 1) >= 2 and 'IMM' or '1/2')
+                icon.drLevel:SetText((state.level or 1) >= 2 and LText('IMM') or '1/2')
                 SetAuraIconBorderColor(icon, info.color[1], info.color[2], info.color[3], 1)
                 icon:ClearAllPoints()
                 if shown == 1 then
@@ -4956,7 +4961,7 @@ function Mod:UpdateArenaDR(frame)
                 local resetTime = tonumber(info.resetTime) or tonumber(data.resetTime) or 16.5
                 icon.cooldown:SetCooldown(state.startTime or (state.expirationTime - resetTime), resetTime)
                 icon.cooldown:Show()
-                icon.drLevel:SetText((state.level or 1) >= 2 and 'IMM' or '1/2')
+                icon.drLevel:SetText((state.level or 1) >= 2 and LText('IMM') or '1/2')
                 SetAuraIconBorderColor(icon, info.color[1], info.color[2], info.color[3], 1)
                 icon:ClearAllPoints()
                 if shown == 1 then
@@ -6705,7 +6710,7 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
         return
     elseif isAFK then
         frame.nameText:Show()
-        if centeredStatus then
+        if centeredStatus or (frame.mode == "party" and frame._pfNativeStyle) then
             frame.valueText:SetJustifyH("CENTER")
         else
             frame.valueText:SetJustifyH("RIGHT")
@@ -6729,7 +6734,7 @@ function Mod:UpdateFrameVisual(frame, refreshAuras)
         return
     else
         frame.nameText:Show()
-        if centeredStatus then
+        if centeredStatus or (frame.mode == "party" and frame._pfNativeStyle) then
             frame.valueText:SetJustifyH("CENTER")
         else
             frame.valueText:SetJustifyH("RIGHT")
@@ -7430,6 +7435,9 @@ function Mod:UpdateFrameHealthEvent(frame)
 
     local db = self:GetModeDB(frame.mode or "party")
     local hpPercent = UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+    if ns.PF_Styles and frame._pfNativeStyle then
+        ns.PF_Styles.UpdateHealthText(frame, db)
+    end
     -- State-stamped paint: an event that arrives without a
     -- real value change (idle aura/range refresh, duplicate fires) must not write
     -- the bar. Avoids the sustained idle PartyFrames cost in large raids.
@@ -7814,11 +7822,19 @@ function Mod:HighlightVisibleFrames()
         if frame:IsShown() then
             frame:SetAlpha(1)
             if frame.hover then
-                frame.hover:SetColorTexture(1, 1, 1, 0.24)
+                if frame._pfNativeStyle then
+                    frame.hover:SetVertexColor(1, 1, 1, 0.24)
+                else
+                    frame.hover:SetColorTexture(1, 1, 1, 0.24)
+                end
                 frame.hover:Show()
                 C_Timer.After(0.35, function()
                     if frame and frame.hover then
-                        frame.hover:SetColorTexture(1, 1, 1, 0.08)
+                        if frame._pfNativeStyle then
+                            frame.hover:SetVertexColor(1, 1, 1, 0.16)
+                        else
+                            frame.hover:SetColorTexture(1, 1, 1, 0.08)
+                        end
                     end
                 end)
             end
@@ -7947,6 +7963,20 @@ function Mod:RegisterUnlockElements()
                 local frame = self.containers[mode]
                 if frame and frame:IsShown() then return frame:GetSize() end
                 return self:GetContainerSize(mode)
+            end,
+            -- Tamano de cada marco del modo (mismos ajustes que el panel).
+            sizeLabels = { width = "Frame Width", height = "Frame Height" },
+            getEditableSize = function()
+                return tonumber(self:GetConfigValue(mode, "frameWidth", 125)) or 125,
+                    tonumber(self:GetConfigValue(mode, "frameHeight", 40)) or 40
+            end,
+            setEditableSize = function(_, width, height)
+                if tonumber(self:GetConfigValue(mode, "frameWidth", 125)) ~= width then
+                    self:SetConfigValue(mode, "frameWidth", width)
+                end
+                if tonumber(self:GetConfigValue(mode, "frameHeight", 40)) ~= height then
+                    self:SetConfigValue(mode, "frameHeight", height)
+                end
             end,
             isHidden = function()
                 local frame = self.containers[mode]

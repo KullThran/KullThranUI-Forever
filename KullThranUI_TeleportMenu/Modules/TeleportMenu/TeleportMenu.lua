@@ -12,6 +12,47 @@ local function LText(text)
     if L and L[text] ~= nil then return L[text] end
     return text
 end
+
+-- Display name for a menu entry: the client-localized name from the game API,
+-- falling back to the English name stored in the entry data. Plain items keep
+-- the data name here: an uncached item lookup would send a server query.
+local function GetEntryDisplayName(item)
+    if type(item) ~= "table" then return "" end
+    local id, name = item.id, nil
+    if id then
+        if item.type == "spell" then
+            if C_Spell and C_Spell.GetSpellName then
+                local ok, value = pcall(C_Spell.GetSpellName, id)
+                if ok then name = value end
+            end
+        else
+            if item.type == "toy" and C_ToyBox and C_ToyBox.GetToyInfo then
+                local ok, _, toyName = pcall(C_ToyBox.GetToyInfo, id)
+                if ok then name = toyName end
+            end
+        end
+    end
+    if type(name) ~= "string" or name == "" then name = item.name or "" end
+    return name
+end
+
+local RACE_IDS = { Worgen = 22, DarkIronDwarf = 34, Vulpera = 35 }
+
+local function GetClassDisplayName(classToken)
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    return (names and names[classToken]) or tostring(classToken or "")
+end
+
+local function GetRaceDisplayName(raceToken)
+    local raceID = RACE_IDS[raceToken]
+    if raceID and C_CreatureInfo and C_CreatureInfo.GetRaceInfo then
+        local ok, info = pcall(C_CreatureInfo.GetRaceInfo, raceID)
+        if ok and type(info) == "table" and type(info.raceName) == "string" and info.raceName ~= "" then
+            return info.raceName
+        end
+    end
+    return tostring(raceToken or "")
+end
 local Mod = KT:NewModule("TeleportMenu", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
 local LDB     = LibStub("LibDataBroker-1.1", true)
 local LDBIcon = LibStub("LibDBIcon-1.0", true)
@@ -676,7 +717,7 @@ function Mod:CreateMenuFrame()
     title:SetFont(KT_FONT, 14, "OUTLINE")
     title:SetPoint("LEFT", 12, 0)
     title:SetPoint("TOP",  f, "TOP", 0, -9)
-    title:SetText(LText("Portal & Teleport") .. "  |cff808080· escaparate|r")
+    title:SetText(LText("Portal & Teleport") .. "  |cff808080· " .. LText("showcase") .. "|r")
 
     -- ── Separator under header ────────────────────────────────────────────────
     local sep = f:CreateTexture(nil, "BACKGROUND")
@@ -1181,14 +1222,14 @@ function Mod:ShowCategory(category)
                 local data = s.data
                 if Mod.db.showTooltip ~= false and data then
                     GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine(data.name or "", 1, 1, 1)
+                    GameTooltip:AddLine(GetEntryDisplayName(data), 1, 1, 1)
                     if data.classReq then
-                        GameTooltip:AddLine("Clase: " .. data.classReq, 0.7, 0.7, 0.7)
+                        GameTooltip:AddLine(string.format(LText("Class: %s"), GetClassDisplayName(data.classReq)), 0.7, 0.7, 0.7)
                     end
                     if data.raceReq then
-                        GameTooltip:AddLine("Raza: " .. data.raceReq, 0.7, 0.7, 0.7)
+                        GameTooltip:AddLine(string.format(LText("Race: %s"), GetRaceDisplayName(data.raceReq)), 0.7, 0.7, 0.7)
                     end
-                    GameTooltip:AddLine(LText("Solo escaparate: no ejecuta el teleport."), 0.6, 0.6, 0.6)
+                    GameTooltip:AddLine(LText("Showcase only: does not cast the teleport."), 0.6, 0.6, 0.6)
                     GameTooltip:Show()
                 end
                 local hoverR, hoverG, hoverB = GetThemeAccentColor()
@@ -1230,7 +1271,7 @@ function Mod:ShowCategory(category)
             outline = "OUTLINE"
         end
         btn.nameLabel:SetFont(font, self.db.fontSize or 10, outline)
-        btn.nameLabel:SetText(item.name or "")
+        btn.nameLabel:SetText(GetEntryDisplayName(item))
         btn.nameLabel:SetWidth(cellW)
         btn.nameLabel:SetHeight(labelHeight > 0 and labelHeight or 1)
         if showLabels then btn.nameLabel:Show() else btn.nameLabel:Hide() end
@@ -1357,7 +1398,7 @@ function Mod:ShowCategory(category)
         content:SetSize(totalWidth, math.max(1, totalRows * (cellH + bSpace) + bSpace))
     end
 
-    frame.countLabel:SetText(#validItems .. " teleports  ·  " .. availableCount .. " disponibles")
+    frame.countLabel:SetText(string.format(LText("%d teleports  ·  %d available"), #validItems, availableCount))
     self:UpdateAllCooldowns()
 end
 

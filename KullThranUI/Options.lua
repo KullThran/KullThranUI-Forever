@@ -28,6 +28,7 @@ ns.PAGE_ICON_MAP = {
     aurareminders  = "AuraReminders",
     cooldownmanager = "KUICooldownManager",
     teleportmenu   = "TeleportMenu",
+    flightmaster   = "FlightMaster",
     cursor         = "Cursor",
     enhancements   = "Enhacements",
     external       = "cogs",
@@ -68,6 +69,7 @@ ns.PAGE_CATEGORY_MAP = {
     expbar = "hud_navigation",
     minimap = "hud_navigation",
     teleportmenu = "hud_navigation",
+    flightmaster = "hud_navigation",
 
     chat = "utility_social",
     bags = "utility_social",
@@ -100,6 +102,7 @@ ns.MODULE_ICON_MAP = {
     expbar = "ExperienceBar",
     minimap = "Minimap",
     teleportmenu = "TeleportMenu",
+    flightmaster = "FlightMaster",
     chat = "Chat",
     bags = "Bags",
     tooltip = "Tooltip",
@@ -141,6 +144,7 @@ ns.MODULE_DESCRIPTION_MAP = {
     expbar = "Track experience, reputation and other progression values.",
     minimap = "Configure the minimap, buttons and navigation information.",
     teleportmenu = "Access hearthstones, portals and teleportation spells quickly.",
+    flightmaster = "Flight duration bar and a guide to every flight point with distances.",
 
     chat = "Customize chat windows, private conversations and message behavior.",
     bags = "Configure inventory layout, sorting and item presentation.",
@@ -954,10 +958,48 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.0.4"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.3"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.1.3"] = {
+        version = "0.1.3",
+        published = "2026-10-11",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "New Flight Master module, replacing Dragon Riding. A flight bar shows origin and destination, remaining time or arrival time, and whether the duration is measured or estimated. Routes with stops get a button to land at the next stop, and an optional sound plays on landing.",
+            "Flight Master guide: every flight point with its distance from you, flight master portrait, flight time and known or undiscovered state, with search, filters and pages, sorted by distance by default. It appears in the options page, next to the flight map when you talk to a flight master, and with /kfm.",
+            "Flight times are measured on every flight, shared by all your characters and, optionally, with guild and group members using KullThranUI.",
+            "New Dungeon Tracker in Enhancements: elapsed time, bosses defeated, party deaths and dungeon history, with live preview and appearance options.",
+            "Friends list enhancements work with the new Social window of the Forever client.",
+            "Chat: each whisper window shows only its own conversation.",
+            "Character names with surnames show correctly on nameplates and Unit Frames.",
+            "Unlock Mode: right-clicking an element opens a complete Element Options menu. Width, height, X and Y have sliders and number boxes, and you can anchor the element to another one with its own offsets and extra width, pick the screen point positions are measured from, fade it on mouseover, center it, or reset its position and size.",
+            "Unlock Mode: Unit Frames, Cast Bar and Party Frames resize with the same width and height settings used on their option pages.",
+            "Unlock Mode: the unsaved changes dialog is back, with Exit Without Saving and Save & Exit. Esc or clicking outside returns you to editing.",
+            "Unlock Mode: movers are more opaque, the element list uses flat rows, and hovering a row highlights its element on screen while clicking it makes it flash. Elements also have new hover, click and selection animations.",
+            "Leaving Unlock Mode without saving no longer changes Unit Frame scale. The Player frame is restored once to 132% in the Classic, Forever and Retail styles.",
+            "Resource Bars: new Autoattack Bars that replace Blizzard's autoattack bars while enabled, with fill or empty direction, color, a test button and artwork that follows the selected visual style.",
+            "Damage Meter: new Visual Style selector (KUI, Retail, Forever, Classic). Only the look changes; every window keeps its own mode, session, size and position.",
+            "Classic style: Holy Power, Soul Shards, Runes, Essence, Chi and Arcane Charges use a classic gem tray under the Player frame, aligned like the combo points.",
+            "Retail and Forever styles keep Blizzard's own class resource art and animations under the Player frame.",
+            "Target of Target and Focus Target use the small Blizzard frame with power bar and portrait in the Classic, Forever and Retail styles, and their previews match.",
+            "Druid combo points are only shown in Cat Form, in every combo style.",
+            "Party Frames: in the Classic, Retail and Forever styles, debuffs sit centered below the frame instead of over the health bar when the debuff anchor is Center.",
+            "Cooldown Manager: the KUI Tracker no longer shows another class's interrupt or defensive (for example Kick on a Warlock) when characters share a profile.",
+            "Cooldown Manager: bars keep their exact position after being dragged in Unlock Mode and when arena layouts reset.",
+            "Unit Frames: AFK, Dead, Ghost and Offline badges update correctly when you switch target or focus.",
+            "Unit Frames: names written in Korean, Chinese or Japanese characters display correctly instead of empty boxes.",
+            "Target auras refresh reliably after target changes.",
+            "Bags: using an item from the bags in combat no longer triggers a blocked-action warning. The bag updates as soon as combat ends.",
+            "Bags: item categories (Equipment, Consumables, Reagents, Junk and the rest) are now built into KullThranUI and work on their own.",
+            "Nameplates: KUI style bars no longer keep the fill texture left by a previously applied style, and group threat colors stay readable.",
+            "Teleport Menu shows destination names in your client's language.",
+            "Minimap layout refreshes with your current settings after combat.",
+            "Tooltip, Installer previews, Inspect, Minimap and Aura Reminders texts are now translated in every supported language.",
+        },
+    },
     ["0.0.4"] = {
         version = "0.0.4",
         published = "2026-09-24",
@@ -1005,7 +1047,7 @@ local CHANGELOG_ENTRIES = {
             "Added visible Unit Frames and Party Frames toggles and live-preview rendering for level and PvP indicators; Target metadata mirrors to the right side when its portrait is on the right.",
             "Moved Target portrait to the right by default and made Target metadata follow the actual portrait anchor.",
             "Added friendly-player levels to Nameplates with configurable font, size, outline, shadow, color, X, and Y.",
-            "Fixed Objective Tracker accent quest titles, Armory Forever visibility/stats, Skins nil callbacks, BlizzMove frame detection, TeleportMenu cooldown handling, and protected chat paths.",
+            "Fixed Objective Tracker accent quest titles, Armory Forever visibility/stats, Skins nil callbacks, KUI Move frame detection, TeleportMenu cooldown handling, and protected chat paths.",
             "Patched Rogue/Feral Combo Points across Resource Bars, Unit Frames, oUF ClassPower, and the oUF cpoints tag so secret numbers are never compared or arithmetized in Lua.",
             "Fixed outgoing whisper history for Forever lineID 0 events and adjusted the default Damage Meter position.",
             "Persistence diagnostics are off by default; Lua syntax and repository whitespace checks completed successfully.",
@@ -1080,9 +1122,9 @@ local CHANGELOG_ENTRIES = {
             "Reworked global font inheritance so modules that still follow the global font update together while explicitly customized areas preserve their own selection, with combat-safe deferred refreshes across the supported interface.",
             "Refined the main configuration window with an accent-colored KUI logo, a new resize grip, a slimmer navigation scrollbar, immediate minimap social-icon recoloring, and a scalable nine-slice background that preserves its proportions at preset and custom window sizes.",
             "Redesigned KUI Unlock Mode with a wider and cleaner sidebar, clearer active-element feedback, improved mover menus, direct access to profile importing, an animated opening logo, and an automatically retracting sidebar that remains available from the edge of the screen.",
-            "Improved the in-game changelog window so its complete Ã¢â‚¬Å“DonÃ¢â‚¬â„¢t show againÃ¢â‚¬Â row is clickable, the current patch suppression state is restored correctly, and enabling or disabling the option is saved immediately.",
+            "Improved the in-game changelog window so its complete “Don’t show again” row is clickable, the current patch suppression state is restored correctly, and enabling or disabling the option is saved immediately.",
             "Hardened Chat against protected edit-box state changes during combat, preventing unsafe whisper, Battle.net, and chat-type mutations while retaining the normal input flow outside combat.",
-            "Reduced Cooldown Manager background work by replacing continuous glow polling with coalesced event-driven updates, refreshing only affected bars when possible, and avoiding redundant transition passes once BlizzardÃ¢â‚¬â„¢s Cooldown Viewer pools have stabilized.",
+            "Reduced Cooldown Manager background work by replacing continuous glow polling with coalesced event-driven updates, refreshing only affected bars when possible, and avoiding redundant transition passes once Blizzard’s Cooldown Viewer pools have stabilized.",
             "Improved Cooldown Manager trackers by hiding unavailable potion items, keeping owned potion ranks synchronized, stabilizing player and target frame anchoring around narrow CDM layouts, and making arena, battleground, specialization, and world-transition recovery more selective.",
             "Reworked centered horizontal Party and Arena layouts so the player remains in the intended middle position as the group fills, with a corrected bottom-center default position for horizontal Party Frames.",
             "Improved Party Frames range, phase, roster, aura, and encounter handling with more reliable out-of-range recovery, independent dispel indicators, properly layered AuraKit dispel effects, boss-frame activation during encounters, and fewer unnecessary full roster rebuilds while zoning.",
@@ -1099,7 +1141,7 @@ local CHANGELOG_ENTRIES = {
             "Reworked private whisper persistence so opened character and Battle.net conversations can survive a UI reload, including conversations opened before any message is exchanged, while closed conversations remain dismissed and session state is cleared on disconnect.",
             "Hardened Chat against protected and secret strings when capturing whisper targets or copying chat history, and prevented closed temporary Blizzard whisper windows from reopening automatically.",
             "Corrected Action Bar cooldown presentation so active cooldowns use a properly darkened swipe over every supported button shape instead of retaining the normal colored background.",
-            "Rebuilt Damage Meter player pinning around a Details-style pinned final row: the player remains visible without corrupting the real ranking order, scrolling can inspect the complete list, and combat-start refreshes no longer push the meter to an unrelated position.",
+            "Rebuilt Damage Meter player pinning around a pinned final row: the player remains visible without corrupting the real ranking order, scrolling can inspect the complete list, and combat-start refreshes no longer push the meter to an unrelated position.",
             "Improved Damage Meter combat-session handling, saved history, protected-value support, and live refresh scheduling to avoid redundant delayed updates during continuous combat events.",
             "Added a genuinely opaque Objective Tracker background mode with a solid black surface, an accent-colored top border, and an accurate live preview that cannot inherit the legacy gradient or fade.",
             "Expanded Armory PvP item-level support with a working live-preview indicator and independent controls for visibility, label, decimals, font, size, outline, color, and horizontal or vertical positioning.",
@@ -1197,12 +1239,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.0.4"
+        or "0.1.3"
     -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "0.0.4"
+        ver = "0.1.3"
     end
     return ver
 end
@@ -2277,7 +2319,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.0.4")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.3")))
     end
     if menu._foreverLogo then
         local VT = KT.VisualThemes
@@ -2942,7 +2984,7 @@ local function AppendModuleProfileTools(sc, W, pageId, totalHeight)
             onClick = function()
                 local exportString, err = profileMod:ExportPageProfileString(pageId)
                 if not exportString then
-                    if KT and KT.Print then KT:Print(err or "No se pudo exportar el modulo.") end
+                    if KT and KT.Print then KT:Print(err or LText("Could not export the module.")) end
                     return
                 end
                 profileMod:ShowExportPopup(
@@ -2962,7 +3004,7 @@ local function AppendModuleProfileTools(sc, W, pageId, totalHeight)
                     function(text)
                         local ok, err = profileMod:ImportPageProfileString(pageId, text)
                         if not ok then
-                            error(err or "No se pudo importar el modulo.", 0)
+                            error(err or LText("Could not import the module."), 0)
                         end
                         return true
                     end
@@ -3520,7 +3562,7 @@ local function CreateMenuFrame()
         btn:SetScript("OnEnter", function(self)
             if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                GameTooltip:SetText(LText("Window Size: ") .. self.preset.tooltip, 1, 1, 1)
+                GameTooltip:SetText(LText("Window Size: ") .. LText(self.preset.tooltip), 1, 1, 1)
                 GameTooltip:Show()
             end
         end)
@@ -3620,7 +3662,7 @@ local function CreateMenuFrame()
                     -- so make the feature discoverable even when that tab is not active.
                     AddIndexedText(LText("Damage Meter"))
                     AddIndexedText(LText("Damage Meter Settings"))
-                    AddIndexedText(LText("Mythic+ Timer"))
+                    AddIndexedText(LText("Dungeon Timer"))
                     AddIndexedText(LText("Live Preview"))
                 end
                 pcall(page.builder, dummyFrame, proxyW)
@@ -3916,12 +3958,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.0.4") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.3") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.0.4"
+	f._versionValue = KT.VERSION or "0.1.3"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving
@@ -5094,6 +5136,7 @@ local PROFILE_MODULE_ICON_MAP = {
     blizzmove = "UnlockMode",
     cursor = "Cursor",
     teleportmenu = "TeleportMenu",
+    flightmaster = "FlightMaster",
 }
 
 -- Profile controls: every button is a KT.NavTabs button (uiverse stale-cheetah
@@ -5605,7 +5648,7 @@ local function AddCompatibilityAddonCard(parent, yOffset, width, detector, entry
                     KT:RefreshPage()
                 end
             elseif KT and KT.Print then
-                KT:Print("Could not disable the KUI module from the Compatibility panel.")
+                KT:Print(LText("Could not disable the KUI module from the Compatibility panel."))
             end
         end)
     end

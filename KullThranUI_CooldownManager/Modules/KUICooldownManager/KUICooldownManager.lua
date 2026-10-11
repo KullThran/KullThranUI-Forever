@@ -413,7 +413,7 @@ local function GetSpellUsableInfo(spellID)
     end
 
     -- Execute family: C_Spell.IsSpellUsable already knows target HP internally.
-    -- The only problem is it returns (false, false) when not usable due to target HP —
+    -- The only problem is it returns (false, false) when not usable due to target HP â€”
     -- insufficientPower=false means the CDM would NOT desaturate. We fix that here.
     -- When usable=true (target below 20% or Sudden Death proc), we also trigger the CDM glow.
     if _executeFamily[spellID] then
@@ -2552,6 +2552,19 @@ local function RegisterCDMUnlockElements()
                         barData._kuiTrackerFreePosition = true
                     end
                 end,
+                translateMoverPosition = function(_, pos)
+                    -- Store the live center while dragging, before any rebuild
+                    -- changes the number of icons or the bar's dimensions.
+                    local uiW, uiH = UIParent:GetSize()
+                    local ratio = UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
+                    local w, h = frame:GetSize()
+                    return {
+                        point = "CENTER", relativePoint = "CENTER",
+                        x = (pos.x or 0) + w * 0.5 - uiW * ratio * 0.5,
+                        y = (pos.y or 0) - h * 0.5 + uiH * ratio * 0.5,
+                        scale = pos.scale,
+                    }
+                end,
                 applyPendingPosition = function(_, pos)
                     frame._kuiUnlockManualPosition = true
                     frame:ClearAllPoints()
@@ -3657,7 +3670,7 @@ local GLOW_STYLES = {
     { id = "autocast", name = "AutoCast Shine",      code = 1 }, -- rotating dots
     { id = "pixel",    name = "Pixel Border",        code = 2 }, -- animated pixel border
     { id = "button",   name = "Action Button Glow",  code = 4 }, -- modern button glow (if available)
-    { id = "none",     name = "Sin Glow",            code = 0 },
+    { id = "none",     name = "None",                code = 0 },
 }
 ns.GLOW_STYLES = GLOW_STYLES
 
@@ -6649,6 +6662,31 @@ local function FilterTrackerAutoSpells(trackerKey, list)
 end
 
 
+-- True when every spell in `list` belongs to the current class's auto catalog
+-- (interrupt/defensive). Other trackers (trinket/potion) are class-agnostic.
+local function IsTrackerSpellListForClass(trackerKey, list)
+    if trackerKey ~= "interrupt" and trackerKey ~= "defensive" then return true end
+    local class = playerIdentity.class or select(2, UnitClass("player"))
+    local catalog
+    if trackerKey == "interrupt" then
+        catalog = (ns.KUI_IS_FOREVER and ns.CDM_FOREVER_INTERRUPTS) or INTERRUPTS_BY_CLASS
+    else
+        catalog = (ns.KUI_IS_FOREVER and ns.CDM_FOREVER_DEFENSIVES) or DEFENSIVE_BY_CLASS
+    end
+    local allowed = {}
+    for _, sid in ipairs((class and catalog[class]) or {}) do allowed[sid] = true end
+    if trackerKey == "defensive" then
+        local race = playerIdentity.race or select(2, UnitRace("player"))
+        for _, entry in ipairs((race and ns.RACE_RACIALS and ns.RACE_RACIALS[race]) or {}) do
+            allowed[type(entry) == "table" and entry[1] or entry] = true
+        end
+    end
+    for _, sid in ipairs(list) do
+        if not allowed[sid] then return false end
+    end
+    return true
+end
+
 local function BuildAutoTrackerSpells(trackerKey)
     local out, seen = {}, {}
     local class = playerIdentity.class or select(2, UnitClass("player"))
@@ -6905,9 +6943,13 @@ local function SyncKUITrackerBars(syncMode)
                     ct.spells = detectedSpells or {}
                 elseif detectedSpells and #detectedSpells > 0 then
                     ct.spells = detectedSpells
-                elseif type(previousSpells) == "table" and #previousSpells > 0 then
+                elseif type(previousSpells) == "table" and #previousSpells > 0
+                    and IsTrackerSpellListForClass(tKey, previousSpells) then
                     -- Do not erase a working tracker during a transient CDM
                     -- spellbook rebuild. SPELLS_CHANGED retries detection.
+                    -- Only keep spells that belong to this class: profiles are
+                    -- shared between characters, so a list saved by a rogue
+                    -- (Kick) must never survive on a warlock.
                     ct.spells = FilterTrackerAutoSpells(tKey, previousSpells)
                 else
                     ct.spells = detectedSpells or {}
@@ -6918,7 +6960,7 @@ local function SyncKUITrackerBars(syncMode)
             if (not ct.spells or #ct.spells == 0) then
                 TrackerDebugOnce(
                     "kui_autofail_" .. tKey,
-                    string.format("KUI Tracker '%s' sin spells detectados (auto=%s).", tKey, tostring(ct.auto))
+                    string.format("KUI Tracker '%s' found no spells (auto=%s).", tKey, tostring(ct.auto))
                 )
             end
 
@@ -7415,8 +7457,9 @@ local function ApplyBarPositionCentered(frame, pos, w, h, scale)
     if pos.point == "TOPLEFT" and pos.relPoint == "TOPLEFT" then
         local fw, fh = frame:GetWidth() or 0, frame:GetHeight() or 0
         local uiW, uiH = UIParent:GetSize()
-        local cx = (pos.x or 0) + fw * 0.5 - uiW * 0.5
-        local cy = (pos.y or 0) - fh * 0.5 + uiH * 0.5
+        local ratio = UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
+        local cx = (pos.x or 0) + fw * 0.5 - uiW * ratio * 0.5
+        local cy = (pos.y or 0) - fh * 0.5 + uiH * ratio * 0.5
         frame:SetPoint("CENTER", UIParent, "CENTER", cx, cy)
         pos.point = "CENTER"
         pos.relPoint = "CENTER"
@@ -7918,7 +7961,9 @@ LayoutCDMBar = function(barKey)
     local isKUIEditMode = (KT and KT._unlockActive)
     local isBlizzEditMode = (C_EditMode and C_EditMode.IsEditModeActive and C_EditMode.IsEditModeActive())
     local maxIcons = 9999
-    if isKUIEditMode then
+    if isKUIEditMode and not ns.BLIZZ_CDM_FRAMES[barKey] then
+        -- Native bars keep their real footprint while moving. Truncating them
+        -- to five icons shifts their centers when Unlock Mode closes.
         maxIcons = (numRows * 5)
     elseif isBlizzEditMode then
         maxIcons = 0
@@ -8711,7 +8756,7 @@ local function UpdateCustomBarIcons(barKey)
             local oy = ct and ct.y or barData.playerFrameOffsetY or 0
             ns.TrackerDebugOnce(
                 "kui_empty_" .. barKey,
-                string.format("KUI Tracker '%s' sin iconos: enabled=%s auto=%s spells=%d side=%s x=%d y=%d",
+                string.format("KUI Tracker '%s' has no icons: enabled=%s auto=%s spells=%d side=%s x=%d y=%d",
                     barKey, tostring(enabled), tostring(auto), count, tostring(side), ox, oy)
             )
         end
@@ -9193,7 +9238,7 @@ local function UpdateCustomBarIcons(barKey)
         end
         ns.TrackerDebugOnce(
             "kui_novis_" .. barKey,
-            string.format("KUI Tracker '%s' sin iconos visibles (total=%d) sample=[%s].",
+            string.format("KUI Tracker '%s' has no visible icons (total=%d) sample=[%s].",
                 barKey, totalCount, table.concat(list, ","))
         )
     end
@@ -9219,10 +9264,12 @@ local function UpdateCustomBarIcons(barKey)
 end
 
 local function SafeUpdateCustomBarIcons(barKey)
+    ns._customTrackerErrors = ns._customTrackerErrors or {}
     local ok, err = pcall(UpdateCustomBarIcons, barKey)
     if ok then
         ns._customTrackerRecoveryAttempts = 0
         ns._customTrackerLastError = nil
+        ns._customTrackerErrors[barKey] = nil
         return true
     end
 
@@ -9231,6 +9278,7 @@ local function SafeUpdateCustomBarIcons(barKey)
         message = err,
         time = GetTime(),
     }
+    ns._customTrackerErrors[barKey] = ns._customTrackerLastError
 
     local now = GetTime()
     if now - (ns._customTrackerRecoveryWindow or 0) > 2 then
@@ -9542,14 +9590,21 @@ function ns.EnsureNativeCDMFrame(frame, barKey, barData)
         if frame.Border then frame.Border:Hide() end
         if frame.DebuffBorder then frame.DebuffBorder:Hide() end
 
-        hooksecurefunc(frame, "SetPoint", function(_, _, relativeTo)
+        hooksecurefunc(frame, "SetPoint", function(_, point, relativeTo, relativePoint, x, y)
             if fd.pointGuard then return end
             local anchor = fd.anchor
             if not anchor then
                 if fd.decorated then ns.ReleaseNativeCDMFrame(frame) end
                 return
             end
-            if relativeTo == anchor[2] then return end
+            if point == anchor[1] and relativeTo == anchor[2]
+                and relativePoint == anchor[3]
+                and (x or 0) == anchor[4] and (y or 0) == anchor[5] then return end
+            if InCombatLockdown and InCombatLockdown()
+                and frame.IsProtected and frame:IsProtected() then
+                ns._cdmLayoutPending = true
+                return
+            end
             fd.pointGuard = true
             frame:ClearAllPoints()
             frame:SetPoint(anchor[1], anchor[2], anchor[3], anchor[4], anchor[5])
@@ -9952,15 +10007,22 @@ end
 -- re-applying KUI's layout and visual ownership.
 function ns.ReassertNativeCDMViewerLayout(viewerName)
     if not ns.NativeCDMHostingEnabled() then return false end
-    if InCombatLockdown and InCombatLockdown() then
-        ns._cdmLayoutPending = true
-        return false
-    end
-
     local barKey = GetHostedBarKeyForViewer(viewerName)
     local container = barKey and cdmBarFrames[barKey]
     local icons = barKey and cdmBarIcons[barKey]
     if not (container and icons) then return false end
+    -- Arena layouts also run in combat. Ordinary hosted CDM frames can be
+    -- restored immediately; only protected geometry must wait for combat end.
+    if InCombatLockdown and InCombatLockdown() then
+        local protected = container.IsProtected and container:IsProtected()
+        for _, icon in ipairs(icons) do
+            if icon.IsProtected and icon:IsProtected() then protected = true; break end
+        end
+        if protected then
+            ns._cdmLayoutPending = true
+            return false
+        end
+    end
 
     -- Blizzard may have changed child alpha while the container alpha itself
     -- stayed constant. Invalidate the small alpha cache so every claimed child
@@ -10995,10 +11057,10 @@ function blizzImport.ImportDisplayedMainBars(forceOverwrite, silent)
         if ns.BuildTrackedBuffBars then ns.BuildTrackedBuffBars() end
         blizzImport.QueueSpecProfileSave()
         if not silent then
-            print("KUI: Imported Blizzard CDM layout for " .. imported .. " default bar(s).")
+            print(string.format(LText("KUI: Imported Blizzard CDM layout for %d default bar(s)."), imported))
         end
     elseif forceOverwrite and not silent then
-        print("KUI: Couldn't read the Blizzard CDM layout yet. Open the Blizzard CDM once and try again.")
+        print(LText("KUI: Couldn't read the Blizzard CDM layout yet. Open the Blizzard CDM once and try again."))
     end
 
     return imported
@@ -11041,7 +11103,7 @@ function blizzImport.TryShowInitialPrompt()
 end
 
 StaticPopupDialogs["KUI_CDM_IMPORT_BLIZZARD_LAYOUT"] = {
-    text = "Blizzard CDM layout changed.\n\nImport Cooldowns, Utility and Buffs into KUI CDM for this spec?",
+    text = LText("Blizzard CDM layout changed.\n\nImport Cooldowns, Utility and Buffs into KUI CDM for this spec?"),
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -11216,8 +11278,17 @@ ns.AnchorPlayerFrameToCDM = function()
 
         local pos = KT.db.profile.unitFrames.positions[unitKey]
         pos.point = "CENTER"
-        pos.x = math.floor((fx - ux) + 0.5)
-        pos.y = math.floor((fy - uy) + 0.5)
+        -- GetCenter() reports in the frame's own scale, while the saved offset is
+        -- applied in that same scale from the UIParent center. A scaled frame
+        -- (Retail default 132%) needs the UIParent center converted to its scale.
+        local ratio = 1
+        local fs = frame.GetEffectiveScale and frame:GetEffectiveScale()
+        local us = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()
+        if type(fs) == "number" and type(us) == "number" and fs > 0 and us > 0 then
+            ratio = fs / us
+        end
+        pos.x = math.floor((fx - ux / ratio) + 0.5)
+        pos.y = math.floor((fy - uy / ratio) + 0.5)
     end
 
     local function TryAnchorFrame(frameRef, unitKey, point, relFrame, relPoint, ox, oy)
@@ -12336,7 +12407,9 @@ local function UpdateAllCDMBars(dt)
     local dirtyHasNoBar = wasDirty and not (next(dirtyBars) ~= nil)
     for i, barData in ipairs(profile.cdmBars.bars) do
         local barNeedsUpdate = updateAllBars or dirtyBars[barData.key]
-        if barNeedsUpdate and dirtyHasNoBar and not viewerDirty
+            or (dirtyHasNoBar and barData.customSpells ~= nil
+                and not ns.BLIZZ_CDM_FRAMES[barData.key])
+        if barNeedsUpdate and not updateAllBars and dirtyHasNoBar and not viewerDirty
             and ns.BLIZZ_CDM_FRAMES and ns.BLIZZ_CDM_FRAMES[barData.key] then
             barNeedsUpdate = false
         end
@@ -13335,6 +13408,7 @@ ns.eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 ns.eventFrame:RegisterEvent("SPELLS_CHANGED")
 ns.eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 ns.eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
+pcall(ns.eventFrame.RegisterEvent, ns.eventFrame, "PVP_MATCH_ACTIVE")
 ns.eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 ns.eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 ns.eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
@@ -13738,6 +13812,14 @@ ns.eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
         if p and p.cdmBars and p.cdmBars.hideBlizzard then
             C_Timer.After(0, function() HideBlizzardCDM() end)
         end
+        return
+    end
+    if event == "PVP_MATCH_ACTIVE" then
+        -- Opening arena gates can reset the native grid without a combat
+        -- transition. Coalesce a reassertion after Blizzard's event handlers.
+        ns.NativeCDMViewerLayoutObserved("EssentialCooldownViewer")
+        ns.NativeCDMViewerLayoutObserved("UtilityCooldownViewer")
+        ns.NativeCDMViewerLayoutObserved("BuffIconCooldownViewer")
         return
     end
     if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -15298,7 +15380,7 @@ SlashCmdList.KUI_CDMDEBUG = function(msg)
         return
     end
     if cmd == "status" then
-        print("KUI CDM glow debug: " .. (ns._cdmGlowDebugEnabled and "ON" or "OFF"))
+        print(string.format(LText("KUI CDM glow debug: %s"), ns._cdmGlowDebugEnabled and LText("ON") or LText("OFF")))
         return
     end
     if cmd == "clear" then
@@ -15313,7 +15395,7 @@ end
 SLASH_KUI_CDMSTACKS1 = "/cdmstacks"
 SlashCmdList.KUI_CDMSTACKS = function()
     local p = function(...) print("|cff0cd29f[CDM Stacks]|r", ...) end
-    p("--- Stack Count Debug ---")
+    p("--- " .. LText("Stack Count Debug") .. " ---")
     local BLIZZ = {
         cooldowns = "EssentialCooldownViewer",
         utility = "UtilityCooldownViewer",
@@ -15322,7 +15404,7 @@ SlashCmdList.KUI_CDMSTACKS = function()
     }
     local profile = KUI_CDM.db and KUI_CDM.db.profile
     if not profile or not profile.cdmBars then
-        p("No CDM bars configured"); return
+        p(LText("No CDM bars configured")); return
     end
 
     for _, barData in ipairs(profile.cdmBars.bars) do
@@ -15363,17 +15445,61 @@ SlashCmdList.KUI_CDMSTACKS = function()
     end
 end
 
+-- Read-only tracker diagnostics, including errors swallowed by recovery.
+SLASH_KUI_CDMTRACKER1 = "/cdmtracker"
+SlashCmdList.KUI_CDMTRACKER = function()
+    local function Report(message) print("|cff00ff99[KUI Tracker]|r " .. message) end
+    local profile = KUI_CDM.db and KUI_CDM.db.profile
+    if not profile then Report(LText("No profile loaded")); return end
+    Report("CDM enabled=" .. tostring(profile.cdmBars and profile.cdmBars.enabled))
+    if KUI_CDM._trackerSyncLastError then
+        Report(string.format(LText("Sync error: %s"), tostring(KUI_CDM._trackerSyncLastError.message)))
+    end
+    for _, trackerKey in ipairs({ "defensive", "interrupt", "trinket", "potion" }) do
+        local key = "kui_" .. trackerKey
+        local cfg = profile.customTracker and profile.customTracker[trackerKey]
+        local frame = cdmBarFrames[key]
+        local icons = cdmBarIcons[key] or {}
+        local shown = 0
+        for _, icon in ipairs(icons) do
+            if icon._ktCDMShouldShow == true
+                or (icon._ktCDMShouldShow == nil and icon:IsShown()) then
+                shown = shown + 1
+            end
+        end
+        Report(key .. ": enabled=" .. tostring(cfg and cfg.enabled)
+            .. " spells=" .. tostring(cfg and cfg.spells and #cfg.spells or 0)
+            .. " icons=" .. tostring(shown) .. "/" .. tostring(#icons)
+            .. " frame=" .. tostring(frame ~= nil))
+        if frame then
+            local ok, details = pcall(function()
+                local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+                return "shown=" .. tostring(frame:IsShown())
+                    .. " visible=" .. tostring(frame:IsVisible())
+                    .. " alpha=" .. tostring(frame:GetEffectiveAlpha())
+                    .. " size=" .. tostring(frame:GetWidth()) .. "x" .. tostring(frame:GetHeight())
+                    .. " anchor=" .. tostring(point) .. ":"
+                    .. tostring(relativeTo and relativeTo:GetName()) .. ":" .. tostring(relativePoint)
+                    .. " offset=" .. tostring(x) .. "," .. tostring(y)
+            end)
+            Report(ok and details or LText("Frame details unavailable"))
+        end
+        local failure = ns._customTrackerErrors and ns._customTrackerErrors[key]
+        if failure then Report(string.format(LText("%s error: %s"), key, tostring(failure.message))) end
+    end
+end
+
 SLASH_KUI_CDMCUSTOM1 = "/cdmcustom"
 SlashCmdList.KUI_CDMCUSTOM = function()
     local p = function(...) print("|cff00ff99[CDM Custom]|r", ...) end
-    p("=== Custom bar spells ===")
+    p("=== " .. LText("Custom bar spells") .. " ===")
     local profile = KUI_CDM.db and KUI_CDM.db.profile
     if not profile or not profile.cdmBars then
-        p("No profile"); return
+        p(LText("No profile loaded")); return
     end
     for _, barData in ipairs(profile.cdmBars.bars) do
         if barData.customSpells and #barData.customSpells > 0 then
-            p("Bar: " .. tostring(barData.key))
+            p(string.format(LText("Bar: %s"), tostring(barData.key)))
             for _, sid in ipairs(barData.customSpells) do
                 if sid and sid > 0 then
                     local name = C_Spell.GetSpellName and C_Spell.GetSpellName(sid) or "?"

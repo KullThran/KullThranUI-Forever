@@ -1690,6 +1690,66 @@ local function KT_GetReplyChatFrame()
         or nil
 end
 
+-- Opens Blizzard's player popup for a player/BN name link. Blizzard anchors
+-- that menu to the chat frame passed to SetItemRef and closes it as soon as
+-- that owner is hidden; ChatFrame1 is hidden under KUI, so the menu is owned
+-- by the visible KUI message frame while ChatFrame1 still handles the
+-- whisper and pop-out actions.
+local function KT_OpenPlayerLinkMenu(link, ownerFrame)
+    if type(link) ~= "string" or type(_G.UnitPopup_OpenMenu) ~= "function" or not ownerFrame then
+        return false
+    end
+    if IsModifiedClick and IsModifiedClick("CHATLINK") then
+        return false
+    end
+
+    local linkType, linkData = link:match("^(.-):(.*)$")
+    linkType = strlower(tostring(linkType or ""))
+    local chatFrame = KT_GetReplyChatFrame()
+    local which, contextData
+
+    if linkType == "player" then
+        local name, lineID, chatType = strsplit(":", linkData)
+        name = KT_GetNonEmptyAccessibleString(name)
+        if not name then
+            return false
+        end
+        which = "FRIEND"
+        contextData = {
+            name = name,
+            lineID = lineID,
+            chatType = chatType,
+            chatTarget = name,
+            chatFrame = chatFrame,
+            ownerFrame = ownerFrame,
+        }
+    elseif linkType == "bnplayer" then
+        local name, bnetIDAccount, _, chatType = strsplit(":", linkData)
+        name = KT_GetNonEmptyAccessibleString(name)
+        bnetIDAccount = tonumber(bnetIDAccount)
+        if not name or not bnetIDAccount then
+            return false
+        end
+        if BNIsSelf and BNIsSelf(bnetIDAccount) then
+            return true
+        end
+        which = "BN_FRIEND"
+        contextData = {
+            name = name,
+            chatType = chatType,
+            chatTarget = name,
+            chatFrame = chatFrame,
+            bnetIDAccount = bnetIDAccount,
+            ownerFrame = ownerFrame,
+        }
+    else
+        return false
+    end
+
+    local ok = pcall(_G.UnitPopup_OpenMenu, which, contextData)
+    return ok
+end
+
 local function KT_NormalizeWhisperRealmName(realmName)
     realmName = KT_GetNonEmptyAccessibleString(realmName)
     if not realmName then
@@ -3389,11 +3449,9 @@ function Mod:BuildTabFilter(config)
                 return false
             end
 
-            local activeTab = self:GetActiveTab()
-            if not (activeTab and activeTab.KT_WhisperThreadKey) then
-                return true
-            end
-
+            -- A selected conversation (whisper strip button or an individual
+            -- whisper tab) must only show that player's messages. Clicking the
+            -- Whisp tab itself clears the selection and shows every whisper.
             local selectedThread = self.selectedWhisperThread
             if not selectedThread then
                 return true
@@ -3705,7 +3763,7 @@ function Mod:GetActiveDedicatedNativeTabRole(tab)
     -- On secure-chat builds whispers are mirrored from Blizzard's already
     -- rendered whisper frame into KUI history. Keeping the native frame as
     -- the visible Whisp tab would bypass KUI's per-conversation filter.
-    if role == "whisper" and KT_IsSecureChatSafeMode() then
+    if role == "whisper" and (KT_IsSecureChatSafeMode() or KT_IS_FOREVER_BUILD) then
         return nil
     end
 
@@ -4184,11 +4242,11 @@ function Mod:HandlePositionDebugCommand(input)
     elseif command == "clear" then
         wipe(self.positionDebugLog or {})
         if self.db then self.db.positionDebugLog = self.positionDebugLog end
-        if KT and KT.Print then KT:Print("KT Chat position debug log cleared.") end
+        if KT and KT.Print then KT:Print(LText("KT Chat position debug log cleared.")) end
         return
     elseif command == "verbose" then
         self.positionDebugVerbose = not self.positionDebugVerbose
-        if KT and KT.Print then KT:Print("KT Chat position debug verbose: " .. (self.positionDebugVerbose and "ON" or "OFF")) end
+        if KT and KT.Print then KT:Print(string.format(LText("KT Chat position debug verbose: %s"), self.positionDebugVerbose and LText("ON") or LText("OFF"))) end
         return
     end
 
@@ -4210,13 +4268,13 @@ function Mod:HandlePositionDebugCommand(input)
         self:StartPositionDebugWatch()
         self:RecordPositionDebug("debug enabled")
         if KT and KT.Print then
-            KT:Print("KT Chat position debug ON and persistent across reloads. Use /ktchatdebug dump after the chat moves.")
+            KT:Print(LText("KT Chat position debug ON and persistent across reloads. Use /ktchatdebug dump after the chat moves."))
         end
     else
         if self.db then self.db.positionDebugEnabled = false end
         self:StopPositionDebugWatch()
         if KT and KT.Print then
-            KT:Print("KT Chat position debug OFF. Use /ktchatdebug dump to inspect the captured log.")
+            KT:Print(LText("KT Chat position debug OFF. Use /ktchatdebug dump to inspect the captured log."))
         end
     end
 end
@@ -6886,6 +6944,10 @@ function Mod:CreateMessageFrame(parent, globalName)
     frame:EnableMouseWheel(true)
     self:EnableChatFrameTextFontFallback(frame, fontPath)
     frame:SetScript("OnHyperlinkClick", function(widget, link, text, button)
+        if button == "RightButton" and KT_OpenPlayerLinkMenu(link, widget) then
+            return
+        end
+
         -- Preserve KUI navigation on left-click, but delegate right-click to
         -- Blizzard for the standard player/report context menu.
         if button ~= "RightButton" then

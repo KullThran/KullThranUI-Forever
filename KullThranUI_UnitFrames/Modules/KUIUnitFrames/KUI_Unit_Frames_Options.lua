@@ -524,7 +524,7 @@ local function ApplyPreviewUnit(frame, unitKey, settings, globalDB, nameText, va
         + (isCircular and math.max(0, portraitWidth - circularOverlap) or portraitWidth)
     local totalHeight = isCircular and math.max(totalBarHeight, portraitWidth) or totalBarHeight
     local portraitSide = settings.portraitSide or "left"
-    local showLevel = globalDB.showCharacterLevel ~= false
+    local showLevel = ns.ShowCharacterLevel(globalDB)
     local showPvP = globalDB.showPvPIcon ~= false and (unitKey == "player" or unitKey == "target")
 
     frame:SetSize(totalWidth, totalHeight)

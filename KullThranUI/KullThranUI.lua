@@ -43,6 +43,48 @@ function KT:IsForever()
     return self.IS_FOREVER == true
 end
 
+-- WoW Forever characters have a surname: UnitName returns (name, surname)
+-- instead of (name, realm). Blizzard's NameUtil.FormatUnitNameForDisplay joins
+-- both parts; we do the same through C_StringUtil.WrapString, which accepts
+-- secret values, so restricted names still reach the FontString untouched.
+local kuiSurnameSeparator
+local function GetSurnameSeparator()
+    if kuiSurnameSeparator == nil then
+        local consts = _G.Constants and _G.Constants.CharacterNameSeparatorConsts
+        local sep = consts and consts.CHARACTERNAME_SURNAME_SEPARATOR
+        kuiSurnameSeparator = type(sep) == "string" and sep or " "
+    end
+    return kuiSurnameSeparator
+end
+
+function KT:GetUnitDisplayName(unit)
+    if not unit or not _G.UnitName then return nil end
+    local name, surname = _G.UnitName(unit)
+    -- Resolve the real interface directly for display names. The legacy
+    -- profile detector used `GetBuildInfo and GetBuildInfo()`, which collapses
+    -- multiple returns and can label Forever as Retail. Do not change profile
+    -- namespaces as a side effect of fixing visible names.
+    local forever = self.IS_FOREVER
+    if not forever and type(_G.GetBuildInfo) == "function" then
+        local _, _, _, interface = _G.GetBuildInfo()
+        interface = tonumber(interface)
+        forever = interface and ((interface >= 16000 and interface < 20000)
+            or (interface >= 160000 and interface < 170000))
+    end
+    if not forever or not name or not surname then return name end
+    local isSecret = _G.issecretvalue
+    local secret = isSecret and (isSecret(name) or isSecret(surname))
+    if not secret and (type(surname) ~= "string" or surname == "") then return name end
+    local wrap = _G.C_StringUtil and _G.C_StringUtil.WrapString
+    if wrap then
+        local ok, full = pcall(wrap, GetSurnameSeparator(), name, surname)
+        if ok and full then return full end
+    elseif not secret then
+        return name .. GetSurnameSeparator() .. surname
+    end
+    return name
+end
+
 -- Profile data is not portable between Retail and WoW Forever. Forever keeps
 -- the mainline project identity, so the interface number/client flavor must
 -- be part of the profile namespace and transfer format.
@@ -216,12 +258,12 @@ local hooksecurefunc = _G.hooksecurefunc
 
 KT.VERSION = KT.VERSION
     or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
-		or "0.0.4"
+		or "0.1.3"
 -- When loaded directly from the source tree (without the release packager),
 -- GetAddOnMetadata returns the literal "@project-version@" token.  Strip it
 -- so the in-game UI never displays the raw packager placeholder.
 if KT.VERSION and KT.VERSION:find("@", 1, true) then
-    KT.VERSION = "0.1.2"
+    KT.VERSION = "0.1.3"
 end
 
 function KT:IsBlizzardEditModeActive()

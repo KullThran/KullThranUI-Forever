@@ -5,6 +5,39 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.1.3 (2026-10-11) - Beta
+
+- New Flight Master module, replacing Dragon Riding. A flight bar shows origin and destination, remaining time or arrival time, and whether the duration is measured or estimated. Routes with stops get a button to land at the next stop, and an optional sound plays on landing.
+- Flight Master guide: every flight point with its distance from you, flight master portrait, flight time and known or undiscovered state, with search, filters and pages, sorted by distance by default. It appears in the options page, next to the flight map when you talk to a flight master, and with /kfm.
+- Flight times are measured on every flight, shared by all your characters and, optionally, with guild and group members using KullThranUI.
+- New Dungeon Tracker in Enhancements: elapsed time, bosses defeated, party deaths and dungeon history, with live preview and appearance options.
+- Friends list enhancements work with the new Social window of the Forever client.
+- Chat: each whisper window shows only its own conversation.
+- Character names with surnames show correctly on nameplates and Unit Frames.
+- Unlock Mode: right-clicking an element opens a complete Element Options menu. Width, height, X and Y have sliders and number boxes, and you can anchor the element to another one with its own offsets and extra width, pick the screen point positions are measured from, fade it on mouseover, center it, or reset its position and size.
+- Unlock Mode: Unit Frames, Cast Bar and Party Frames resize with the same width and height settings used on their option pages.
+- Unlock Mode: the unsaved changes dialog is back, with Exit Without Saving and Save & Exit. Esc or clicking outside returns you to editing.
+- Unlock Mode: movers are more opaque, the element list uses flat rows, and hovering a row highlights its element on screen while clicking it makes it flash. Elements also have new hover, click and selection animations.
+- Leaving Unlock Mode without saving no longer changes Unit Frame scale. The Player frame is restored once to 132% in the Classic, Forever and Retail styles.
+- Resource Bars: new Autoattack Bars that replace Blizzard's autoattack bars while enabled, with fill or empty direction, color, a test button and artwork that follows the selected visual style.
+- Damage Meter: new Visual Style selector (KUI, Retail, Forever, Classic). Only the look changes; every window keeps its own mode, session, size and position.
+- Classic style: Holy Power, Soul Shards, Runes, Essence, Chi and Arcane Charges use a classic gem tray under the Player frame, aligned like the combo points.
+- Retail and Forever styles keep Blizzard's own class resource art and animations under the Player frame.
+- Target of Target and Focus Target use the small Blizzard frame with power bar and portrait in the Classic, Forever and Retail styles, and their previews match.
+- Druid combo points are only shown in Cat Form, in every combo style.
+- Party Frames: in the Classic, Retail and Forever styles, debuffs sit centered below the frame instead of over the health bar when the debuff anchor is Center.
+- Cooldown Manager: the KUI Tracker no longer shows another class's interrupt or defensive (for example Kick on a Warlock) when characters share a profile.
+- Cooldown Manager: bars keep their exact position after being dragged in Unlock Mode and when arena layouts reset.
+- Unit Frames: AFK, Dead, Ghost and Offline badges update correctly when you switch target or focus.
+- Unit Frames: names written in Korean, Chinese or Japanese characters display correctly instead of empty boxes.
+- Target auras refresh reliably after target changes.
+- Bags: using an item from the bags in combat no longer triggers a blocked-action warning. The bag updates as soon as combat ends.
+- Bags: item categories (Equipment, Consumables, Reagents, Junk and the rest) are now built into KullThranUI and work on their own.
+- Nameplates: KUI style bars no longer keep the fill texture left by a previously applied style, and group threat colors stay readable.
+- Teleport Menu shows destination names in your client's language.
+- Minimap layout refreshes with your current settings after combat.
+- Tooltip, Installer previews, Inspect, Minimap and Aura Reminders texts are now translated in every supported language.
+
 ## 0.1.2 (2026-10-06) - Beta
 
 - Party Frames now offer KUI, Forever, Retail and Classic style cards with independent class-color or health-color selections.
@@ -208,7 +241,7 @@ Cumulative WoW Forever beta release notes from the 0.0.1 baseline. This branch i
 - Added configurable friendly-player levels to Nameplates and retained shared font, size, outline, shadow, color, X, and Y controls.
 - Restyled Objective Tracker quest titles with the accent color across Forever legacy tracker blocks and added safer tracker discovery without assuming Retail ScrollBox APIs.
 - Restored Armory visibility and Forever-compatible stats handling without feeding missing Retail stat strings into Blizzard tooltip formatters.
-- Hardened BlizzMove for Forever build/version semantics, accepted existing Forever frames marked with obsolete Retail ranges, and suppressed expected missing-frame noise.
+- Hardened KUI Move for Forever build/version semantics, accepted existing Forever frames marked with obsolete Retail ranges, and suppressed expected missing-frame noise.
 - Fixed Skins option builders and other Forever frame/API differences that caused nil callback failures.
 - Protected TeleportMenu cooldown comparisons, Action Bar and TextStatusBar paths, and other tainted/secret-number operations from Lua arithmetic and comparisons.
 - Patched Rogue/Feral Combo Points in Resource Bars, Unit Frames custom Class Power, oUF ClassPower, and the oUF cpoints tag; Feral-only Druid mapping avoids applying Combo Points to other Druid specs.
@@ -295,7 +328,7 @@ Cumulative WoW Forever beta release notes from the 0.0.1 baseline. This branch i
 - Reworked private whisper persistence so opened character and Battle.net conversations can survive a UI reload, including conversations opened before any message is exchanged, while closed conversations remain dismissed and session state is cleared on disconnect.
 - Hardened Chat against protected and secret strings when capturing whisper targets or copying chat history, and prevented closed temporary Blizzard whisper windows from reopening automatically.
 - Corrected Action Bar cooldown presentation so active cooldowns use a properly darkened swipe over every supported button shape instead of retaining the normal colored background.
-- Rebuilt Damage Meter player pinning around a Details-style pinned final row: the player remains visible without corrupting the real ranking order, scrolling can inspect the complete list, and combat-start refreshes no longer push the meter to an unrelated position.
+- Rebuilt Damage Meter player pinning around a pinned final row: the player remains visible without corrupting the real ranking order, scrolling can inspect the complete list, and combat-start refreshes no longer push the meter to an unrelated position.
 - Improved Damage Meter combat-session handling, saved history, protected-value support, and live refresh scheduling to avoid redundant delayed updates during continuous combat events.
 - Added a genuinely opaque Objective Tracker background mode with a solid black surface, an accent-colored top border, and an accurate live preview that cannot inherit the legacy gradient or fade.
 - Expanded Armory PvP item-level support with a working live-preview indicator and independent controls for visibility, label, decimals, font, size, outline, color, and horizontal or vertical positioning.

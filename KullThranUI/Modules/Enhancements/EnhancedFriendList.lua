@@ -681,6 +681,15 @@ local function ApplyInsetStyle(frame, bgAlpha, themeContext)
     ApplySurface(frame, BUTTON_TEXTURE, 0.038, 0.038, 0.048, bgAlpha or 0.98, 0.16, 0.08, 0.9, 0.07, 0, 0, themeContext)
 end
 
+-- Shared renderer for Forever's SocialUI adapter. Keep the same theme and
+-- textures as the legacy replacement without sharing its frame ownership.
+EnhancedFriendList.SocialStyle = {
+    shell = ApplyShellStyle,
+    section = ApplySectionStyle,
+    inset = ApplyInsetStyle,
+    font = ResolveFont,
+}
+
 local function EnsureButtonArt(button)
     if not button then
         return nil
@@ -928,7 +937,7 @@ local function ApplyButtonStyle(button, variant)
 end
 
 local function CreateLabel(parent, size, r, g, b, a, flags)
-    local fs = parent:CreateFontString(nil, "OVERLAY")
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     fs:SetFont(ResolveFont(), size, flags or "")
     fs:SetTextColor(r, g, b, a or 1)
     fs:SetJustifyH("LEFT")
@@ -1138,6 +1147,22 @@ local function ShouldUseCustomList()
         return false
     end
     return not (db.social and db.social.enhancedFriendList == false)
+end
+
+function EnhancedFriendList:UsesSocialUI()
+    return _G.C_SocialUI and type(_G.C_SocialUI.IsSystemEnabled) == "function"
+        and _G.C_SocialUI.IsSystemEnabled()
+end
+
+function EnhancedFriendList:RefreshSocialUI()
+    -- Restore any legacy reparenting before selecting the new controller.
+    if runtime.baseApplied then
+        self:SetBaseFrameState(false)
+        self:RestoreExternalFrames()
+    end
+    if self.frame then self.frame:Hide() end
+    if runtime.optionMenu then runtime.optionMenu:Hide() end
+    if self.SocialUI then self.SocialUI:Refresh(ShouldUseCustomList()) end
 end
 
 -- ── Friend Groups (CRUD helpers) ────────────────────────────────────────────
@@ -5852,6 +5877,7 @@ function EnhancedFriendList:RefreshView(dataset)
 end
 
 function EnhancedFriendList:Disable()
+    if self.SocialUI then self.SocialUI:Disable() end
     if self.frame then
         self.frame:Hide()
     end
@@ -5866,6 +5892,10 @@ function EnhancedFriendList:Disable()
 end
 
 function EnhancedFriendList:RefreshTheme()
+    if self:UsesSocialUI() then
+        self:RefreshSocialUI()
+        return
+    end
     if not self.frame then return end
 
     local ar, ag, ab = AccentColor()
@@ -6084,7 +6114,7 @@ function EnhancedFriendList:InstallHooks()
                     runtime.DebugRaidState("NativeTab-OnClick-" .. definition.key)
                     runtime.DebugRaidDetail("NativeTab-OnClick-" .. definition.key)
                     if definition.key == "contacts" and debugstack and KT and KT.Print then
-                        KT:Print("|cff00c8ffEFL reset stack|r " .. string.gsub(debugstack(2, 5, 1), "[\r\n]+", " "))
+                        KT:Print(string.format(LText("|cff00c8ffEFL reset stack|r %s"), (string.gsub(debugstack(2, 5, 1), "[\r\n]+", " "))))
                     end
                 end
                 if (definition.key ~= "raid" or not runtime.raidNativeClickPending)
@@ -6169,6 +6199,10 @@ function EnhancedFriendList:EnsureEventFrame()
 end
 
 function EnhancedFriendList:OnAddonLoaded(loadedAddon)
+    if self:UsesSocialUI() then
+        self:RefreshSocialUI()
+        return
+    end
     if loadedAddon and loadedAddon ~= "Blizzard_FriendsFrame" then
         return
     end
@@ -6212,6 +6246,12 @@ function EnhancedFriendList:Refresh(force)
         end)
         runtime.themeHooked = true
     end
+
+    if self:UsesSocialUI() then
+        self:RefreshSocialUI()
+        return
+    end
+    if self.SocialUI then self.SocialUI:Disable() end
 
     if not ShouldUseCustomList() then
         self:Disable()
@@ -6274,3 +6314,11 @@ function EnhancedFriendList:Refresh(force)
         runtime.DebugRaidState("Refresh-raid-after-embed")
     end
 end
+
+-- Forever SocialUI uses the same controls and geometry as the EFL shell.
+EnhancedFriendList.SocialStyle.newButton = CreateSimpleButton
+EnhancedFriendList.SocialStyle.newLabel = CreateLabel
+EnhancedFriendList.SocialStyle.button = ApplyButtonStyle
+EnhancedFriendList.SocialStyle.accent = AccentColor
+EnhancedFriendList.SocialStyle.text = TextColor
+EnhancedFriendList.SocialStyle.layout = LAYOUT

@@ -427,13 +427,19 @@ function KT.VisualThemes:ResetComboDefaults()
         local tables = { _G.KullThranUINameplatesDB, _G.KullThranUINameplatesDB_Forever, P }
         local PREFIX = { "healthBar", "castBar", "cast", "enemyName", "level", "name", "classPower",
             "textSlot", "raidMarker", "rareElite", "targetArrow", "focusCast" }
+        -- ApplyAll already restored the selected theme slot. A layout reset
+        -- must not erase its owned texture/color fields or re-seed that slot.
+        local owned = {}
+        for _, path in ipairs(ad and ad.getOwnedPaths and ad.getOwnedPaths() or {}) do
+            owned[path:match("^[^.]+") or path] = true
+        end
         local seen = {}
         for _, tbl in ipairs(tables) do
             if type(tbl) == "table" and not seen[tbl] then
                 seen[tbl] = true
                 tbl.nameplateStyle = nil
                 for k in pairs(tbl) do
-                    if type(k) == "string" and not k:find("^friendly") then
+                    if type(k) == "string" and not owned[k] and not k:find("^friendly") then
                         for _, pre in ipairs(PREFIX) do
                             if k:sub(1, #pre) == pre then tbl[k] = nil; break end
                         end
@@ -442,13 +448,7 @@ function KT.VisualThemes:ResetComboDefaults()
                 tbl.classPowerPos = "bottom"
             end
         end
-        -- re-seed the theme's own plate look (also covers re-selecting the active theme)
-        local _, nst = self:EnsureInitialized()
-        local nth = nst and nst.active
-        if ad and ad.seed and P and nth then
-            pcall(ad.seed, P, nth)
-            if ad.validate then pcall(ad.validate, P) end
-        end
+        if ad and ad.validate and P then pcall(ad.validate, P) end
         if type(KT.RefreshNameplateTheme) == "function" then pcall(KT.RefreshNameplateTheme) end
     end
     -- Minimap: selecting a theme overwrites any manual ring choice (auto = the theme's
@@ -672,6 +672,6 @@ function KT.VisualThemes:RequestApply(themeKey)
         hideOnEscape = true,
         preferredIndex = 3,
     }
-    StaticPopup_Show("KT_VISUAL_THEME_CONFIRM", theme.name, nil, themeKey)
+    StaticPopup_Show("KT_VISUAL_THEME_CONFIRM", Tr(theme.name), nil, themeKey)
     return true
 end

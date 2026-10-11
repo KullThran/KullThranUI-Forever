@@ -1,13 +1,17 @@
 ## Interface: 16001
 ## AllowLoadGameType: camelot
-## LoadOnDemand: 1
-## Title: KullThranUI - Dragon Riding
-## Notes: KullThranUI module: Dragon Riding
+## Title: KullThranUI - Flight Master
+## Notes: KullThranUI module: Flight Master tracker (flight duration bar and flight point guide)
 ## Author: KullThran
-## Version: 0.1.2
+## Version: 0.1.3
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
 Init.lua
-Modules\DragonRiding\DragonRiding.lua
-Modules\DragonRiding\DragonRiding_Options.lua
+Modules\FlightMaster\FlightMaster_SeedData.lua
+Modules\FlightMaster\FlightMaster_NPCData.lua
+Modules\FlightMaster\FlightMaster_Data.lua
+Modules\FlightMaster\FlightMaster.lua
+Modules\FlightMaster\FlightMaster_Guide.lua
+Modules\FlightMaster\FlightMaster_Sync.lua
+Modules\FlightMaster\FlightMaster_Options.lua

@@ -249,7 +249,7 @@ local function SkinAchievementButton(button)
         button.isSkinned = true
     end
 
-    -- [FIX] Forzar color de descripción en cada actualización (evita texto negro)
+    -- Forzar color de descripción en cada actualización (evita texto negro)
     if button.Description then button.Description:SetTextColor(0.9, 0.9, 0.9) end
     if button.HiddenDescription then button.HiddenDescription:SetTextColor(0.9, 0.9, 0.9) end
 end
@@ -258,7 +258,7 @@ SkinAchievementUI = function()
     EnsureAchievementSkinWatcher()
     if not (S.db.enable and S.db.achievement) then return end
 
-    -- [FIX] Blizzard Bug: AchievementFrameComparison_UpdateStatusBars crashes if id is "summary"
+    -- Blizzard Bug: AchievementFrameComparison_UpdateStatusBars crashes if id is "summary"
     -- Use hooksecurefunc to avoid tainting Blizzard protected code (Midnight 12.x requirement)
     if _G.AchievementFrameComparison_UpdateStatusBars and not S._ktAchievementComparisonStatusHooked then
         hooksecurefunc("AchievementFrameComparison_UpdateStatusBars", function(id)
@@ -588,7 +588,7 @@ SkinAchievementUI = function()
         end
     end
 
-    -- [FIX] Criteria Text Color (Black text issue)
+    -- Criteria Text Color (Black text issue)
     if _G.AchievementObjectives_DisplayCriteria and not S._ktAchievementCriteriaHooked then
         hooksecurefunc("AchievementObjectives_DisplayCriteria", function(objectivesFrame, id)
         if not objectivesFrame or not objectivesFrame.GetCriteria then return end

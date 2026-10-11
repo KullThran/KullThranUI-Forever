@@ -441,12 +441,17 @@ function KT:SetupOptions()
         preferredIndex = 3,
     }
 
+    local function Loc(text)
+        local loc = self:GetLocale()
+        return (loc and loc[text]) or text
+    end
+
     -- Comandos de Debugging
     self:RegisterChatCommand("ktdebug", function()
         if self.RunCompatibilityDebug then
             self:RunCompatibilityDebug()
         else
-            self:Print("DB Loaded: " .. (self.db and "Yes" or "No"))
+            self:Print(string.format(Loc("DB loaded: %s"), self.db and Loc("Yes") or Loc("No")))
         end
     end)
     self:RegisterChatCommand("ktframe", function()
@@ -464,11 +469,11 @@ function KT:SetupOptions()
         
         if frame then
             local name = frame:GetName() or tostring(frame)
-            self:Print("|cff00FFFFFrame:|r " .. name)
-            self:Print("Parent: " .. (frame:GetParent() and (frame:GetParent():GetName() or tostring(frame:GetParent())) or "nil"))
-            self:Print("Size: " .. math.floor(frame:GetWidth()) .. "x" .. math.floor(frame:GetHeight()))
+            self:Print("|cff00FFFF" .. Loc("Frame:") .. "|r " .. name)
+            self:Print(string.format(Loc("Parent: %s"), (frame:GetParent() and (frame:GetParent():GetName() or tostring(frame:GetParent())) or "nil")))
+            self:Print(string.format(Loc("Size: %dx%d"), math.floor(frame:GetWidth()), math.floor(frame:GetHeight())))
         else
-            self:Print("No frame under mouse.")
+            self:Print(Loc("No frame under mouse."))
         end
     end)
 end

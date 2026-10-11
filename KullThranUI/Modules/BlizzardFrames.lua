@@ -175,6 +175,7 @@ local function RestoreGroupLootRollVisibility()
         for _, frame in pairs(container.rollFrames) do
             if frame then
                 hasRollFrame = true
+                if KT.LootRollVisibilityGuard then KT.LootRollVisibilityGuard:PrepareFrame(frame) end
                 SafeSetAlpha(frame, 1)
                 if frame.IsShown and not frame:IsShown() and frame.Show then
                     pcall(frame.Show, frame)
@@ -187,6 +188,7 @@ local function RestoreGroupLootRollVisibility()
         local frame = _G["GroupLootFrame" .. index]
         if frame and frame.IsShown and frame:IsShown() then
             hasRollFrame = true
+            if KT.LootRollVisibilityGuard then KT.LootRollVisibilityGuard:PrepareFrame(frame) end
             SafeSetAlpha(frame, 1)
         end
     end
