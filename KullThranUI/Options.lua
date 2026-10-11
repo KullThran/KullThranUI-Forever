@@ -958,10 +958,25 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.3"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.4"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.1.4"] = {
+        version = "0.1.4",
+        published = "2026-10-12",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "New Debuff Tracker tab in Enhancements: shows which important raid debuffs your target is missing (Sunder Armor, Expose Armor, Faerie Fire, the Curses of Recklessness and of the Elements, Hunter's Mark, the Judgements, Fire Vulnerability, demoralizing effects and rogue poisons), whoever applies them. Missing ones are dimmed and glow, active ones show their timer and stacks, and you can add your own. In combat, where the client hides enemy auras, debuffs seen before the pull keep updating and the rest show a question mark.",
+            "Minimap: choose the side (left, right, top or bottom) for the Teleport Menu, Guild, Friends and KUI options icons and show or hide each one. The live preview now draws the real map of your zone inside the chosen shape, with the icons in place, and the shape picker no longer errors with the Retail ring.",
+            "Party Frames: in the Classic, Retail and Forever styles the portrait fills its ring, the Dead, Offline and AFK icon sits on the portrait, debuffs get their own strip below the frame instead of covering the next one, and the live preview and Party Test show portraits again. These styles keep the portrait on, as their art needs it.",
+            "Unlock Mode: dragging the X or Y slider no longer sends the element away or makes it flicker, and editing X no longer makes Y sink.",
+            "Nameplates: a friendly player who challenges you to a duel no longer shows two plates at once.",
+            "Chat: Battle.net toasts (friend online, invites) are visible again.",
+            "Profiles: the Debuff Tracker and the Dungeon Timer export, import and reset as their own module profiles, and the General profile carries the window move settings.",
+        },
+    },
     ["0.1.3"] = {
         version = "0.1.3",
         published = "2026-10-11",
@@ -1239,12 +1254,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.1.3"
+        or "0.1.4"
     -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "0.1.3"
+        ver = "0.1.4"
     end
     return ver
 end
@@ -2319,7 +2334,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.3")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.4")))
     end
     if menu._foreverLogo then
         local VT = KT.VisualThemes
@@ -3958,12 +3973,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.3") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.4") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.1.3"
+	f._versionValue = KT.VERSION or "0.1.4"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving
