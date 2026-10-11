@@ -52,7 +52,7 @@ local env = setmetatable({
         GetAuraDuration = function() return nil end,
     },
 }, { __index = _G })
-local Mod = { db = { debuffTracker = { enabled = true } } }
+local Mod = { db = { debuffTracker = { enabled = true, groupOnly = true } } }
 function Mod:GetDB() return self.db end
 env.ns = { Enhancements = Mod }
 env.KT = {
@@ -69,10 +69,14 @@ Mod:InitializeDebuffTracker()
 local icons = Mod.debuffTrackerIcons
 local function Refresh() Mod:RefreshDebuffTracker() end
 
--- Only the player's own class and known spells: Sunder Armor shows, Rend is not
--- learned and Expose Armor belongs to rogues.
+-- Group filter on: the player is alone (a warrior), so only the debuffs a warrior
+-- applies show; Expose Armor (rogue) waits for a rogue in the group.
 Refresh()
-assert(icons[1] and icons[1]:IsShown() and not (icons[2] and icons[2]:IsShown()), "only known debuffs of your own class may show")
+assert(icons[1] and icons[1]:IsShown() and not (icons[2] and icons[2]:IsShown()), "group filter must hide debuffs nobody in the group can apply")
+-- Group filter off: every important raid debuff shows, whoever applies it.
+Mod.db.debuffTracker.groupOnly = false; Refresh()
+assert(icons[1]:IsShown() and icons[2] and icons[2]:IsShown(), "all raid debuffs must show without the group filter")
+Mod.db.debuffTracker.groupOnly = true; Refresh()
 
 -- Readable and absent: missing (desaturated, glowing).
 state.aura = nil; Refresh()
@@ -105,4 +109,4 @@ assert(not icons[1].unknown:IsShown() and icons[1].glow:IsShown())
 state.target = false; Refresh()
 assert(Mod.debuffTrackerFrame:IsShown(), "the tracker must stay on screen without a target")
 assert(icons[1]:IsShown() and icons[1].alpha <= 0.4 and not icons[1].glow:IsShown() and not icons[1].unknown:IsShown())
-print("PASS: debuff tracker states (present, missing, unknown), restriction handling, own-class filter and idle display without a target")
+print("PASS: debuff tracker states (present, missing, unknown), restriction handling, group filter and idle display without a target")

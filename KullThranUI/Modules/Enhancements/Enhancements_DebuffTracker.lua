@@ -3,8 +3,8 @@ local KT = ns.KT or _G.KT
 local Mod = ns.Enhancements or KT:GetModule("Enhancements", true)
 if not Mod then return end
 
--- Shows which of YOUR OWN debuffs (the ones your class can apply) a hostile
--- target is MISSING.
+-- Shows which important raid debuffs (whoever applies them) a hostile target is
+-- MISSING.
 --
 -- Aura reads on enemies are restricted (combat, encounters, challenge mode, PvP):
 -- the queries then return nothing, which cannot be told apart from "not there".
@@ -15,57 +15,33 @@ if not Mod then return end
 --   unknown  restricted and not identified: shown as "?", never as missing.
 
 local DEFAULT_POSITION = { point = "CENTER", relativePoint = "CENTER", x = 270, y = -278 }
-local MAX_ICONS = 14
+local MAX_ICONS = 24
 
--- The debuffs YOU can put on an enemy, per class. `aura` is the rank 1 spell ID
+-- The important RAID debuffs, whoever applies them. `aura` is the rank 1 spell ID
 -- of the debuff (its localized name is resolved at runtime and matched on the
--- target, so every rank counts); `cast` is the spell that has to be in your
--- spellbook for the entry to show (defaults to `aura`). Entries the client or
--- your character do not know are skipped. `own` entries only count when YOU
--- applied them (damage over time, slows); the rest are shared raid debuffs that
--- count whoever applied them.
-local CLASS_ENTRIES = {
-    WARRIOR = {
-        { key = "sunder", aura = 7386 }, { key = "rend", aura = 772, own = true },
-        { key = "thunderclap", aura = 6343 }, { key = "demoshout", aura = 1160 },
-        { key = "hamstring", aura = 1715, own = true },
-    },
-    ROGUE = {
-        { key = "expose", aura = 8647 }, { key = "rupture", aura = 1943, own = true },
-        { key = "garrote", aura = 703, own = true }, { key = "hemorrhage", aura = 16511 },
-    },
-    HUNTER = {
-        { key = "huntersmark", aura = 1130 }, { key = "serpentsting", aura = 1978, own = true },
-        { key = "scorpidsting", aura = 3043, own = true }, { key = "concussive", aura = 5116, own = true },
-    },
-    DRUID = {
-        { key = "faerie", aura = 770 }, { key = "moonfire", aura = 8921, own = true },
-        { key = "rake", aura = 1822, own = true }, { key = "rip", aura = 1079, own = true },
-        { key = "demoroar", aura = 99 },
-    },
-    WARLOCK = {
-        { key = "recklessness", aura = 704 }, { key = "elements", aura = 1490 },
-        { key = "agony", aura = 980, own = true }, { key = "weakness", aura = 702 },
-        { key = "tongues", aura = 1714 }, { key = "corruption", aura = 172, own = true },
-        { key = "immolate", aura = 348, own = true },
-    },
-    PRIEST = {
-        { key = "swpain", aura = 589, own = true }, { key = "holyfire", aura = 14914, own = true },
-        { key = "vampiric", aura = 15286 }, { key = "plague", aura = 2944, own = true },
-    },
-    PALADIN = {
-        { key = "wisdom", aura = 20186, cast = 20166 }, { key = "light", aura = 20185, cast = 20165 },
-        { key = "crusader", aura = 21183, cast = 21082 }, { key = "justice", aura = 20184, cast = 20164 },
-    },
-    SHAMAN = {
-        { key = "flameshock", aura = 8050, own = true }, { key = "frostshock", aura = 8056, own = true },
-        { key = "stormstrike", aura = 17364, own = true },
-    },
-    MAGE = {
-        { key = "firevuln", aura = 22959, cast = 2948 }, { key = "frostbolt", aura = 116, own = true },
-    },
+-- target, so every rank counts); `classes` are the classes able to apply it:
+-- with the group filter on, an entry only shows when one of them is in your group.
+-- Entries the client does not know are skipped.
+local RAID_ENTRIES = {
+    { key = "sunder",       aura = 7386,  classes = { WARRIOR = true } },
+    { key = "expose",       aura = 8647,  classes = { ROGUE = true } },
+    { key = "faerie",       aura = 770,   classes = { DRUID = true } },
+    { key = "recklessness", aura = 704,   classes = { WARLOCK = true } },
+    { key = "elements",     aura = 1490,  classes = { WARLOCK = true } },
+    { key = "huntersmark",  aura = 1130,  classes = { HUNTER = true } },
+    { key = "wisdom",       aura = 20186, classes = { PALADIN = true } },
+    { key = "light",        aura = 20185, classes = { PALADIN = true } },
+    { key = "crusader",     aura = 21183, classes = { PALADIN = true } },
+    { key = "firevuln",     aura = 22959, classes = { MAGE = true } },
+    { key = "demoshout",    aura = 1160,  classes = { WARRIOR = true } },
+    { key = "demoroar",     aura = 99,    classes = { DRUID = true } },
+    { key = "thunderclap",  aura = 6343,  classes = { WARRIOR = true } },
+    { key = "deadlypoison", aura = 2818,  classes = { ROGUE = true } },
+    { key = "woundpoison",  aura = 13218, classes = { ROGUE = true } },
+    { key = "mindpoison",   aura = 5760,  classes = { ROGUE = true } },
+    { key = "cripplepoison", aura = 3409, classes = { ROGUE = true } },
 }
-Mod.DebuffTrackerClassEntries = CLASS_ENTRIES
+Mod.DebuffTrackerRaidEntries = RAID_ENTRIES
 
 local container, events, testing, testTimer
 local icons = {}
@@ -96,6 +72,7 @@ local function Config()
     if c.showTimers == nil then c.showTimers = true end
     if c.glowMissing == nil then c.glowMissing = true end
     if c.missingAlpha == nil then c.missingAlpha = 0.5 end
+    if c.groupOnly == nil then c.groupOnly = true end
     c.hidden = c.hidden or {}
     c.custom = c.custom or {}
     return c
@@ -121,35 +98,15 @@ local function SpellTexture(id, fallback)
     return fallback or 134400
 end
 
-local function SpellKnown(castID, name)
-    if castID then
-        if IsPlayerSpell then
-            local ok, known = pcall(IsPlayerSpell, castID)
-            if ok and known then return true end
-        end
-        if C_SpellBook and C_SpellBook.IsSpellKnown then
-            local ok, known = pcall(C_SpellBook.IsSpellKnown, castID)
-            if ok and known then return true end
-        end
-    end
-    -- Ranks and talents: a spell found by name is in the spellbook.
-    if name and C_Spell and C_Spell.GetSpellInfo then
-        local ok, info = pcall(C_Spell.GetSpellInfo, name)
-        if ok and info then return true end
-    end
-    return false
-end
-
--- Your class's debuffs that your character knows, then your own additions.
+-- The raid list the client knows about, then your own additions.
 function Mod:GetDebuffTrackerEntries()
     local config = Config()
     local list = {}
-    local _, class = UnitClass("player")
-    for _, def in ipairs(CLASS_ENTRIES[class] or {}) do
+    for _, def in ipairs(RAID_ENTRIES) do
         local name = SpellName(def.aura)
-        if name and SpellKnown(def.cast or def.aura, SpellName(def.cast or def.aura) or name) then
+        if name then
             list[#list + 1] = {
-                key = def.key, name = name, spellID = def.aura, own = def.own,
+                key = def.key, name = name, spellID = def.aura, classes = def.classes,
                 icon = SpellTexture(def.aura), enabled = config.hidden[def.key] ~= true,
             }
         end
@@ -185,6 +142,23 @@ end
 function Mod:ClearDebuffTrackerCustom()
     Config().custom = {}
     self:RefreshDebuffTracker()
+end
+
+local function GroupClasses()
+    local set = {}
+    local _, own = UnitClass("player")
+    if own then set[own] = true end
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers() end
+    for index = 1, count or 0 do
+        local unit = prefix .. index
+        if UnitExists(unit) then
+            local _, class = UnitClass(unit)
+            if class and not IsSecret(class) then set[class] = true end
+        end
+    end
+    return set
 end
 
 -- True while aura queries about this spell would return secret values.
@@ -399,8 +373,16 @@ local function Update()
     -- The tracker stays on screen even without a usable target: the icons are
     -- then shown idle (dimmed) so the layout never disappears and reappears.
     local hasTarget = TargetUsable()
+    local classes = config.groupOnly and GroupClasses() or nil
     for _, entry in ipairs(entries) do
-        if entry.enabled then active[#active + 1] = entry end
+        local provided = true
+        if classes and entry.classes then
+            provided = false
+            for class in pairs(entry.classes) do
+                if classes[class] then provided = true end
+            end
+        end
+        if entry.enabled and provided then active[#active + 1] = entry end
     end
     local shown = 0
     for index = 1, math.min(#active, MAX_ICONS) do
@@ -470,7 +452,7 @@ function Mod:InitializeDebuffTracker()
     self.debuffTrackerInitialized = true
     Build()
     events = CreateFrame("Frame")
-    for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD",
         "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED", "UNIT_FLAGS" }) do
         pcall(events.RegisterEvent, events, event)
     end

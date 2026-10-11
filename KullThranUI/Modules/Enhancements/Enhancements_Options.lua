@@ -275,7 +275,7 @@ local CATEGORY_META = {
     },
     debuffs = {
         title = LText("Debuff Tracker"),
-        description = LText("Your own debuffs your target is missing, with timers while they are active."),
+        description = LText("Important raid debuffs your target is missing, with timers while they are active."),
     },
     automation = {
         title = LText("Automation & Social"),
@@ -2336,6 +2336,10 @@ local function BuildDebuffTrackerBlock(container, W, db)
     _, h = W:Toggle(container, LText("Enable Debuff Tracker"), -y,
         function() return config.enabled == true end,
         function(value) config.enabled = value and true or false; RefreshTracker() end)
+    y = y + h
+    _, h = W:Toggle(container, LText("Only Debuffs Your Group Can Apply"), -y,
+        function() return config.groupOnly ~= false end,
+        function(value) config.groupOnly = value and true or false; RefreshTracker() end)
     y = y + h
     _, h = W:Toggle(container, LText("Show Timers"), -y,
         function() return config.showTimers ~= false end,
