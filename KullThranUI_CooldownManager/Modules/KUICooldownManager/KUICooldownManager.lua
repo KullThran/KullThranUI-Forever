@@ -11278,17 +11278,12 @@ ns.AnchorPlayerFrameToCDM = function()
 
         local pos = KT.db.profile.unitFrames.positions[unitKey]
         pos.point = "CENTER"
-        -- GetCenter() reports in the frame's own scale, while the saved offset is
-        -- applied in that same scale from the UIParent center. A scaled frame
-        -- (Retail default 132%) needs the UIParent center converted to its scale.
-        local ratio = 1
-        local fs = frame.GetEffectiveScale and frame:GetEffectiveScale()
-        local us = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()
-        if type(fs) == "number" and type(us) == "number" and fs > 0 and us > 0 then
-            ratio = fs / us
-        end
-        pos.x = math.floor((fx - ux / ratio) + 0.5)
-        pos.y = math.floor((fy - uy / ratio) + 0.5)
+        -- fx/fy are already the centre in the frame's own scale units and ux/uy the
+        -- UIParent centre, so the CENTER offset is their plain difference. The old
+        -- extra ux/ratio term shifted a 132% frame by ux*(1-1/scale): the saved
+        -- offset then displaced the Target on every re-apply.
+        pos.x = math.floor((fx - ux) + 0.5)
+        pos.y = math.floor((fy - uy) + 0.5)
     end
 
     local function TryAnchorFrame(frameRef, unitKey, point, relFrame, relPoint, ox, oy)
