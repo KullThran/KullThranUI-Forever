@@ -42,6 +42,7 @@ Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/file
 - Chat: Battle.net toasts (friend online, invites) are visible again; they were drawn off-screen together with the hidden Blizzard chat.
 - New Debuff Tracker tab in Enhancements: shows which important raid debuffs your target is missing, whoever applies them (Sunder Armor, Expose Armor, Faerie Fire, Curse of Recklessness and of the Elements, Hunter's Mark, the Judgements, Fire Vulnerability, demoralizing effects and rogue poisons). By default it only lists debuffs someone in your group can apply. Missing ones are dimmed and glow, active ones show their timer and stacks, and you can add your own. In combat, where the client hides enemy auras, debuffs seen before the pull keep updating and the rest show a question mark. Use /ktdebuffs diag to see what your client allows.
 - Minimap: the Teleport Menu, Guild, Friends and KUI options icons can be placed on the left, right, top or bottom of the minimap and shown or hidden one by one. The live preview now shows the real art of the zone you are standing in inside the chosen shape, with the icons in place, and the Retail ring style no longer errors in the shape picker.
+- Profiles: the Debuff Tracker and the Dungeon Timer now export, import and reset as their own module profiles from their Enhancements tabs, and the General profile carries the window move settings.
 
 ## 0.1.2 (2026-10-06) - Beta
 

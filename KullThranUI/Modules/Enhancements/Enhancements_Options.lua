@@ -2527,7 +2527,22 @@ local function BuildActiveCategory(parent, W, db)
         end)
     end
 
-    return EndOptionBlocks(cols)
+    local totalHeight = EndOptionBlocks(cols)
+    -- Debuff Tracker is its own submodule profile, like Damage Meter and Dungeon Timer.
+    if activeKey == "debuffs" then
+        if Opt.AppendModuleProfileTools then
+            totalHeight = Opt.AppendModuleProfileTools(parent, W, "debufftracker", totalHeight)
+        end
+        local _, resetHeight = W:Button(parent, LText("Reset Profile"), -totalHeight, function()
+            local profiles = KT:GetModule("Profiles", true)
+            if profiles then
+                local ok, err = profiles:ResetSubmoduleProfile("debufftracker")
+                if not ok then KT:Print(err) end
+            end
+        end, "FULL", true, LText("Reset this submodule profile to defaults?"))
+        totalHeight = totalHeight + resetHeight
+    end
+    return totalHeight
 end
 
 KT:RegisterPage("enhancements", LText("Enhancements"), 52, function(sc, W)

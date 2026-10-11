@@ -24,7 +24,7 @@ local MODULE_DEFS = {
         id = "general",
         label = "General",
         -- UI scale stays out of shared strings: it belongs to each player's display.
-        keys = { "globalFont", "language", "menuCustomWidth", "menuCustomHeight", "editMode" },
+        keys = { "globalFont", "language", "menuCustomWidth", "menuCustomHeight", "editMode", "foreverWindowMove" },
         -- Accept keys emitted by older General module strings, but do not put
         -- them in new exports now that they belong to their own page scopes.
         importKeys = { "skin", "objectiveTracker", "blizzframes", "externalAddons", "uufIntegration" },
@@ -42,15 +42,17 @@ local MODULE_DEFS = {
     { id = "chat", label = "Chat", keys = { "chat" } },
     { id = "bags", label = "Bags", keys = { "bags" }, nested = { skin = { "bagsColorMode", "bagsColor" } } },
     { id = "tooltip", label = "Tooltip", keys = { "tooltip" } },
-    { id = "enhancements", label = "Enhancements", keys = { "enhancements", "friendListTypography" }, omit = { enhancements = { damageMeter = true, mplusTracker = true } } },
+    { id = "enhancements", label = "Enhancements", keys = { "enhancements", "friendListTypography" }, omit = { enhancements = { damageMeter = true, mplusTracker = true, debuffTracker = true } } },
     { id = "damagemeter", label = "Damage Meter", keys = {}, nested = { enhancements = { "damageMeter" } } },
     {
         id = "mythicplustimer",
         label = "Mythic+ Timer",
+        -- Forever reuses the same settings for its Dungeon Timer.
+        foreverLabel = "Dungeon Timer",
         keys = {},
         nested = { enhancements = { "mplusTracker" } },
-        forever = false,
     },
+    { id = "debufftracker", label = "Debuff Tracker", keys = {}, nested = { enhancements = { "debuffTracker" } }, foreverOnly = true },
     { id = "objectivetracker", label = "Objective Tracker", keys = { "objectiveTracker" } },
     { id = "blizzmove", label = "BlizzMove", keys = { "blizzMove" }, importKeys = { "BlizzMove" } },
     { id = "cursor", label = "Cursor", keys = { "cursor" } },
@@ -84,9 +86,10 @@ local PAGE_PROFILE_SCOPES = {
     chat = { "chat" },
     bags = { "bags" },
     tooltip = { "tooltip" },
-    enhancements = { "enhancements", "damagemeter", "mythicplustimer" },
+    enhancements = { "enhancements", "damagemeter", "mythicplustimer", "debufftracker" },
     damagemeter = { "damagemeter" },
     mythicplustimer = { "mythicplustimer" },
+    debufftracker = { "debufftracker" },
     objectivetracker = { "objectivetracker" },
     cursor = { "cursor" },
     teleportmenu = { "teleportmenu" },
@@ -106,6 +109,7 @@ end
 local function IsDefinitionAvailable(definition)
     return type(definition) == "table"
         and (not IsForeverProfileFlavor() or definition.forever ~= false)
+        and (not definition.foreverOnly or IsForeverProfileFlavor())
 end
 
 local function GetProfileFlavorName(name)
@@ -1356,7 +1360,7 @@ function Mod:GetPageProfileInfo(pageID)
     local primary = MODULE_BY_ID[moduleIDs[1]]
     return {
         pageID = pageID,
-        label = primary and primary.label or tostring(pageID),
+        label = primary and ((IsForeverProfileFlavor() and primary.foreverLabel) or primary.label) or tostring(pageID),
         moduleIDs = moduleIDs,
     }
 end
@@ -1541,13 +1545,17 @@ function Mod:ExportPageProfileString(pageID)
 end
 
 function Mod:ResetSubmoduleProfile(pageID)
-    local key = pageID == "damagemeter" and "damageMeter"
-        or pageID == "mythicplustimer" and "mplusTracker"
-    if not key then return false, LText("Unknown submodule profile.") end
+    -- Every Enhancements child profile (Damage Meter, Dungeon Timer, Debuff Tracker...)
+    -- declares its keys in MODULE_DEFS, so a new child needs no change here.
+    local definition = MODULE_BY_ID[pageID]
+    local keys = definition and IsDefinitionAvailable(definition) and definition.nested and definition.nested.enhancements
+    if type(keys) ~= "table" or #keys == 0 then return false, LText("Unknown submodule profile.") end
     local root = GetRootProfile()
     if not root then return false, LText("Profile unavailable.") end
     root.enhancements = root.enhancements or {}
-    root.enhancements[key] = nil
+    for _, key in ipairs(keys) do
+        root.enhancements[key] = nil
+    end
     self:RefreshProfileRuntime()
     PromptReloadPopup("Submodule profile reset.")
     return true
