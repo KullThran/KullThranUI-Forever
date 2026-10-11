@@ -41,6 +41,7 @@ Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/file
 - Cast Bar: chaining fast casts no longer hides the first cast halfway through.
 - Chat: Battle.net toasts (friend online, invites) are visible again; they were drawn off-screen together with the hidden Blizzard chat.
 - New Debuff Tracker tab in Enhancements: shows YOUR OWN debuffs that your target is missing, based on your class and the spells you know (Sunder Armor, Rend, Hunter's Mark, Corruption, Shadow Word: Pain and more). Missing ones are dimmed and glow, active ones show their timer and stacks, and you can add your own. In combat, where the client hides enemy auras, debuffs seen before the pull keep updating and the rest show a question mark. Use /ktdebuffs diag to see what your client allows.
+- Minimap: the Teleport Menu, Guild, Friends and KUI options icons can be placed on the left, right, top or bottom of the minimap and shown or hidden one by one. The live preview now shows the real art of the zone you are standing in inside the chosen shape, with the icons in place, and the Retail ring style no longer errors in the shape picker.
 
 ## 0.1.2 (2026-10-06) - Beta
 
