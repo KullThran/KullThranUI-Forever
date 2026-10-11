@@ -220,9 +220,13 @@ local function BuildIcon(parent)
     alpha:SetFromAlpha(1)
     alpha:SetToAlpha(0.25)
     alpha:SetDuration(0.6)
+    -- A font string needs its font before any SetText, so set it at creation.
+    local font = KT.FONT_PATH or "Fonts\FRIZQT__.TTF"
     icon.count = icon:CreateFontString(nil, "OVERLAY")
+    icon.count:SetFont(font, 12, "OUTLINE")
     icon.count:SetPoint("BOTTOMRIGHT", -1, 1)
     icon.unknown = icon:CreateFontString(nil, "OVERLAY")
+    icon.unknown:SetFont(font, 16, "OUTLINE")
     icon.unknown:SetPoint("CENTER", 0, 0)
     icon.unknown:SetText("?")
     icon.unknown:Hide()
@@ -244,8 +248,12 @@ local function StyleIcon(icon, config)
     icon:SetSize(size, size)
     icon.glow:SetSize(size * 1.7, size * 1.7)
     local font = KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
-    icon.count:SetFont(font, math.max(9, math.floor(size * 0.42)), "OUTLINE")
-    icon.unknown:SetFont(font, math.max(12, math.floor(size * 0.6)), "OUTLINE")
+    if not icon.count:SetFont(font, math.max(9, math.floor(size * 0.42)), "OUTLINE") then
+        icon.count:SetFont("Fonts\FRIZQT__.TTF", math.max(9, math.floor(size * 0.42)), "OUTLINE")
+    end
+    if not icon.unknown:SetFont(font, math.max(12, math.floor(size * 0.6)), "OUTLINE") then
+        icon.unknown:SetFont("Fonts\FRIZQT__.TTF", math.max(12, math.floor(size * 0.6)), "OUTLINE")
+    end
     icon.cooldown:SetHideCountdownNumbers(not config.showTimers)
 end
 
