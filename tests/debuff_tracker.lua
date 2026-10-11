@@ -101,7 +101,8 @@ assert(icons[1].unknown:IsShown() and icons[1].tex.desaturated == true)
 state.secret = false; state.aura = nil; Refresh()
 assert(not icons[1].unknown:IsShown() and icons[1].glow:IsShown())
 
--- No target: hidden.
+-- No target: the tracker stays visible, icons idle (dimmed, no glow, no question mark).
 state.target = false; Refresh()
-assert(not Mod.debuffTrackerFrame:IsShown(), "no target must hide the tracker")
-print("PASS: debuff tracker states (present, missing, unknown), restriction handling, own-class filter and target visibility")
+assert(Mod.debuffTrackerFrame:IsShown(), "the tracker must stay on screen without a target")
+assert(icons[1]:IsShown() and icons[1].alpha <= 0.4 and not icons[1].glow:IsShown() and not icons[1].unknown:IsShown())
+print("PASS: debuff tracker states (present, missing, unknown), restriction handling, own-class filter and idle display without a target")

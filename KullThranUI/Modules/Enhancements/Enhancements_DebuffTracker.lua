@@ -336,6 +336,11 @@ local function Render(icon, entry, state, aura, instanceID, config)
         icon:SetAlpha(1)
         SetCooldown(icon, aura, instanceID)
         SetCount(icon, aura, instanceID)
+    elseif state == "idle" then
+        icon.tex:SetDesaturated(true)
+        icon:SetAlpha(math.min(0.4, config.missingAlpha))
+        icon.cooldown:Clear()
+        icon.count:SetText("")
     elseif state == "missing" then
         icon.tex:SetDesaturated(true)
         icon:SetAlpha(config.missingAlpha)
@@ -391,12 +396,11 @@ local function Update()
     end
     local entries = Mod:GetDebuffTrackerEntries()
     local active = {}
-    if testing then
-        for _, entry in ipairs(entries) do if entry.enabled then active[#active + 1] = entry end end
-    elseif TargetUsable() then
-        for _, entry in ipairs(entries) do
-            if entry.enabled then active[#active + 1] = entry end
-        end
+    -- The tracker stays on screen even without a usable target: the icons are
+    -- then shown idle (dimmed) so the layout never disappears and reappears.
+    local hasTarget = TargetUsable()
+    for _, entry in ipairs(entries) do
+        if entry.enabled then active[#active + 1] = entry end
     end
     local shown = 0
     for index = 1, math.min(#active, MAX_ICONS) do
@@ -408,9 +412,11 @@ local function Update()
         if testing then
             Render(icon, entry, TEST_STATES[(index - 1) % 3 + 1], nil, nil, config)
             if (index - 1) % 3 == 0 then icon.cooldown:SetCooldown(GetTime(), 30) end
-        else
+        elseif hasTarget then
             local state, aura, instanceID = Evaluate(entry)
             Render(icon, entry, state, aura, instanceID, config)
+        else
+            Render(icon, entry, "idle", nil, nil, config)
         end
     end
     for index = shown + 1, #icons do icons[index]:Hide() end

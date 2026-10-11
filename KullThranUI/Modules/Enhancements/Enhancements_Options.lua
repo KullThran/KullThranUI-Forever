@@ -2398,11 +2398,13 @@ local function BuildDebuffListBlock(container, W, db)
     end
 
     for _, entry in ipairs(Mod.GetDebuffTrackerEntries and Mod:GetDebuffTrackerEntries() or {}) do
+        -- Spell icon next to the spell name (cropped like the tracker icons).
+        local label = string.format("|T%s:16:16:0:0:64:64:5:59:5:59|t %s", tostring(entry.icon or 134400), entry.name)
         if entry.custom then
-            _, h = W:Label(container, entry.name, -y, 11)
+            _, h = W:Label(container, label, -y, 11)
         else
             local key = entry.key
-            _, h = W:Toggle(container, entry.name, -y,
+            _, h = W:Toggle(container, label, -y,
                 function() return config.hidden[key] ~= true end,
                 function(value) config.hidden[key] = (not value) and true or nil; RefreshTracker() end)
         end
