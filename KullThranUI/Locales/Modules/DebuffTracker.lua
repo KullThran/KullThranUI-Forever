@@ -5,9 +5,8 @@ if type(locales) ~= "table" then return end
 
 local keys = {
     "Debuff Tracker",
-    "Important debuffs your target is missing, with timers while they are active.",
+    "Your own debuffs your target is missing, with timers while they are active.",
     "Enable Debuff Tracker",
-    "Only Debuffs Your Group Can Apply",
     "Show Timers",
     "Glow Missing Debuffs",
     "Missing Debuff Opacity",
@@ -25,9 +24,8 @@ local keys = {
 local values = {
     esES = {
         "Rastreador de debuffs",
-        "Debuffs importantes que le faltan a tu objetivo, con temporizadores mientras están activos.",
+        "Tus propios debuffs que le faltan a tu objetivo, con temporizadores mientras están activos.",
         "Activar rastreador de debuffs",
-        "Solo debuffs que tu grupo puede aplicar",
         "Mostrar temporizadores",
         "Resaltar debuffs que faltan",
         "Opacidad de debuffs que faltan",
@@ -43,9 +41,8 @@ local values = {
     },
     deDE = {
         "Debuff-Tracker",
-        "Wichtige Debuffs, die deinem Ziel fehlen, mit Timern, solange sie aktiv sind.",
+        "Deine eigenen Debuffs, die deinem Ziel fehlen, mit Timern, solange sie aktiv sind.",
         "Debuff-Tracker aktivieren",
-        "Nur Debuffs, die deine Gruppe anwenden kann",
         "Timer anzeigen",
         "Fehlende Debuffs hervorheben",
         "Deckkraft fehlender Debuffs",
@@ -61,9 +58,8 @@ local values = {
     },
     frFR = {
         "Suivi des debuffs",
-        "Les debuffs importants qui manquent à votre cible, avec des minuteurs tant qu'ils sont actifs.",
+        "Vos propres debuffs qui manquent à votre cible, avec des minuteurs tant qu'ils sont actifs.",
         "Activer le suivi des debuffs",
-        "Uniquement les debuffs que votre groupe peut appliquer",
         "Afficher les minuteurs",
         "Faire briller les debuffs manquants",
         "Opacité des debuffs manquants",
@@ -79,9 +75,8 @@ local values = {
     },
     itIT = {
         "Tracker dei debuff",
-        "I debuff importanti che mancano al tuo bersaglio, con timer finché sono attivi.",
+        "I tuoi debuff che mancano al bersaglio, con timer finché sono attivi.",
         "Attiva il tracker dei debuff",
-        "Solo debuff che il tuo gruppo può applicare",
         "Mostra i timer",
         "Evidenzia i debuff mancanti",
         "Opacità dei debuff mancanti",
@@ -97,9 +92,8 @@ local values = {
     },
     ptBR = {
         "Rastreador de debuffs",
-        "Debuffs importantes que faltam no seu alvo, com temporizadores enquanto estiverem ativos.",
+        "Seus próprios debuffs que faltam no alvo, com temporizadores enquanto estiverem ativos.",
         "Ativar rastreador de debuffs",
-        "Apenas debuffs que seu grupo pode aplicar",
         "Mostrar temporizadores",
         "Destacar debuffs ausentes",
         "Opacidade dos debuffs ausentes",
@@ -115,9 +109,8 @@ local values = {
     },
     ruRU = {
         "Отслеживание дебаффов",
-        "Важные дебаффы, которых не хватает вашей цели, с таймерами, пока они активны.",
+        "Ваши собственные дебаффы, которых нет на цели, с таймерами, пока они активны.",
         "Включить отслеживание дебаффов",
-        "Только дебаффы, которые может наложить ваша группа",
         "Показывать таймеры",
         "Подсвечивать отсутствующие дебаффы",
         "Прозрачность отсутствующих дебаффов",
@@ -133,9 +126,8 @@ local values = {
     },
     koKR = {
         "디버프 추적기",
-        "대상에게 없는 중요한 디버프를 표시하고, 활성 상태인 동안 타이머를 보여줍니다.",
+        "대상에게 없는 내 디버프를 표시하고, 활성 상태인 동안 타이머를 보여줍니다.",
         "디버프 추적기 사용",
-        "파티가 적용할 수 있는 디버프만",
         "타이머 표시",
         "없는 디버프 강조",
         "없는 디버프 투명도",
@@ -151,9 +143,8 @@ local values = {
     },
     zhCN = {
         "减益追踪",
-        "显示目标缺少的重要减益，并在其生效期间显示计时。",
+        "显示目标上缺少的你自己的减益，并在其生效期间显示计时。",
         "启用减益追踪",
-        "仅显示队伍能施加的减益",
         "显示计时",
         "高亮缺失的减益",
         "缺失减益的不透明度",
@@ -169,9 +160,8 @@ local values = {
     },
     zhTW = {
         "減益追蹤",
-        "顯示目標缺少的重要減益，並在其生效期間顯示計時。",
+        "顯示目標上缺少的你自己的減益，並在其生效期間顯示計時。",
         "啟用減益追蹤",
-        "僅顯示隊伍能施加的減益",
         "顯示計時",
         "醒目提示缺少的減益",
         "缺少減益的不透明度",

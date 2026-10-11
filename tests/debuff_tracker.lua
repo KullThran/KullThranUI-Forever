@@ -28,12 +28,13 @@ local env = setmetatable({
     UnitCanAttack = function() return true end,
     UnitIsDeadOrGhost = function() return false end,
     UnitClass = function() return "Warrior", "WARRIOR" end,
+    IsPlayerSpell = function(id) return id ~= 772 end,
     IsInRaid = function() return false end, IsInGroup = function() return false end,
     strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end,
     wipe = function(t) for k in pairs(t) do t[k] = nil end return t end,
     C_Timer = { After = function(_, fn) fn() end, NewTimer = function() return { Cancel = function() end } end },
     C_Spell = {
-        GetSpellName = function(id) return ({ [7386] = "Sunder Armor", [8647] = "Expose Armor" })[id] end,
+        GetSpellName = function(id) return ({ [7386] = "Sunder Armor", [772] = "Rend", [8647] = "Expose Armor" })[id] end,
         GetSpellTexture = function() return 1 end,
     },
     C_Secrets = {
@@ -51,7 +52,7 @@ local env = setmetatable({
         GetAuraDuration = function() return nil end,
     },
 }, { __index = _G })
-local Mod = { db = { debuffTracker = { enabled = true, groupOnly = true } } }
+local Mod = { db = { debuffTracker = { enabled = true } } }
 function Mod:GetDB() return self.db end
 env.ns = { Enhancements = Mod }
 env.KT = {
@@ -68,9 +69,10 @@ Mod:InitializeDebuffTracker()
 local icons = Mod.debuffTrackerIcons
 local function Refresh() Mod:RefreshDebuffTracker() end
 
--- Player is a warrior: only Sunder Armor is provided by the group.
+-- Only the player's own class and known spells: Sunder Armor shows, Rend is not
+-- learned and Expose Armor belongs to rogues.
 Refresh()
-assert(icons[1] and icons[1]:IsShown() and not (icons[2] and icons[2]:IsShown()), "group filter must keep only the warrior debuff")
+assert(icons[1] and icons[1]:IsShown() and not (icons[2] and icons[2]:IsShown()), "only known debuffs of your own class may show")
 
 -- Readable and absent: missing (desaturated, glowing).
 state.aura = nil; Refresh()
@@ -102,4 +104,4 @@ assert(not icons[1].unknown:IsShown() and icons[1].glow:IsShown())
 -- No target: hidden.
 state.target = false; Refresh()
 assert(not Mod.debuffTrackerFrame:IsShown(), "no target must hide the tracker")
-print("PASS: debuff tracker states (present, missing, unknown), restriction handling, group filter and target visibility")
+print("PASS: debuff tracker states (present, missing, unknown), restriction handling, own-class filter and target visibility")

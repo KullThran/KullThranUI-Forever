@@ -531,7 +531,6 @@ local DEFAULTS = {
         showTimers = true,
         glowMissing = true,
         missingAlpha = 0.5,
-        groupOnly = true,
         hidden = {},
         custom = {},
         position = { point = "CENTER", relativePoint = "CENTER", x = 270, y = -278 },
