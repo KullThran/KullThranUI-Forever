@@ -968,15 +968,16 @@ local CHANGELOG_ENTRIES = {
         sourceLabel = "Forever Beta",
         sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
         notes = {
-            "Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; what you cannot use yet is dimmed.",
+            "Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; unusable ones are dimmed.",
             "Flight Master: clicking a flight point in the guide puts a TomTom arrow on it. Without TomTom it uses the map waypoint.",
             "AFK Screen: new page in Enhancements. When you go AFK the interface hides, the camera turns slowly and a bottom bar shows your character, guild, time away and your model, with whispers and guild chat. Any key, combat, or a group finder or battleground invite closes it.",
-            "Performance: Party Frames do less work in raids (health, power and shield updates are handled separately, and power events are only registered while a power bar is shown). Nameplates stop re-laying out friendly plates every tick, and the Cooldown Manager skips icons without visibility rules and merges bursts of cooldown events.",
+            "Performance: Party Frames do less work in raids (health, power and shield updates are separate, power events only while a power bar is shown), Nameplates stop re-laying out friendly plates every tick, and the Cooldown Manager skips icons without visibility rules.",
             "New /kperf window with CPU and memory per module, with snapshots to compare before and after a change.",
             "Unlock Mode: Focus and Focus Target no longer drift away from their mover while the unit is hidden, and Reset Position works after a drag.",
             "Unit Frames: Text Size now scales the text of the Blizzard-style looks. In Classic the name window takes the class color when health is not class colored, and the raid marker sits on top of the portrait in the Blizzard-style looks.",
             "Skins: popups use the Settings artwork, breath and fatigue bars get striped bars in Blizzard's colors, and the Professions rank bar no longer shows a floating flare over an empty bar.",
             "Cooldown Manager: a potion quality saved from a Retail profile no longer hides every potion; Forever only offers Highest and Most.",
+            "Cooldown Manager: buff icons appear as soon as you gain the buff (they could wait until combat), and no longer stay hidden for seconds when combat starts.",
         },
     },
     ["0.1.4"] = {
