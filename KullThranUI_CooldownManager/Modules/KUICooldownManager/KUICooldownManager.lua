@@ -6035,6 +6035,9 @@ local function GetPotionTrackerItemQuality(itemID)
 end
 
 local function PotionMatchesSelectedQuality(itemID)
+    -- Vanilla potions have no crafted quality: a Quality 1/2 setting carried
+    -- over from a retail profile would otherwise hide every potion.
+    if ns.KUI_IS_FOREVER then return true end
     local wantedQuality = GetPotionTrackerQualityPreference()
     if not wantedQuality then return true end
     return GetPotionTrackerItemQuality(itemID) == wantedQuality
