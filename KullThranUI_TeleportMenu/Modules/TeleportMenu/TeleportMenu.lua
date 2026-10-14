@@ -20,16 +20,12 @@ local function GetEntryDisplayName(item)
     if type(item) ~= "table" then return "" end
     local id, name = item.id, nil
     if id then
-        if item.type == "spell" then
-            if C_Spell and C_Spell.GetSpellName then
-                local ok, value = pcall(C_Spell.GetSpellName, id)
-                if ok then name = value end
-            end
-        else
-            if item.type == "toy" and C_ToyBox and C_ToyBox.GetToyInfo then
-                local ok, _, toyName = pcall(C_ToyBox.GetToyInfo, id)
-                if ok then name = toyName end
-            end
+        -- Items borrow the localized name of the spell they cast (nameSpell), so
+        -- no item lookup is ever sent to the server.
+        local spellID = (item.type == "spell") and id or item.nameSpell
+        if spellID and C_Spell and C_Spell.GetSpellName then
+            local ok, value = pcall(C_Spell.GetSpellName, spellID)
+            if ok then name = value end
         end
     end
     if type(name) ~= "string" or name == "" then name = item.name or "" end
@@ -67,9 +63,7 @@ local CreateFrame      = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local C_Item           = C_Item
 local C_Spell          = C_Spell
-local C_ToyBox         = C_ToyBox
 local C_Timer          = C_Timer
-local PlayerHasToy     = PlayerHasToy
 local IsPlayerSpell    = IsPlayerSpell
 local UnitClass = UnitClass
 local UnitRace  = UnitRace
@@ -88,10 +82,12 @@ local function IsSecretValue(value)
     return false
 end
 
--- This module is a read-only showcase on WoW Forever / Camelot: it only lists
--- the teleports that exist and never casts, uses, equips or queries housing.
--- Every action that sends a request the server does not support has been
--- removed on purpose, because those requests disconnect the player.
+-- Forever / Camelot catalog. Only teleports that exist in this client are listed
+-- (hearthstone, mage teleports and portals, druid, shaman, engineering items).
+-- Buttons cast the spell or use the item through a secure macro, like an action
+-- bar. Nothing here queries toys, housing, equippable items or items that are not
+-- in the client: those requests are not supported by the server and disconnect
+-- the player, which is why the original Retail copy had to be replaced.
 
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
@@ -249,10 +245,6 @@ local CATEGORY_ICONS = {
     ["Hearthstones"]   = "Interface\\Icons\\INV_Misc_Rune_09",
     ["Class & Racial"] = "Interface\\Icons\\Spell_Arcane_TeleportOrgrimmar",
     ["Items"]          = "Interface\\Icons\\INV_Misc_Bag_07",
-    ["Toys"]           = "Interface\\Icons\\Inv_misc_toy_05",
-    ["Dungeons"]       = "Interface\\Icons\\INV_Misc_Map_01",
-    ["Raids"]          = "Interface\\Icons\\INV_Misc_Head_Dragon_Bronze",
-    ["Delves"]         = "Interface\\Icons\\Inv_misc_map05",
 }
 
 local function ApplySidebarTabState(tab, state)
@@ -291,310 +283,40 @@ Mod.Categories = {
     "Hearthstones",
     "Class & Racial",
     "Items",
-    "Toys",
-    "Dungeons",
-    "Raids",
-    "Delves",
 }
 
-Mod.DungeonCurrentSeason = {
-    ["Magisters' Terrace"] = true,
-    ["Maisara Caverns"] = true,
-    ["Nexus-Point Xenas"] = true,
-    ["Windrunner Spire"] = true,
-    ["Algeth'ar Academy"] = true,
-    ["Pit of Saron"] = true,
-    ["Seat of the Triumvirate"] = true,
-    ["Skyreach"] = true,
-}
-
-Mod.DungeonExpansionOrder = {
-    "The War Within",
-    "Dragonflight",
-    "Shadowlands",
-    "Battle for Azeroth",
-    "Legion",
-    "Warlords of Draenor",
-    "Mists of Pandaria",
-    "Cataclysm",
-}
-
-Mod.DungeonExpansionByName = {
-    ["Operation: Floodgate"] = "The War Within",
-    ["Eco-Dome Al'dani"] = "The War Within",
-    ["Ara-Kara, City of Echoes"] = "The War Within",
-    ["The Dawnbreaker"] = "The War Within",
-    ["Priory of the Sacred Flame"] = "The War Within",
-    ["City of Threads"] = "The War Within",
-    ["The Stonevault"] = "The War Within",
-    ["Cinderbrew Meadery"] = "The War Within",
-    ["Darkflame Cleft"] = "The War Within",
-    ["The Rookery"] = "The War Within",
-    ["Brackenhide Hollow"] = "Dragonflight",
-    ["Halls of Infusion"] = "Dragonflight",
-    ["Neltharus"] = "Dragonflight",
-    ["Uldaman: Legacy of Tyr"] = "Dragonflight",
-    ["Dawn of the Infinite"] = "Dragonflight",
-    ["The Azure Vault"] = "Dragonflight",
-    ["Algeth'ar Academy"] = "Dragonflight",
-    ["The Nokhud Offensive"] = "Dragonflight",
-    ["Ruby Life Pools"] = "Dragonflight",
-    ["Tazavesh"] = "Shadowlands",
-    ["Halls of Atonement"] = "Shadowlands",
-    ["The Necrotic Wake"] = "Shadowlands",
-    ["Plaguefall"] = "Shadowlands",
-    ["Mists of Tirna Scithe"] = "Shadowlands",
-    ["Spires of Ascension"] = "Shadowlands",
-    ["Theater of Pain"] = "Shadowlands",
-    ["De Other Side"] = "Shadowlands",
-    ["Sanguine Depths"] = "Shadowlands",
-    ["Freehold"] = "Battle for Azeroth",
-    ["The Underrot"] = "Battle for Azeroth",
-    ["Waycrest Manor"] = "Battle for Azeroth",
-    ["Atal'Dazar"] = "Battle for Azeroth",
-    ["Operation: Mechagon"] = "Battle for Azeroth",
-    ["Siege of Boralus"] = "Battle for Azeroth",
-    ["The MOTHERLODE!!"] = "Battle for Azeroth",
-    ["Neltharion's Lair"] = "Legion",
-    ["Black Rook Hold"] = "Legion",
-    ["Darkheart Thicket"] = "Legion",
-    ["Halls of Valor"] = "Legion",
-    ["Court of Stars"] = "Legion",
-    ["Return to Karazhan"] = "Legion",
-    ["The Everbloom"] = "Warlords of Draenor",
-    ["Grimrail Depot"] = "Warlords of Draenor",
-    ["Iron Docks"] = "Warlords of Draenor",
-    ["Auchindoun"] = "Warlords of Draenor",
-    ["Bloodmaul Slag Mines"] = "Warlords of Draenor",
-    ["Shadowmoon Burial Grounds"] = "Warlords of Draenor",
-    ["Skyreach"] = "Warlords of Draenor",
-    ["Upper Blackrock Spire"] = "Warlords of Draenor",
-    ["Temple of the Jade Serpent"] = "Mists of Pandaria",
-    ["Stormstout Brewery"] = "Mists of Pandaria",
-    ["Shado-Pan Monastery"] = "Mists of Pandaria",
-    ["Gate of the Setting Sun"] = "Mists of Pandaria",
-    ["Mogu'shan Palace"] = "Mists of Pandaria",
-    ["Siege of Niuzao Temple"] = "Mists of Pandaria",
-    ["Scholomance"] = "Mists of Pandaria",
-    ["The Vortex Pinnacle"] = "Cataclysm",
-    ["Throne of the Tides"] = "Cataclysm",
-    ["Grim Batol"] = "Cataclysm",
-}
-
+-- Entry fields: type ("spell" | "item"), id, name (English fallback), classReq,
+-- raceReq, factionReq ("Alliance" | "Horde"), group (sub-header), reagent (item ID
+-- whose bag count is shown on the button), nameSpell (spell whose localized name an
+-- item entry borrows).
 Mod.TeleportData = {
-    -- ── Hearthstones ──────────────────────────────────────────────────────────
     ["Hearthstones"] = {
-        { type = "item",  id = 6948,   name = "Hearthstone" },
-        { type = "spell", id = 8690,   name = "Hearthstone (Spell)" },
-        { type = "toy", id = 140192, name = "Dalaran Hearthstone" },
-        { type = "toy", id = 110560, name = "Garrison Hearthstone" },
-        { type = "toy", id = 142542, name = "Tome of Town Portal",                 cosmetic = true },
-        { type = "toy", id = 188952, name = "Dominated Hearthstone",               cosmetic = true },
-        { type = "toy", id = 172179, name = "Eternal Traveler's Hearthstone",      cosmetic = true },
-        { type = "toy", id = 200630, name = "Ohn'ir Windsage's Hearthstone",       cosmetic = true },
-        { type = "toy", id = 208704, name = "Deepdweller's Earthen Hearthstone",   cosmetic = true },
-        { type = "toy", id = 209035, name = "Hearthstone of the Flame",            cosmetic = true },
-        { type = "toy", id = 190237, name = "Broker Translocation Matrix",         cosmetic = true },
-        { type = "toy", id = 184353, name = "Kyrian Hearthstone",                  cosmetic = true },
-        { type = "toy", id = 183716, name = "Venthyr Sinstone",                    cosmetic = true },
-        { type = "toy", id = 180290, name = "Night Fae Hearthstone",               cosmetic = true },
-        { type = "toy", id = 182773, name = "Necrolord Hearthstone",               cosmetic = true },
-        { type = "toy", id = 212337, name = "Stone of the Hearth",                 cosmetic = true },
-        { type = "toy", id = 206195, name = "Path of the Naaru",                   cosmetic = true },
-        { type = "toy", id = 260221, name = "Naaru's Embrace",                     cosmetic = true },
-        { type = "toy", id = 166746, name = "Fire Eater's Hearthstone",            cosmetic = true },
-        { type = "toy", id = 166747, name = "Brewfest Reveler's Hearthstone",      cosmetic = true },
-        { type = "toy", id = 163045, name = "Headless Horseman's Hearthstone",     cosmetic = true },
-        { type = "toy", id = 165669, name = "Lunar Elder's Hearthstone",           cosmetic = true },
-        { type = "toy", id = 165670, name = "Peddlefeet's Lovely Hearthstone",     cosmetic = true },
-        { type = "toy", id = 165802, name = "Noble Gardener's Hearthstone",        cosmetic = true },
-        { type = "toy", id = 162973, name = "Greatfather Winter's Hearthstone",    cosmetic = true },
-        { type = "toy", id = 168907, name = "Holographic Digitalization Hearthstone", cosmetic = true },
-        { type = "toy", id = 245970, name = "P.O.S.T. Master's Express Hearthstone", cosmetic = true },
-        { type = "toy", id = 193588, name = "Timewalker's Hearthstone",            cosmetic = true },
-        { type = "toy", id = 228940, name = "Notorious Thread's Hearthstone",      cosmetic = true },
-        { type = "toy", id = 64488,  name = "The Innkeeper's Daughter",            cosmetic = true },
-        { type = "toy", id = 93672,  name = "Dark Portal",                         cosmetic = true },
-        { type = "toy", id = 54452,  name = "Ethereal Portal",                     cosmetic = true },
-        { type = "toy", id = 190196, name = "Enlightened Hearthstone",             cosmetic = true },
-        { type = "toy", id = 246565, name = "Cosmic Hearthstone",                  cosmetic = true },
-        { type = "toy", id = 265100, name = "Corewarden's Hearthstone",            cosmetic = true },
-        { type = "toy", id = 263933, name = "Preyseeker's Hearthstone",            cosmetic = true },
-        { type = "toy", id = 235016, name = "Redeployment Module",                 cosmetic = true },
+        { type = "item", id = 6948, name = "Hearthstone", nameSpell = 8690 },
     },
 
-    -- ── Class & Racial ────────────────────────────────────────────────────────
     ["Class & Racial"] = {
-        { type = "spell", id = 3561,   name = "Teleport: Stormwind",              classReq = "MAGE" },
-        { type = "spell", id = 3562,   name = "Teleport: Ironforge",              classReq = "MAGE" },
-        { type = "spell", id = 3565,   name = "Teleport: Darnassus",              classReq = "MAGE" },
-        { type = "spell", id = 32271,  name = "Teleport: Exodar",                 classReq = "MAGE" },
-        { type = "spell", id = 49359,  name = "Teleport: Theramore",              classReq = "MAGE" },
-        { type = "spell", id = 33690,  name = "Teleport: Shattrath (Alliance)",   classReq = "MAGE" },
-        { type = "spell", id = 132621, name = "Teleport: Vale (Alliance)",        classReq = "MAGE" },
-        { type = "spell", id = 176248, name = "Teleport: Stormshield",            classReq = "MAGE" },
-        { type = "spell", id = 281403, name = "Teleport: Boralus",                classReq = "MAGE" },
-        { type = "spell", id = 3567,   name = "Teleport: Orgrimmar",              classReq = "MAGE" },
-        { type = "spell", id = 3563,   name = "Teleport: Undercity",              classReq = "MAGE" },
-        { type = "spell", id = 3566,   name = "Teleport: Thunder Bluff",          classReq = "MAGE" },
-        { type = "spell", id = 32272,  name = "Teleport: Silvermoon",             classReq = "MAGE" },
-        { type = "spell", id = 49358,  name = "Teleport: Stonard",                classReq = "MAGE" },
-        { type = "spell", id = 35715,  name = "Teleport: Shattrath (Horde)",      classReq = "MAGE" },
-        { type = "spell", id = 132627, name = "Teleport: Vale (Horde)",           classReq = "MAGE" },
-        { type = "spell", id = 176242, name = "Teleport: Warspear",               classReq = "MAGE" },
-        { type = "spell", id = 281404, name = "Teleport: Dazar'alor",             classReq = "MAGE" },
-        { type = "spell", id = 53140,  name = "Teleport: Dalaran (Northrend)",    classReq = "MAGE" },
-        { type = "spell", id = 224869, name = "Teleport: Dalaran (Broken Isles)", classReq = "MAGE" },
-        { type = "spell", id = 88342,  name = "Teleport: Tol Barad (Alliance)",   classReq = "MAGE" },
-        { type = "spell", id = 88344,  name = "Teleport: Tol Barad (Horde)",      classReq = "MAGE" },
-        { type = "spell", id = 395277, name = "Teleport: Valdrakken",             classReq = "MAGE" },
-        { type = "spell", id = 446540, name = "Teleport: Dornogal",               classReq = "MAGE" },
-        { type = "spell", id = 344587, name = "Teleport: Oribos",                 classReq = "MAGE" },
-        { type = "spell", id = 120145, name = "Ancient Teleport: Dalaran",        classReq = "MAGE" },
-        { type = "spell", id = 193759, name = "Teleport: Hall of the Guardian",   classReq = "MAGE" },
-        { type = "spell", id = 193753, name = "Dreamwalk",                        classReq = "DRUID" },
-        { type = "spell", id = 50977,  name = "Death Gate",                       classReq = "DEATHKNIGHT" },
-        { type = "spell", id = 126892, name = "Zen Pilgrimage",                   classReq = "MONK" },
-        { type = "spell", id = 556,    name = "Astral Recall",                    classReq = "SHAMAN" },
-        { type = "spell", id = 265225, name = "Mole Machine",                     raceReq = "DarkIronDwarf" },
-        { type = "spell", id = 312370, name = "Make Camp",                        raceReq = "Vulpera" },
-        { type = "spell", id = 312372, name = "Return to Camp",                   raceReq = "Vulpera" },
+        -- Mage: Teleport (needs a Rune of Teleportation)
+        { type = "spell", id = 3561,  name = "Teleport: Stormwind",    classReq = "MAGE", factionReq = "Alliance", group = "Teleports", reagent = 17031 },
+        { type = "spell", id = 3562,  name = "Teleport: Ironforge",    classReq = "MAGE", factionReq = "Alliance", group = "Teleports", reagent = 17031 },
+        { type = "spell", id = 3565,  name = "Teleport: Darnassus",    classReq = "MAGE", factionReq = "Alliance", group = "Teleports", reagent = 17031 },
+        { type = "spell", id = 3567,  name = "Teleport: Orgrimmar",    classReq = "MAGE", factionReq = "Horde",    group = "Teleports", reagent = 17031 },
+        { type = "spell", id = 3563,  name = "Teleport: Undercity",    classReq = "MAGE", factionReq = "Horde",    group = "Teleports", reagent = 17031 },
+        { type = "spell", id = 3566,  name = "Teleport: Thunder Bluff", classReq = "MAGE", factionReq = "Horde",   group = "Teleports", reagent = 17031 },
+        -- Mage: Portal (needs a Rune of Portals)
+        { type = "spell", id = 10059, name = "Portal: Stormwind",      classReq = "MAGE", factionReq = "Alliance", group = "Portals", reagent = 17032 },
+        { type = "spell", id = 11416, name = "Portal: Ironforge",      classReq = "MAGE", factionReq = "Alliance", group = "Portals", reagent = 17032 },
+        { type = "spell", id = 11419, name = "Portal: Darnassus",      classReq = "MAGE", factionReq = "Alliance", group = "Portals", reagent = 17032 },
+        { type = "spell", id = 11417, name = "Portal: Orgrimmar",      classReq = "MAGE", factionReq = "Horde",    group = "Portals", reagent = 17032 },
+        { type = "spell", id = 11418, name = "Portal: Undercity",      classReq = "MAGE", factionReq = "Horde",    group = "Portals", reagent = 17032 },
+        { type = "spell", id = 11420, name = "Portal: Thunder Bluff",  classReq = "MAGE", factionReq = "Horde",    group = "Portals", reagent = 17032 },
+        -- Druid / Shaman
+        { type = "spell", id = 18960, name = "Teleport: Moonglade",    classReq = "DRUID" },
+        { type = "spell", id = 556,   name = "Astral Recall",          classReq = "SHAMAN" },
     },
 
-    -- ── Items ─────────────────────────────────────────────────────────────────
     ["Items"] = {
-        { type = "item", id = 63378,  name = "Hellscream's Reach Tabard",         equippable = true },
-        { type = "item", id = 63379,  name = "Baradin's Wardens Tabard",          equippable = true },
-        { type = "item", id = 65274,  name = "Cloak of Coordination (Horde)",     equippable = true },
-        { type = "item", id = 65360,  name = "Cloak of Coordination (Alliance)",  equippable = true },
-        { type = "item", id = 63352,  name = "Shroud of Cooperation (Horde)",     equippable = true },
-        { type = "item", id = 63353,  name = "Shroud of Cooperation (Alliance)",  equippable = true },
-        { type = "item", id = 63207,  name = "Wrap of Unity (Horde)",             equippable = true },
-        { type = "item", id = 63206,  name = "Wrap of Unity (Alliance)",          equippable = true },
-        { type = "item", id = 118663, name = "Blessed Medallion of Karabor" },
-        { type = "item", id = 140493, name = "Adept's Guide to Dimensional Rifting" },
-        { type = "item", id = 52251,  name = "Jaina's Locket" },
-        { type = "item", id = 139599, name = "Empowered Ring of the Kirin Tor",   equippable = true },
-        { type = "item", id = 46874,  name = "Argent Crusader's Tabard",          equippable = true },
-        { type = "item", id = 32757,  name = "Blessed Medallion of Karabor" },
-        { type = "item", id = 44935,  name = "Ring of the Kirin Tor",             equippable = true },
-        { type = "item", id = 40586,  name = "Band of the Kirin Tor",             equippable = true },
-        { type = "item", id = 193000, name = "Ring-Bound Hourglass",              equippable = true },
-        { type = "item", id = 142469, name = "Violet Seal of the Grand Magus",    equippable = true },
-        { type = "item", id = 40585,  name = "Signet of the Kirin Tor",           equippable = true },
-        { type = "item", id = 95050,  name = "The Brassiest Knuckle",             equippable = true },
-        { type = "item", id = 118907, name = "Pit Fighter's Punching Ring",       equippable = true },
-        { type = "item", id = 144391, name = "Pugilist's Powerful Punching Ring", equippable = true },
-        { type = "item", id = 128353, name = "Admiral's Compass" },
-        { type = "item", id = 219222, name = "Time-Lost Artifact" },
-        { type = "item", id = 202046, name = "Lucky Tortollan Charm" },
-        { type = "item", id = 132523, name = "Reaves Battery",                    profReq = true },
-        { type = "item", id = 144341, name = "Rechargeable Reaves Battery",       profReq = true },
-        { type = "item", id = 50287,  name = "Boots of the Bay",                  equippable = true },
-    },
-
-    -- ── Toys ──────────────────────────────────────────────────────────────────
-    ["Toys"] = {
-        { type = "toy", id = 151016, name = "Fractured Necrolyte Skull" },
-        { type = "toy", id = 37863,  name = "Direbrew's Remote" },
-        { type = "toy", id = 211788, name = "Tess's Peacebloom",                  raceReq = "Worgen" },
-        { type = "toy", id = 64457,  name = "The Last Relic of Argus" },
-        { type = "toy", id = 243056, name = "Delver's Mana-Bound Ethergate" },
-        { type = "toy", id = 48933,  name = "Wormhole Generator: Northrend",      profReq = true },
-        { type = "toy", id = 87215,  name = "Wormhole Generator: Pandaria",       profReq = true },
-        { type = "toy", id = 112059, name = "Wormhole Centrifuge",                profReq = true },
-        { type = "toy", id = 168808, name = "Wormhole Generator: Zandalar",       profReq = true },
-        { type = "toy", id = 168807, name = "Wormhole Generator: Kul Tiras",      profReq = true },
-        { type = "toy", id = 172924, name = "Wormhole Generator: Shadowlands",    profReq = true },
-        { type = "toy", id = 198156, name = "Wyrmhole Generator: Dragon Isles",   profReq = true },
-        { type = "toy", id = 221966, name = "Wormhole Generator: Khaz Algar",     profReq = true },
-        { type = "toy", id = 18984,  name = "Dimensional Ripper - Everlook",      profReq = true },
-        { type = "toy", id = 18986,  name = "Ultrasafe Transporter: Gadgetzan",   profReq = true },
-        { type = "toy", id = 30542,  name = "Dimensional Ripper - Area 52",       profReq = true },
-        { type = "toy", id = 30544,  name = "Ultrasafe Transporter: Toshley's Station", profReq = true },
-        { type = "toy", id = 151652, name = "Wormhole Generator: Argus",          profReq = true },
-        { type = "toy", id = 153004, name = "Unstable Portal Emitter" },
-        { type = "toy", id = 192443, name = "Element-Infused Rocket Helmet",      profReq = true },
-    },
-
-    -- ── Dungeons ──────────────────────────────────────────────────────────────
-    ["Dungeons"] = {
-        { type = "spell", id = 1216786, name = "Operation: Floodgate" },
-        { type = "spell", id = 1237215, name = "Eco-Dome Al'dani" },
-        { type = "spell", id = 445417,  name = "Ara-Kara, City of Echoes" },
-        { type = "spell", id = 445414,  name = "The Dawnbreaker" },
-        { type = "spell", id = 445444,  name = "Priory of the Sacred Flame" },
-        { type = "spell", id = 367416,  name = "Tazavesh" },
-        { type = "spell", id = 354465,  name = "Halls of Atonement" },
-        { type = "spell", id = 445416,  name = "City of Threads" },
-        { type = "spell", id = 445269,  name = "The Stonevault" },
-        { type = "spell", id = 445440,  name = "Cinderbrew Meadery" },
-        { type = "spell", id = 445441,  name = "Darkflame Cleft" },
-        { type = "spell", id = 445443,  name = "The Rookery" },
-        { type = "spell", id = 393267,  name = "Brackenhide Hollow" },
-        { type = "spell", id = 393283,  name = "Halls of Infusion" },
-        { type = "spell", id = 393276,  name = "Neltharus" },
-        { type = "spell", id = 393222,  name = "Uldaman: Legacy of Tyr" },
-        { type = "spell", id = 424197,  name = "Dawn of the Infinite" },
-        { type = "spell", id = 393279,  name = "The Azure Vault" },
-        { type = "spell", id = 393273,  name = "Algeth'ar Academy" },
-        { type = "spell", id = 393262,  name = "The Nokhud Offensive" },
-        { type = "spell", id = 393256,  name = "Ruby Life Pools" },
-        { type = "spell", id = 354462,  name = "The Necrotic Wake" },
-        { type = "spell", id = 354463,  name = "Plaguefall" },
-        { type = "spell", id = 354464,  name = "Mists of Tirna Scithe" },
-        { type = "spell", id = 354466,  name = "Spires of Ascension" },
-        { type = "spell", id = 354467,  name = "Theater of Pain" },
-        { type = "spell", id = 354468,  name = "De Other Side" },
-        { type = "spell", id = 354469,  name = "Sanguine Depths" },
-        { type = "spell", id = 410071,  name = "Freehold" },
-        { type = "spell", id = 410074,  name = "The Underrot" },
-        { type = "spell", id = 424167,  name = "Waycrest Manor" },
-        { type = "spell", id = 424187,  name = "Atal'Dazar" },
-        { type = "spell", id = 373274,  name = "Operation: Mechagon" },
-        { type = "spell", id = 445418,  name = "Siege of Boralus" },
-        { type = "spell", id = 272268,  name = "The MOTHERLODE!!" },
-        { type = "spell", id = 410078,  name = "Neltharion's Lair" },
-        { type = "spell", id = 424153,  name = "Black Rook Hold" },
-        { type = "spell", id = 424163,  name = "Darkheart Thicket" },
-        { type = "spell", id = 393764,  name = "Halls of Valor" },
-        { type = "spell", id = 393766,  name = "Court of Stars" },
-        { type = "spell", id = 373262,  name = "Return to Karazhan" },
-        { type = "spell", id = 159901,  name = "The Everbloom" },
-        { type = "spell", id = 159900,  name = "Grimrail Depot" },
-        { type = "spell", id = 159896,  name = "Iron Docks" },
-        { type = "spell", id = 159897,  name = "Auchindoun" },
-        { type = "spell", id = 159895,  name = "Bloodmaul Slag Mines" },
-        { type = "spell", id = 159899,  name = "Shadowmoon Burial Grounds" },
-        { type = "spell", id = 159898,  name = "Skyreach" },
-        { type = "spell", id = 159902,  name = "Upper Blackrock Spire" },
-        { type = "spell", id = 131204,  name = "Temple of the Jade Serpent" },
-        { type = "spell", id = 131205,  name = "Stormstout Brewery" },
-        { type = "spell", id = 131206,  name = "Shado-Pan Monastery" },
-        { type = "spell", id = 131225,  name = "Gate of the Setting Sun" },
-        { type = "spell", id = 131222,  name = "Mogu'shan Palace" },
-        { type = "spell", id = 131228,  name = "Siege of Niuzao Temple" },
-        { type = "spell", id = 131232,  name = "Scholomance" },
-        { type = "spell", id = 410080,  name = "The Vortex Pinnacle" },
-        { type = "spell", id = 424142,  name = "Throne of the Tides" },
-        { type = "spell", id = 445424,  name = "Grim Batol" },
-    },
-
-    -- ── Raids ─────────────────────────────────────────────────────────────────
-    ["Raids"] = {
-        { type = "spell", id = 1239155, name = "Manaforge Omega" },
-        { type = "spell", id = 1226482, name = "Liberation of Undermine" },
-        { type = "spell", id = 432254,  name = "Vault of the Incarnates" },
-        { type = "spell", id = 432257,  name = "Aberrus, the Shadowed Crucible" },
-        { type = "spell", id = 432258,  name = "Amirdrassil, the Dream's Hope" },
-        { type = "spell", id = 373190,  name = "Castle Nathria" },
-        { type = "spell", id = 373191,  name = "Sanctum of Domination" },
-        { type = "spell", id = 373192,  name = "Sepulcher of the First Ones" },
-    },
-
-    -- ── Delves ────────────────────────────────────────────────────────────────
-    ["Delves"] = {
-        { type = "toy", id = 230850, name = "Delve-O-Bot 7001" },
+        { type = "item", id = 18984, name = "Dimensional Ripper - Everlook" },
+        { type = "item", id = 18986, name = "Ultrasafe Transporter: Gadgetzan" },
     },
 }
 
@@ -641,7 +363,7 @@ function Mod:OnInitialize()
     end
     self.activeCategory = "Hearthstones"
     self.buttons        = {}
-    self.plainButtons   = {}
+    self.secureButtons  = {}
     self.pendingCategory = nil
 end
 
@@ -661,9 +383,25 @@ function Mod:OnEnable()
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA",     "OnZoneChanged")
     self:RegisterEvent("PLAYER_ENTERING_WORLD",     "OnEnteringWorld")
     self:RegisterEvent("PLAYER_REGEN_ENABLED",      "OnRegenEnabled")
+    self:RegisterEvent("SPELLS_CHANGED",            "OnCollectionChanged")
+    self:RegisterEvent("BAG_UPDATE_DELAYED",        "OnCollectionChanged")
 
     self:RegisterChatCommand("ktteleport", "Toggle")
     self:RegisterChatCommand("porter",     "Toggle")
+end
+
+-- Learning a spell or moving an item re-evaluates what is available. Debounced:
+-- BAG_UPDATE_DELAYED can fire in bursts, and the rebuild is not free.
+function Mod:OnCollectionChanged()
+    local f = self.menuFrame
+    if self._refreshQueued or not (f and f:IsShown()) then return end
+    self._refreshQueued = true
+    C_Timer.After(0.3, function()
+        Mod._refreshQueued = nil
+        if Mod.menuFrame and Mod.menuFrame:IsShown() then
+            Mod:ShowCategory(Mod.activeCategory)
+        end
+    end)
 end
 
 function Mod:OnRegenEnabled()
@@ -717,7 +455,7 @@ function Mod:CreateMenuFrame()
     title:SetFont(KT_FONT, 14, "OUTLINE")
     title:SetPoint("LEFT", 12, 0)
     title:SetPoint("TOP",  f, "TOP", 0, -9)
-    title:SetText(LText("Portal & Teleport") .. "  |cff808080· " .. LText("showcase") .. "|r")
+    title:SetText(LText("Portal & Teleport"))
 
     -- ── Separator under header ────────────────────────────────────────────────
     local sep = f:CreateTexture(nil, "BACKGROUND")
@@ -808,7 +546,7 @@ function Mod:CreateMenuFrame()
         txt:SetJustifyH("LEFT")
         txt:SetJustifyV("MIDDLE")
         txt:SetWordWrap(false)
-        txt:SetText(cat)
+        txt:SetText(LText(cat))
         tab.text = txt
 
         tab.category = cat
@@ -1090,8 +828,9 @@ end
 -- ============================================================================
 
 function Mod:ShowCategory(category)
+    category = category or self.activeCategory or "Hearthstones"
     if InCombatLockdown() then
-        self.pendingCategory = category or self.activeCategory or "Hearthstones"
+        self.pendingCategory = category
         return
     end
 
@@ -1102,8 +841,8 @@ function Mod:ShowCategory(category)
     frame.countLabel:Show()
 
     self.buttons = {}
-    self.plainButtons = self.plainButtons or {}
-    for _, btn in ipairs(self.plainButtons) do btn:Hide() end
+    self.secureButtons = self.secureButtons or {}
+    for _, btn in ipairs(self.secureButtons) do btn:Hide() end
     self.groupHeaders = self.groupHeaders or {}
     for _, header in ipairs(self.groupHeaders) do header:Hide() end
 
@@ -1120,14 +859,14 @@ function Mod:ShowCategory(category)
 
     local playerClass = select(2, UnitClass("player"))
     local _, playerRace = UnitRace("player")
+    local playerFaction = UnitFactionGroup and UnitFactionGroup("player")
     local validItems = {}
 
     for _, item in ipairs(list) do
         local show = true
         if item.classReq and item.classReq ~= playerClass then show = false end
         if item.raceReq and item.raceReq ~= playerRace then show = false end
-        if item.cosmetic and not Mod.db.showCosmetic then show = false end
-        -- Showcase: every possible teleport is listed, even if not unlocked yet.
+        if item.factionReq and playerFaction and item.factionReq ~= playerFaction then show = false end
         if show then
             tinsert(validItems, item)
         end
@@ -1153,15 +892,19 @@ function Mod:ShowCategory(category)
     local totalWidth = bCols * (cellW + bSpace) - bSpace
     local availableCount = 0
 
+    local function BagCount(itemID)
+        local fn = (C_Item and C_Item.GetItemCount) or _G.GetItemCount
+        local ok, n = pcall(fn, itemID)
+        return (ok and tonumber(n)) or 0
+    end
+
+    -- Spells: learned. Items: in the bags. Both are local checks, no server query.
     local function IsTeleportAvailable(item)
         if item.type == "spell" then
             local ok, known = pcall(IsPlayerSpell, item.id)
             return ok and known == true
-        elseif item.type == "toy" then
-            local ok, known = pcall(PlayerHasToy, item.id)
-            return ok and known == true
         end
-        return true
+        return BagCount(item.id) > 0
     end
 
     local function AcquireGroupHeader(index)
@@ -1181,10 +924,43 @@ function Mod:ShowCategory(category)
         return header
     end
 
+    local function ShowTooltip(s)
+        local data = s.data
+        if Mod.db.showTooltip == false or not data then return end
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        if data.type == "spell" then
+            GameTooltip:SetSpellByID(data.id)
+        else
+            -- Only a cached item can be shown without asking the server.
+            local cached = C_Item and C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(data.id)
+            if cached then
+                GameTooltip:SetItemByID(data.id)
+            else
+                GameTooltip:AddLine(GetEntryDisplayName(data), 1, 1, 1)
+            end
+        end
+        if data.classReq then
+            GameTooltip:AddLine(string.format(LText("Class: %s"), GetClassDisplayName(data.classReq)), 0.7, 0.7, 0.7)
+        end
+        if data.raceReq then
+            GameTooltip:AddLine(string.format(LText("Race: %s"), GetRaceDisplayName(data.raceReq)), 0.7, 0.7, 0.7)
+        end
+        if data.reagent then
+            GameTooltip:AddLine(string.format(LText("Reagent: %d"), BagCount(data.reagent)), 0.7, 0.7, 0.7)
+        end
+        GameTooltip:AddLine(" ")
+        if s.isAvailable then
+            GameTooltip:AddLine(LText(data.type == "spell" and "Click to cast" or "Click to use"), 0.3, 1, 0.3)
+        else
+            GameTooltip:AddLine(LText(data.type == "spell" and "Not learned yet" or "Not in your bags"), 0.6, 0.6, 0.6)
+        end
+        GameTooltip:Show()
+    end
+
     local function ApplyButtonItem(index, item, x, y)
-        local btn = self.plainButtons[index]
+        local btn = self.secureButtons[index]
         if not btn then
-            btn = CreateFrame("Button", "KT_TeleportShowcaseBtn" .. index, content, "BackdropTemplate")
+            btn = CreateFrame("Button", "KT_TeleportSecureBtn" .. index, content, "SecureActionButtonTemplate,BackdropTemplate")
             btn:SetBackdrop({
                 bgFile   = "Interface\\Buttons\\WHITE8x8",
                 edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -1212,26 +988,13 @@ function Mod:ShowCategory(category)
             btn.nameLabel:SetTextColor(0.85, 0.85, 0.85, 1)
             btn.nameLabel:SetSpacing(0)
 
-            btn.badge = btn:CreateTexture(nil, "OVERLAY")
-            btn.badge:SetSize(10, 10)
-            btn.badge:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-            btn.badge:Hide()
+            -- Reagent count (bottom-right of the icon).
+            btn.count = btn:CreateFontString(nil, "OVERLAY")
+            btn.count:SetFont(KT_FONT, 10, "OUTLINE")
+            btn.count:Hide()
 
-            -- Read-only tooltip: the showcase never casts, uses or queries items.
             btn:SetScript("OnEnter", function(s)
-                local data = s.data
-                if Mod.db.showTooltip ~= false and data then
-                    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine(GetEntryDisplayName(data), 1, 1, 1)
-                    if data.classReq then
-                        GameTooltip:AddLine(string.format(LText("Class: %s"), GetClassDisplayName(data.classReq)), 0.7, 0.7, 0.7)
-                    end
-                    if data.raceReq then
-                        GameTooltip:AddLine(string.format(LText("Race: %s"), GetRaceDisplayName(data.raceReq)), 0.7, 0.7, 0.7)
-                    end
-                    GameTooltip:AddLine(LText("Showcase only: does not cast the teleport."), 0.6, 0.6, 0.6)
-                    GameTooltip:Show()
-                end
+                ShowTooltip(s)
                 local hoverR, hoverG, hoverB = GetThemeAccentColor()
                 s:SetBackdropBorderColor(hoverR, hoverG, hoverB, 1)
             end)
@@ -1240,8 +1003,9 @@ function Mod:ShowCategory(category)
                 s:SetBackdropBorderColor(0.15, 0.15, 0.15, 1)
             end)
 
-            btn:RegisterForClicks("LeftButtonUp")
-            self.plainButtons[index] = btn
+            -- Both edges, so it respects the "cast on key down" setting.
+            btn:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+            self.secureButtons[index] = btn
         end
 
         btn:SetSize(cellW, cellH)
@@ -1259,11 +1023,13 @@ function Mod:ShowCategory(category)
         btn.cooldown:SetPoint("TOP", btn, "TOP", 0, 0)
         btn.cooldown:SetSize(bSize, bSize)
         btn.cooldown:Clear()
+        btn.count:ClearAllPoints()
+        btn.count:SetPoint("BOTTOMRIGHT", btn.icon, "BOTTOMRIGHT", -1, 2)
 
-        btn.spellID, btn.itemID, btn.toyID = nil, nil, nil
+        btn.spellID, btn.itemID = nil, nil
         btn.data = item
-        btn:SetScript("OnClick", nil)
-        btn.badge:Hide()
+        btn:SetAttribute("type", nil)
+        btn:SetAttribute("macrotext", nil)
 
         local font = (self.db.font and LSM and LSM:Fetch("font", self.db.font)) or KT_FONT
         local outline = self.db.fontOutline
@@ -1276,89 +1042,75 @@ function Mod:ShowCategory(category)
         btn.nameLabel:SetHeight(labelHeight > 0 and labelHeight or 1)
         if showLabels then btn.nameLabel:Show() else btn.nameLabel:Hide() end
 
+        local macro
         if item.type == "spell" then
             local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(item.id)
             btn.icon:SetTexture(info and info.iconID or 134400)
             btn.spellID = item.id
+            local spellName = info and info.name
+            if type(spellName) == "string" and spellName ~= "" then
+                macro = "/cast " .. spellName
+            end
         else
-            local icon
-            if item.type == "toy" and C_ToyBox and C_ToyBox.GetToyInfo then
-                local ok, _, _, toyIcon = pcall(C_ToyBox.GetToyInfo, item.id)
-                if ok then icon = toyIcon end
-            end
-            if not icon then
-                local ok, _, _, _, _, instantIcon = pcall(GetItemInfoInstant, item.id)
-                if ok then icon = instantIcon end
-            end
-            btn.icon:SetTexture(icon or 134400)
+            -- Static client data: the icon comes without a server query.
+            local ok, _, _, _, _, instantIcon = pcall(C_Item.GetItemInfoInstant, item.id)
+            btn.icon:SetTexture((ok and instantIcon) or 134400)
             btn.itemID = item.id
-            if item.type == "toy" then
-                btn.toyID = item.id
-                btn.itemID = nil
-            end
+            macro = "/use item:" .. item.id
         end
 
         local available = IsTeleportAvailable(item)
+        btn.isAvailable = available
         if available then
             availableCount = availableCount + 1
             btn.icon:SetVertexColor(1, 1, 1, 1)
             btn.nameLabel:SetTextColor(0.85, 0.85, 0.85, 1)
-            btn.badge:Hide()
+            if macro then
+                btn:SetAttribute("type", "macro")
+                btn:SetAttribute("macrotext", macro)
+            end
         else
             btn.icon:SetVertexColor(0.40, 0.40, 0.40, 1)
             btn.nameLabel:SetTextColor(0.55, 0.55, 0.55, 1)
-            btn.badge:SetColorTexture(0.45, 0.45, 0.45, 0.85)
-            btn.badge:Show()
+        end
+
+        if item.reagent then
+            local n = BagCount(item.reagent)
+            btn.count:SetText(n)
+            if n > 0 then btn.count:SetTextColor(1, 1, 1, 1) else btn.count:SetTextColor(1, 0.25, 0.25, 1) end
+            btn.count:Show()
+        else
+            btn.count:Hide()
         end
 
         self.buttons[index] = btn
     end
 
-    if category == "Dungeons" then
-        local grouped = {}
-        local currentGroup = { label = "Current Season", items = {} }
-        for _, item in ipairs(validItems) do
-            if self.DungeonCurrentSeason[item.name] then
-                currentGroup.items[#currentGroup.items + 1] = item
-            end
+    -- Group by sub-header, in order of first appearance. Entries without a group
+    -- fall under "Other" only when some other entry has one.
+    local groups, byLabel, anyLabel = {}, {}, false
+    for _, item in ipairs(validItems) do
+        local key = item.group or false
+        local group = byLabel[key]
+        if not group then
+            group = { label = item.group, items = {} }
+            byLabel[key] = group
+            groups[#groups + 1] = group
         end
-        if #currentGroup.items > 0 then
-            grouped[#grouped + 1] = currentGroup
-        end
+        if item.group then anyLabel = true end
+        tinsert(group.items, item)
+    end
 
-        for _, expansion in ipairs(self.DungeonExpansionOrder) do
-            local items = {}
-            for _, item in ipairs(validItems) do
-                if not self.DungeonCurrentSeason[item.name] and self.DungeonExpansionByName[item.name] == expansion then
-                    items[#items + 1] = item
-                end
-            end
-            if #items > 0 then
-                grouped[#grouped + 1] = { label = expansion, items = items }
-            end
-        end
-
-        local others = {}
-        for _, item in ipairs(validItems) do
-            if not self.DungeonCurrentSeason[item.name] and not self.DungeonExpansionByName[item.name] then
-                others[#others + 1] = item
-            end
-        end
-        if #others > 0 then
-            grouped[#grouped + 1] = { label = "Other", items = others }
-        end
-
-        local buttonIndex = 1
-        local headerIndex = 1
-        local cursorY = 0
-
-        for _, group in ipairs(grouped) do
+    local buttonIndex, headerIndex, cursorY = 1, 1, 0
+    for _, group in ipairs(groups) do
+        local label = group.label or (anyLabel and "Other") or nil
+        if label then
             local header = AcquireGroupHeader(headerIndex)
             header:SetParent(content)
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -cursorY)
             header:SetSize(totalWidth, 18)
-            header.text:SetText(group.label)
+            header.text:SetText(LText(label))
             header.text:SetTextColor(1, 0.82, 0.25, 1)
             header.line:ClearAllPoints()
             header.line:SetPoint("LEFT", header.text, "RIGHT", 8, 0)
@@ -1367,37 +1119,22 @@ function Mod:ShowCategory(category)
             header:Show()
             headerIndex = headerIndex + 1
             cursorY = cursorY + 24
-
-            local col, row = 0, 0
-            for _, item in ipairs(group.items) do
-                ApplyButtonItem(buttonIndex, item, col * (cellW + bSpace), -cursorY - row * (cellH + bSpace))
-                buttonIndex = buttonIndex + 1
-                col = col + 1
-                if col >= bCols then
-                    col = 0
-                    row = row + 1
-                end
-            end
-
-            cursorY = cursorY + math_ceil(#group.items / bCols) * (cellH + bSpace) + 10
         end
 
-        content:SetSize(totalWidth, math.max(1, cursorY))
-    else
         local col, row = 0, 0
-        for i, item in ipairs(validItems) do
-            ApplyButtonItem(i, item, col * (cellW + bSpace), -row * (cellH + bSpace))
+        for _, item in ipairs(group.items) do
+            ApplyButtonItem(buttonIndex, item, col * (cellW + bSpace), -cursorY - row * (cellH + bSpace))
+            buttonIndex = buttonIndex + 1
             col = col + 1
             if col >= bCols then
                 col = 0
                 row = row + 1
             end
         end
-
-        local totalRows = math_ceil(#validItems / bCols)
-        content:SetSize(totalWidth, math.max(1, totalRows * (cellH + bSpace) + bSpace))
+        cursorY = cursorY + math_ceil(#group.items / bCols) * (cellH + bSpace) + 10
     end
 
+    content:SetSize(totalWidth, math.max(1, cursorY))
     frame.countLabel:SetText(string.format(LText("%d teleports  ·  %d available"), #validItems, availableCount))
     self:UpdateAllCooldowns()
 end
@@ -1415,8 +1152,6 @@ function Mod:UpdateAllCooldowns()
                 if cd then start, duration = cd.startTime, cd.duration end
             elseif btn.itemID then
                 start, duration = C_Item.GetItemCooldown(btn.itemID)
-            elseif btn.toyID then
-                start, duration = C_Item.GetItemCooldown(btn.toyID)
             end
 
             local durationIsSecret = IsSecretValue(duration)

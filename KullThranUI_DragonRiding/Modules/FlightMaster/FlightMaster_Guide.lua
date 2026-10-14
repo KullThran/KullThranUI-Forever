@@ -167,8 +167,47 @@ local function DistanceLabel(entry)
     return "|cff888888" .. L("No position") .. "|r"
 end
 
+-- Arrow created by the last click, so the next click replaces it instead of
+-- piling waypoints up.
+local tomtomWaypoint
+
+-- TomTom: a waypoint with the flight master's coordinates and the arrow pointing
+-- at it. Coordinates are normalized (0-1), which is what TomTom expects.
+local function SetTomTomArrow(node)
+    local tomtom = _G.TomTom
+    if not (tomtom and tomtom.AddWaypoint) then return false end
+    local ok, uid = pcall(function()
+        if tomtomWaypoint and tomtom.RemoveWaypoint then
+            pcall(tomtom.RemoveWaypoint, tomtom, tomtomWaypoint)
+        end
+        tomtomWaypoint = nil
+        return tomtom:AddWaypoint(node.mapID, node.x, node.y, {
+            title = node.name,
+            from = "KullThranUI",
+            persistent = false,
+            minimap = true,
+            world = true,
+            crazy = true,
+            silent = true,
+        })
+    end)
+    if not (ok and uid) then return false end
+    tomtomWaypoint = uid
+    -- AddWaypoint returns an existing waypoint untouched; make sure the arrow follows it.
+    if tomtom.SetCrazyArrow then
+        local arrival = tomtom.profile and tomtom.profile.arrow and tomtom.profile.arrow.arrival or 10
+        pcall(tomtom.SetCrazyArrow, tomtom, uid, arrival, node.name)
+    end
+    return true
+end
+
 local function SetWaypoint(node)
     if not (node and node.mapID and node.x and node.y) then return end
+    if SetTomTomArrow(node) then
+        print("|cff00ccffKullThranUI|r " .. string.format(L("Waypoint set: %s"),
+            string.format("%s (%.1f, %.1f)", node.name, node.x * 100, node.y * 100)))
+        return
+    end
     local ok = false
     if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
         ok = pcall(function()

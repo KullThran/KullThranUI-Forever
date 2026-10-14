@@ -3,7 +3,7 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.1.4
+## Version: 0.1.5
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
@@ -105,12 +105,15 @@ Locales\Modules\OptionsCoverage.lua
 Locales\Modules\FontsColors.lua
 Locales\Modules\OptionsGaps.lua
 Locales\Modules\MinimapIcons.lua
+Locales\Modules\AFKScreen.lua
 Locales\Modules\VisualStyles.lua
 Locales\Modules\CooldownManager.lua
 Locales\Modules\AuraReminders.lua
 Locales\Modules\DungeonTimer.lua
 Locales\Modules\DebuffTracker.lua
 Locales\Generated.lua
+Locales\Modules\PerfMonitor.lua
+Locales\Modules\TeleportMenu.lua
 Locales\Modules\Completion.lua
 Modules\Defaults\Defaults.lua
 
@@ -155,6 +158,7 @@ Modules\Profilehandlers\Profilehandlers.lua
 Modules\Profilehandlers\Profiledata.lua
 Modules\Profiler.lua
 Modules\CombatCPUProfiler.lua
+Modules\PerfMonitor.lua
 
 # --- EXTERNAL INTEGRATION ---
 # Modules\Grid2Integration.lua

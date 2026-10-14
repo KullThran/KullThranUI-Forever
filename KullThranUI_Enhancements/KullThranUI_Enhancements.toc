@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Enhancements
 ## Notes: KullThranUI module: Enhancements
 ## Author: KullThran
-## Version: 0.1.4
+## Version: 0.1.5
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
@@ -31,6 +31,7 @@ Init.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_MythicPlusHistory.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_MythicPlusHistoryUI.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_CombatTimer.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_AFK.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_ForeverDungeonTracker.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_DebuffTracker.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_Options.lua

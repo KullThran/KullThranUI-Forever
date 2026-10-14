@@ -3490,6 +3490,27 @@ local function ApplyClassPowerPipShape(pip, round)
     end
 end
 
+-- Pip size, spacing and look for the class resource, shared with the options
+-- live preview so both draw the same thing. Combo points follow the shape
+-- picker cards: circles a little narrower than the pips, both with roughly a
+-- third of their width as spacing. Other resources keep the flat bar segments.
+ns._ComboGeom = { D = 16, W = 18, H = 7, GAP = 4 }
+function ns.ClassPowerPipLayout(isCombo, cpScale, gap)
+    local round = isCombo and GetClassPowerShape() ~= "pip"
+    local cg = ns._ComboGeom
+    local w, h, g
+    if round then
+        w, h, g = cg.D, cg.D, gap + cg.GAP
+    elseif isCombo then
+        w, h, g = cg.W, cg.H, gap + cg.GAP
+    else
+        w, h, g = CP_PIP_W * 1.4, CP_PIP_H, gap + 2
+    end
+    return w * cpScale, h * cpScale, g * cpScale, round, isCombo and true or false
+end
+ns.ApplyClassPowerPipShape = ApplyClassPowerPipShape
+ns.SetClassPowerPipDecor = SetPipDecor
+
 -- Lazy-create pip textures on a plate (done once, then reused via show/hide)
 local function CreateClassPowerPip(plate)
     local background = plate:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -3647,8 +3668,6 @@ local function UpdateClassPowerOnPlate(plate)
     local cpXOff  = GetClassPowerXOffset()
     local cpPos   = GetClassPowerPos()
     local bgCol   = GetClassPowerBgColor()
-    local comboPips = classPowerType == Enum.PowerType.ComboPoints
-    local comboRound = comboPips and GetClassPowerShape() ~= "pip"
 
     -- Resolver anclaje: encima o debajo de la barra de salud,
     -- evitando solapamiento con la barra de casteo si está activa
@@ -3739,22 +3758,9 @@ local function UpdateClassPowerOnPlate(plate)
         return
     end
 
-    -- Layout de pips: calcular posiciones una vez y aplicar en un solo bucle
-    local scaledW   = CP_PIP_W * cpScale * 1.4  -- wider pips
-    local scaledH   = CP_PIP_H * cpScale
-    -- CP_PIP_W/H (8x3) is a thin flat bar-segment shape, meant for the
-    -- rectangular look -- a circular mask on an 8:3 box clips down to the
-    -- smaller dimension (3), producing an almost invisible sliver.
-    -- Combo points on nameplates barely showed at all.
-    -- Round pips use a square sized to the width (8), a far more visible
-    -- circle than the flat height would give.
-    if comboRound then
-        -- The initial +25% still looked too small on
-        -- a real nameplate, so it is enlarged further.
-        scaledW = scaledW * 2.5
-        scaledH = scaledW
-    end
-    local scaledGap = (GetClassPowerGap() + (comboRound and 0 or 2)) * cpScale
+    -- Layout de pips: tamaño y separación compartidos con el live preview
+    local scaledW, scaledH, scaledGap, comboRound, comboPips = ns.ClassPowerPipLayout(
+        classPowerType == Enum.PowerType.ComboPoints, cpScale, GetClassPowerGap())
 
     -- Precalcular borde izquierdo de cada pip en coordenadas de grupo.
     -- PP.Point/PP.Size aplican el snap usando la escala efectiva de la
@@ -3860,7 +3866,10 @@ GetClassPowerTopPush = function(plate)
     if not plate or not plate.unit or not UnitIsUnit(plate.unit, "target") then return 0 end
     local cpScale = GetClassPowerScale()
     local cpYOff = GetClassPowerYOffset()
-    return CP_PIP_H * cpScale + cpYOff
+    -- Push by the real pip height so names/auras clear the taller combo circles.
+    local _, pipH = ns.ClassPowerPipLayout(classPowerType == Enum.PowerType.ComboPoints, cpScale, GetClassPowerGap())
+    if ns._BarResourceDefs[classPowerType] then pipH = CP_PIP_H * cpScale end
+    return pipH + cpYOff
 end
 
 local function RefreshClassPowerPlates(repositionTopElements)
@@ -4925,7 +4934,7 @@ function NameplateFrame:RefreshPixelPerfectLayout()
     if type(scale) ~= "number" or scale <= 0 then
         return
     end
-    if self._ktPixelScale and math.abs(self._ktPixelScale - scale) < 0.0001 then
+    if self._ktPixelScale and math.abs(self._ktPixelScale - scale) < 0.003 then
         return
     end
     self._ktPixelScale = scale
@@ -7292,9 +7301,15 @@ end
 -- como un OnUpdate costoso por placa.
 do
     local elapsedSinceRefresh = 0
+    -- Hoisted: a fresh closure per tick was pure garbage (the tick runs 10x/s).
+    local function RelayoutPlate(_, plate)
+        if plate and plate.RefreshPixelPerfectLayout then
+            plate:RefreshPixelPerfectLayout()
+        end
+    end
     manager:SetScript("OnUpdate", function(_, elapsed)
         elapsedSinceRefresh = elapsedSinceRefresh + (elapsed or 0)
-        if elapsedSinceRefresh < 0.05 then
+        if elapsedSinceRefresh < 0.1 then
             return
         end
         elapsedSinceRefresh = 0
@@ -7303,11 +7318,7 @@ do
             return
         end
 
-        SafeForEachPlate(function(_, plate)
-            if plate and plate.RefreshPixelPerfectLayout then
-                plate:RefreshPixelPerfectLayout()
-            end
-        end)
+        SafeForEachPlate(RelayoutPlate)
 
         if ns.RefreshFriendlyPixelPerfectLayout then
             pcall(ns.RefreshFriendlyPixelPerfectLayout)

@@ -5,6 +5,18 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.1.5 (2026-10-14) - Beta
+
+- Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; what you cannot use yet is dimmed.
+- Flight Master: clicking a flight point in the guide puts a TomTom arrow on it. Without TomTom it uses the map waypoint.
+- AFK Screen: new page in Enhancements. When you go AFK the interface hides, the camera turns slowly and a bottom bar shows your character, guild, time away and your model, with whispers and guild chat. Any key, combat, or a group finder or battleground invite closes it.
+- Performance: Party Frames do less work in raids (health, power and shield updates are handled separately, and power events are only registered while a power bar is shown). Nameplates stop re-laying out friendly plates every tick, and the Cooldown Manager skips icons without visibility rules and merges bursts of cooldown events.
+- New /kperf window with CPU and memory per module, with snapshots to compare before and after a change.
+- Unlock Mode: Focus and Focus Target no longer drift away from their mover while the unit is hidden, and Reset Position works after a drag.
+- Unit Frames: Text Size now scales the text of the Blizzard-style looks. In Classic the name window takes the class color when health is not class colored, and the raid marker sits on top of the portrait in the Blizzard-style looks.
+- Skins: popups use the Settings artwork, breath and fatigue bars get striped bars in Blizzard's colors, and the Professions rank bar no longer shows a floating flare over an empty bar.
+- Cooldown Manager: a potion quality saved from a Retail profile no longer hides every potion; Forever only offers Highest and Most.
+
 ## 0.1.4 (2026-10-12) - Beta
 
 - New Debuff Tracker tab in Enhancements: shows which important raid debuffs your target is missing (Sunder Armor, Expose Armor, Faerie Fire, the Curses of Recklessness and of the Elements, Hunter's Mark, the Judgements, Fire Vulnerability, demoralizing effects and rogue poisons), whoever applies them. Missing ones are dimmed and glow, active ones show their timer and stacks, and you can add your own. In combat, where the client hides enemy auras, debuffs seen before the pull keep updating and the rest show a question mark.
