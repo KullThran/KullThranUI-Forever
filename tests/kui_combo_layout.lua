@@ -11,6 +11,8 @@ local function region(x, y, w, h, scale)
         GetWidth = function() return w end,
         GetHeight = function() return h end,
         GetEffectiveScale = function() return scale end,
+        GetLeft = function() return x - w / 2 end, GetRight = function() return x + w / 2 end,
+        GetTop = function() return y + h / 2 end, GetBottom = function() return y - h / 2 end,
     }
 end
 for _, scale in ipairs({ 0.75, 1, 1.5 }) do
@@ -22,16 +24,27 @@ for _, scale in ipairs({ 0.75, 1, 1.5 }) do
         for count = 1, 10 do
             local row = ns.KUIOrnaments.LayoutRing(frame, portrait, count, 10, true)
             assert(#row == count, "all resource points remain available")
+            -- KUI Style: points follow an arc around the portrait; they may not cross the
+            -- health bar or the level number (a straight row is only the last resort).
+            local barLeft, barRight = 200 + side * 110 - 110, 200 + side * 110 + 110
+            local barBottom, barTop = 100 - 23, 100 + 23
             for i, point in ipairs(row) do
-                assert(point[2] - 5 > 23, "point clears health bar and portrait")
-                assert(point[2] - 5 > 46, "point clears level number")
+                local x, y = 200 + point[1], 100 + point[2]
+                local dx = math.max(barLeft - x, 0, x - barRight)
+                local dy = math.max(barBottom - y, 0, y - barTop)
+                assert(math.sqrt(dx * dx + dy * dy) >= 5 - 0.001, "point clears the health bar")
+                assert(math.sqrt((x - 200) ^ 2 + (y - 140) ^ 2) >= 8, "point clears level number")
                 assert(not point.onlyFilled, "extra resource sockets stay visible")
                 if i > 1 then
-                    assert(point[1] - row[i-1][1] >= 14, "points cannot overlap")
-                    assert(point[2] == row[i-1][2], "row stays horizontal on either side")
+                    local px, py = row[i-1][1], row[i-1][2]
+                    assert(math.sqrt((point[1] - px) ^ 2 + (point[2] - py) ^ 2) >= 7, "points cannot overlap")
                 end
             end
-            assert(math.abs(row[1][1] + row[count][1]) < 0.001, "row centred over portrait")
+            if count == 5 then
+                local flat = true
+                for i = 2, count do if row[i][2] ~= row[1][2] then flat = false end end
+                assert(not flat, "KUI Style combo points surround the portrait in an arc, not a straight line")
+            end
         end
         for _, stock in ipairs({ "classic", "forever", "retail" }) do
             theme = stock

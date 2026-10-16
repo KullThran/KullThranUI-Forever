@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Flight Master
 ## Notes: KullThranUI module: Flight Master tracker (flight duration bar and flight point guide)
 ## Author: KullThran
-## Version: 0.1.5
+## Version: 0.1.6
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

@@ -5,6 +5,19 @@ Current addon version: **@project-version@**
 Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
 Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
 
+## 0.1.6 (2026-10-17) - Beta
+
+- Forever style reworked for the new Forever art: Player, Target, Focus, Target of Target, Pet, Focus Target and Party Frames fit the new three-band plate (bars, names, icons and portraits) and keep the round portrait ring. It looks the same on the Retail and Forever clients.
+- Retail and Forever styles use Blizzard's own bar fill on Unit Frames, Raid Frames and Resource Bars, without the baked edge or the diagonal end that left gaps.
+- Resource Bars: smoother fill and no stale value after a change of resource or talents.
+- Portraits face the right way in every Druid form and for class icons.
+- Damage Meter: the Classic style uses the real Recount bar texture in the live preview, the options and the installer, and Retail and Forever use Blizzard-style bars.
+- Action Bars: end caps span the whole bar group up to the bags, with a new End Cap Width option (Bar Group or Bar 1). Action buttons and Cooldown Manager icons glow following their shape instead of a plain swipe.
+- Cooldown Manager: the KUI Tracker shows again in the outdoor world.
+- Chat: print and debug output shows in the chat frame again, not only in the copy window.
+- Unit Frames: in KUI Style the target buffs clear the health bar and the combo points circle the portrait. Aura timers use the KUI global font and sit on the icon, stack counts are smaller and buff rows keep their distance.
+- Combo points under the Player frame use Forever's bronze rings in the Forever style, on any client.
+
 ## 0.1.5 (2026-10-14) - Beta
 
 - Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; unusable ones are dimmed.

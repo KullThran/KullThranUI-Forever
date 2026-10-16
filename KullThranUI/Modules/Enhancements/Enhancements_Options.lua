@@ -1251,6 +1251,7 @@ local DAMAGE_METER_FONT_ORDER = {
 local DAMAGE_METER_TEXTURES = {
     [DAMAGE_METER_DEFAULT_TEXTURE] = LText("Melli"),
     ["Interface\\TargetingFrame\\UI-StatusBar"] = LText("Blizzard"),
+    ["Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\damagemeter\\BantoBar.tga"] = "Recount",
     ["Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"] = LText("Melli Dark"),
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Clean.blp"] = LText("Statusbar Clean"),
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Stripes_Thin.blp"] = LText("Statusbar Stripes Thin"),
@@ -1260,6 +1261,7 @@ local DAMAGE_METER_TEXTURES = {
 local DAMAGE_METER_TEXTURE_ORDER = {
     DAMAGE_METER_DEFAULT_TEXTURE,
     "Interface\\TargetingFrame\\UI-StatusBar",
+    "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\damagemeter\\BantoBar.tga",
     "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga",
     "Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Clean.blp",
     "Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Stripes_Thin.blp",

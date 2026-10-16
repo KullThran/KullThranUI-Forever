@@ -958,10 +958,28 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.5"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.6"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["0.1.6"] = {
+        version = "0.1.6",
+        published = "2026-10-17",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Forever style reworked for the new Forever art: Player, Target, Focus, Target of Target, Pet, Focus Target and Party Frames fit the new three-band plate (bars, names, icons and portraits) and keep the round portrait ring. It looks the same on the Retail and Forever clients.",
+            "Retail and Forever styles use Blizzard's own bar fill on Unit Frames, Raid Frames and Resource Bars, without the baked edge or the diagonal end that left gaps.",
+            "Resource Bars: smoother fill and no stale value after a change of resource or talents.",
+            "Portraits face the right way in every Druid form and for class icons.",
+            "Damage Meter: the Classic style uses the real Recount bar texture in the live preview, the options and the installer, and Retail and Forever use Blizzard-style bars.",
+            "Action Bars: end caps span the whole bar group up to the bags, with a new End Cap Width option (Bar Group or Bar 1). Action buttons and Cooldown Manager icons glow following their shape instead of a plain swipe.",
+            "Cooldown Manager: the KUI Tracker shows again in the outdoor world.",
+            "Chat: print and debug output shows in the chat frame again, not only in the copy window.",
+            "Unit Frames: in KUI Style the target buffs clear the health bar and the combo points circle the portrait. Aura timers use the KUI global font and sit on the icon, stack counts are smaller and buff rows keep their distance.",
+            "Combo points under the Player frame use Forever's bronze rings in the Forever style, on any client.",
+        },
+    },
     ["0.1.5"] = {
         version = "0.1.5",
         published = "2026-10-14",
@@ -1272,7 +1290,7 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.1.5"
+        or "0.1.6"
     -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
@@ -2352,7 +2370,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.5")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.6")))
     end
     if menu._foreverLogo then
         local VT = KT.VisualThemes
@@ -3991,12 +4009,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.5") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.6") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.1.5"
+	f._versionValue = KT.VERSION or "0.1.6"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving

@@ -2161,7 +2161,7 @@ end
 -- 1. ON INITIALIZE
 -- ============================================================================
 function KT:PrintStartupMessages()
-    local version = KT.VERSION or "0.1.5"
+    local version = KT.VERSION or "0.1.6"
     local updateAvailable = false
     local latestVersion = KT.GetLatestArchivedChangelogVersion and KT:GetLatestArchivedChangelogVersion()
     if latestVersion and KT.CompareVersions then
@@ -2824,8 +2824,15 @@ function KT:InitializeCore()
             -- _G.KullThranDB en nil. Liberamos el arranque en ese caso; si
             -- aparece una tabla real antes, el ticker/evento ya la habra unido.
             if not done and (_G.KullThranDB == rawget(self.db, "sv") or _G.KullThranDB == nil) then
-                self._ktPersistenceUnavailable = true
-                self:PersistDebug("READY fallback: no SavedVariables event/table after 15s raw=%s; automatic Installer disabled", tostring(_G.KullThranDB))
+                if _G.KullThranDB == nil then
+                    -- No SavedVariables file exists at all: this is a clean
+                    -- install, so the Installer must still open for it.
+                    self._ktFreshInstall = true
+                    self:PersistDebug("READY fallback: clean install (no varfile) after 15s; automatic Installer stays enabled")
+                else
+                    self._ktPersistenceUnavailable = true
+                    self:PersistDebug("READY fallback: no SavedVariables event/table after 15s raw=%s; automatic Installer disabled", tostring(_G.KullThranDB))
+                end
                 finish()
             end
         end)
@@ -3156,7 +3163,7 @@ function KT:InitializeCore()
         self._installerReopenWatcher = watcher
     end
 
-    local version = KT.VERSION or "0.1.5"
+    local version = KT.VERSION or "0.1.6"
     local accentR, accentG, accentB = self:GetStyleAccentRGB()
     local accentHex = string.format("%02x%02x%02x", accentR * 255, accentG * 255, accentB * 255)
     self:Print(string.format(LText("Welcome to |cff%sKullThranUI|r %s"), accentHex, tostring(version)))
@@ -3214,7 +3221,7 @@ function KT:MaybeAutoOpenInstaller()
         installerDb.isOpen = false
     end
 
-    local currentVersion = KT.VERSION or "0.1.5"
+    local currentVersion = KT.VERSION or "0.1.6"
     local characterKey = self:GetInstallerCharacterKey()
     local legacyCharacterGUID = UnitGUID and UnitGUID("player")
 
@@ -3436,6 +3443,9 @@ function KT:_KT_OnInstallerRegenEnabled()
 end
 
 function KT:OpenInstaller(isAutomatic)
+    -- AceConsole hands slash commands their argument string (""), which is truthy:
+    -- only an explicit true means the automatic login open.
+    isAutomatic = isAutomatic == true
     if isAutomatic and not self._ktPersistenceReady then
         if self.PersistDebug then self:PersistDebug("INSTALLER OPEN blocked automatic: persistence not ready") end
         return

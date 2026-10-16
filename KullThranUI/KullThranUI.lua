@@ -247,6 +247,22 @@ SLASH_KULLTHRANUIINSTALLER2 = "/ins"
 SLASH_KULLTHRANUIINSTALLER3 = "/installers"
 SlashCmdList["KULLTHRANUIINSTALLER"] = KullThranUIInstallerSlash
 
+-- Another addon can replace these entries after the core loads. Claim them
+-- again once the player is in the world so /ins, /installer and /installers
+-- always open the Installer.
+do
+    local function ClaimInstallerSlashes()
+        SLASH_KULLTHRANUIINSTALLER1 = "/installer"
+        SLASH_KULLTHRANUIINSTALLER2 = "/ins"
+        SLASH_KULLTHRANUIINSTALLER3 = "/installers"
+        SlashCmdList["KULLTHRANUIINSTALLER"] = KullThranUIInstallerSlash
+    end
+    local claimFrame = CreateFrame("Frame")
+    claimFrame:RegisterEvent("PLAYER_LOGIN")
+    claimFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    claimFrame:SetScript("OnEvent", ClaimInstallerSlashes)
+end
+
 local LSM = LibStub("LibSharedMedia-3.0", true)
 local ButtonGlow = LibStub("LibButtonGlow-1.0", true)
 local unpack = unpack or table.unpack
@@ -258,12 +274,12 @@ local hooksecurefunc = _G.hooksecurefunc
 
 KT.VERSION = KT.VERSION
     or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
-		or "0.1.5"
+		or "0.1.6"
 -- When loaded directly from the source tree (without the release packager),
 -- GetAddOnMetadata returns the literal "@project-version@" token.  Strip it
 -- so the in-game UI never displays the raw packager placeholder.
 if KT.VERSION and KT.VERSION:find("@", 1, true) then
-    KT.VERSION = "0.1.5"
+    KT.VERSION = "0.1.6"
 end
 
 function KT:IsBlizzardEditModeActive()
