@@ -12004,6 +12004,7 @@ local function SetupOptionsPanel()
             ns._ufReloadPending = false
             ReloadFrames()
             if ns.ComboUnderFrame then ns.ComboUnderFrame:RefreshAll() end
+            if ns.PortraitAuras then ns.PortraitAuras.RefreshAll() end
         end)
     end
 
