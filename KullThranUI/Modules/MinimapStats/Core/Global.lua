@@ -9,8 +9,8 @@ local MINIMAP_ADDON_NAME = "KullThranUI_Minimap"
 
 MSG = MSG or {} -- Global for GUI access if needed
 MS.AddOnName = "MinimapStats" -- Hardcoded as it's now a module
-MS.Version = "0.1.6"
-MS.Author = "UnhaltedGB"
+MS.Version = "1.0.0"
+MS.Author = "KullThran"
 MS.LSM = LibStub("LibSharedMedia-3.0")
 local _, class = UnitClass("player")
 local color = class and RAID_CLASS_COLORS[class]

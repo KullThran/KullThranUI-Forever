@@ -1796,7 +1796,7 @@ function KT:SanitizeLegacyMinimapData(profileDB)
         end
     end
 
-    for _, moveKey in ipairs({ "blizzMove", "BlizzMove" }) do
+    for _, moveKey in ipairs({ "kuiMove", "blizzMove", "BlizzMove", "KUIMove" }) do
         local moveDB = profileDB[moveKey]
         if type(moveDB) == "table" then
             if type(moveDB.points) == "table" and ClearSensitiveBlizzardKeys(moveDB.points) then
@@ -2161,7 +2161,7 @@ end
 -- 1. ON INITIALIZE
 -- ============================================================================
 function KT:PrintStartupMessages()
-    local version = KT.VERSION or "0.1.6"
+    local version = KT.VERSION or "1.0.0"
     local updateAvailable = false
     local latestVersion = KT.GetLatestArchivedChangelogVersion and KT:GetLatestArchivedChangelogVersion()
     if latestVersion and KT.CompareVersions then
@@ -3163,7 +3163,7 @@ function KT:InitializeCore()
         self._installerReopenWatcher = watcher
     end
 
-    local version = KT.VERSION or "0.1.6"
+    local version = KT.VERSION or "1.0.0"
     local accentR, accentG, accentB = self:GetStyleAccentRGB()
     local accentHex = string.format("%02x%02x%02x", accentR * 255, accentG * 255, accentB * 255)
     self:Print(string.format(LText("Welcome to |cff%sKullThranUI|r %s"), accentHex, tostring(version)))
@@ -3221,7 +3221,7 @@ function KT:MaybeAutoOpenInstaller()
         installerDb.isOpen = false
     end
 
-    local currentVersion = KT.VERSION or "0.1.6"
+    local currentVersion = KT.VERSION or "1.0.0"
     local characterKey = self:GetInstallerCharacterKey()
     local legacyCharacterGUID = UnitGUID and UnitGUID("player")
 

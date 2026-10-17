@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Enhancements
 ## Notes: KullThranUI module: Enhancements
 ## Author: KullThran
-## Version: 0.1.6
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
@@ -11,10 +11,10 @@ Init.lua
 
 # Runtime ownership lives in this addon. The source remains centralized in the
 # core folder so releases cannot ship two divergent copies.
-..\KullThranUI\Modules\BlizzMove\BlizzMove.lua
-..\KullThranUI\Modules\BlizzMove\BlizzMoveAPI.lua
-..\KullThranUI\Modules\BlizzMove\BlizzMoveConfig.lua
-..\KullThranUI\Modules\BlizzMove\Frames.lua
+..\KullThranUI\Modules\KUIMove\KUIMove.lua
+..\KullThranUI\Modules\KUIMove\KUIMoveAPI.lua
+..\KullThranUI\Modules\KUIMove\KUIMoveConfig.lua
+..\KullThranUI\Modules\KUIMove\Frames.lua
 ..\KullThranUI\Modules\BlizzardFrames.lua
 ..\KullThranUI\Modules\DurabilityMovable.lua
 ..\KullThranUI\Modules\EscapeMenu.lua
@@ -26,6 +26,8 @@ Init.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_LootDebug.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_DamageMeter.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_QOL.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_BulkBuy.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_RaidCheck.lua
 ..\KullThranUI\Modules\Enhancements\EnhancedFriendList.lua
 ..\KullThranUI\Modules\Enhancements\EnhancedFriendList_SocialUI.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_MythicPlusHistory.lua

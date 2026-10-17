@@ -171,8 +171,8 @@ end
 -- piling waypoints up.
 local tomtomWaypoint
 
--- TomTom: a waypoint with the flight master's coordinates and the arrow pointing
--- at it. Coordinates are normalized (0-1), which is what TomTom expects.
+-- Waypoint arrow: a waypoint with the flight master's coordinates and the arrow pointing
+-- at it. Coordinates are normalized (0-1), which is what the waypoint API expects.
 local function SetTomTomArrow(node)
     local tomtom = _G.TomTom
     if not (tomtom and tomtom.AddWaypoint) then return false end

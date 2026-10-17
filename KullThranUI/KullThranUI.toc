@@ -3,12 +3,12 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.1.6
+## Version: 1.0.0
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
-## OptionalDeps: Blizzard_DamageMeter, Masque, Grid2, Grid2Options, UnhaltedUnitFrames, Chattynator
+## OptionalDeps: Blizzard_DamageMeter, TomTom
 
 # =============================================================================
 # 1. LIBRARIES (Foundation)

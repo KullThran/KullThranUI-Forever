@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Unit Frames
 ## Notes: KullThranUI module: Unit Frames
 ## Author: KullThran
-## Version: 0.1.6
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
@@ -18,6 +18,7 @@ Modules\KUIUnitFrames\KUI_ThemeOrnaments.lua
 Modules\KUIUnitFrames\KUI_AggroGlow.lua
 Modules\KUIUnitFrames\KUI_BarGloss.lua
 Modules\KUIUnitFrames\KUI_HitText.lua
+Modules\KUIUnitFrames\KUI_AltMana.lua
 Modules\KUIUnitFrames\KUI_HealPrediction.lua
 Modules\KUIUnitFrames\KUI_BarFrameArt.lua
 Modules\KUIUnitFrames\KUI_UnitFrames_Options.lua

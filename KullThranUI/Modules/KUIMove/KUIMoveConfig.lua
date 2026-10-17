@@ -9,26 +9,26 @@ local StaticPopupDialogs = _G.StaticPopupDialogs;
 local StaticPopup_Show = _G.StaticPopup_Show;
 local IsControlKeyDown = _G.IsControlKeyDown;
 
-local name = "BlizzMove";
-local OPTIONS_TABLE_NAME = "KullThranUI_BlizzMove";
-local POPUP_NAME = "KUIBlizzMoveURLDialog";
+local name = "KUIMove";
+local OPTIONS_TABLE_NAME = "KullThranUI_KUIMove";
+local POPUP_NAME = "KUIKUIMoveURLDialog";
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
----@class BlizzMove
-local BlizzMove = KT:GetModule(name, true)
-if not BlizzMove then return; end
+---@class KUIMove
+local KUIMove = KT:GetModule(name, true)
+if not KUIMove then return; end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(name, true) or LibStub("AceLocale-3.0"):GetLocale("KullThranUI", true);
 if not L then L = setmetatable({}, { __index = function(t, k) local locale = KT and KT.GetLocale and KT:GetLocale(); return (locale and locale[k]) or k end }) end
 
----@type BlizzMoveAPI
-local BlizzMoveAPI = KT.BlizzMoveAPI;
+---@type KUIMoveAPI
+local KUIMoveAPI = KT.KUIMoveAPI;
 
----@class BlizzMoveConfig
+---@class KUIMoveConfig
 local Config = {};
-BlizzMove.Config = Config;
+KUIMove.Config = Config;
 
 Config.version = KT.VERSION or "unknown";
-Config.displayName = BlizzMove.displayName or (BlizzMove.isForever and "KUI Move Forever" or "KullThranUI Move");
+Config.displayName = KUIMove.displayName or (KUIMove.isForever and "KUI Move Forever" or "KullThranUI Move");
 
 function Config:GetOptions()
     local leftClick = CreateAtlasMarkup('NPE_LeftClick', 18, 18);
@@ -56,7 +56,7 @@ function Config:GetOptions()
                         type = "description",
                         name =
                             self.displayName .. "\n"
-                            .. (BlizzMove.isForever and "Forever uses a curated catalogue of its own Blizzard windows; Retail-only panels are not registered." or "") .. "\n"
+                            .. (KUIMove.isForever and "Forever uses a curated catalogue of its own Blizzard windows; Retail-only panels are not registered." or "") .. "\n"
                             .. L["This addon makes the Blizzard windows movable."] .. "\n"
                             .. "\n"
                             .. L["To temporarily move a window just %s the window and drag it to where you want it for the current game session."]:format(leftClick) .. "\n"
@@ -71,7 +71,7 @@ function Config:GetOptions()
                             .. "  " .. L["CTRL + %s to reset the scale of a window."]:format(rightClick) .. "\n"
                             .. "  " .. L["ALT + %s to re-attach a child window."]:format(rightClick) .. "\n"
                             .. "\n"
-                            .. (BlizzMove.isForever and "KUI Move API support is kept for compatible Forever addons." or L["Addon authors can enable support for their own custom frames by utilizing the BlizzMoveAPI functions"]),
+                            .. (KUIMove.isForever and "KUI Move API support is kept for compatible Forever addons." or L["Addon authors can enable support for their own custom frames by utilizing the KUIMoveAPI functions"]),
                     },
                     newline1 = {
                         order = increment(),
@@ -87,7 +87,7 @@ function Config:GetOptions()
                             requireMoveModifier = {
                                 order = increment(),
                                 name = L["Require move modifier"],
-                                desc = L["If enabled BlizzMove requires to hold SHIFT to move frames."],
+                                desc = L["If enabled KUIMove requires to hold SHIFT to move frames."],
                                 type = "toggle",
                                 width = "full",
                             },
@@ -105,7 +105,7 @@ function Config:GetOptions()
                                     .. "\n"
                                     .. L["In Session"] .. " >> " .. L["frame positions are saved until you reload your UI"] .. "\n"
                                     .. "\n"
-                                    .. L["Remember Permanently"] .. " >> " .. L["frame positions are remembered until you switch to another option, click the reset button, or disable BlizzMove"],
+                                    .. L["Remember Permanently"] .. " >> " .. L["frame positions are remembered until you switch to another option, click the reset button, or disable KUIMove"],
                                 type = "select",
                                 values = {
                                     off = L["Do not remember"],
@@ -120,7 +120,7 @@ function Config:GetOptions()
                                 desc =
                                     L["In Session"] .. " >> " .. L["frame scales are saved until you reload your UI"] .. "\n"
                                     .. "\n"
-                                    .. L["Remember Permanently"] .. " >> " .. L["frame scales are remembered until you switch to another option, click the reset button, or disable BlizzMove"],
+                                    .. L["Remember Permanently"] .. " >> " .. L["frame scales are remembered until you switch to another option, click the reset button, or disable KUIMove"],
                                 type = "select",
                                 values = {
                                     session = L["In Session, until you reload"],
@@ -138,7 +138,7 @@ function Config:GetOptions()
                                 name = L["Reset Permanent Positions"],
                                 desc = L["Reset permanently stored positions"],
                                 type = "execute",
-                                func = function() BlizzMove:ResetPointStorage(); ReloadUI(); end,
+                                func = function() KUIMove:ResetPointStorage(); ReloadUI(); end,
                                 confirm = function() return L["Are you sure you want to reset permanently stored positions? This will reload the UI."] end,
                             },
                             resetScales = {
@@ -147,7 +147,7 @@ function Config:GetOptions()
                                 name = L["Reset Permanent Scales"],
                                 desc = L["Reset permanently stored scales"],
                                 type = "execute",
-                                func = function() BlizzMove:ResetScaleStorage(); ReloadUI(); end,
+                                func = function() KUIMove:ResetScaleStorage(); ReloadUI(); end,
                                 confirm = function() return L["Are you sure you want to reset permanently stored scales? This will reload the UI."] end,
                             },
                         },
@@ -164,8 +164,8 @@ function Config:GetOptions()
                 name = L["List of frames"],
                 type = "group",
                 childGroups = "tree",
-                get = function(info, frameName) return not BlizzMoveAPI:IsFrameDisabled(info[#info], frameName); end,
-                set = function(info, frameName, enabled) return BlizzMoveAPI:SetFrameDisabled(info[#info], frameName, not enabled); end,
+                get = function(info, frameName) return not KUIMoveAPI:IsFrameDisabled(info[#info], frameName); end,
+                set = function(info, frameName, enabled) return KUIMoveAPI:SetFrameDisabled(info[#info], frameName, not enabled); end,
                 args = self.ListOfFramesTable,
             },
             disabledFramesTab = {
@@ -173,8 +173,8 @@ function Config:GetOptions()
                 name = L["Default disabled frames"],
                 type = "group",
                 childGroups = "tree",
-                get = function(info, frameName) return not BlizzMoveAPI:IsFrameDisabled(info[#info], frameName); end,
-                set = function(info, frameName, enabled) return BlizzMoveAPI:SetFrameDisabled(info[#info], frameName, not enabled); end,
+                get = function(info, frameName) return not KUIMoveAPI:IsFrameDisabled(info[#info], frameName); end,
+                set = function(info, frameName, enabled) return KUIMoveAPI:SetFrameDisabled(info[#info], frameName, not enabled); end,
                 args = self.DefaultDisabledFramesTable,
             },
         },
@@ -215,7 +215,7 @@ function Config:GetFramesTables()
         args = allFrames,
     };
 
-    for addOnName, _ in pairs(BlizzMoveAPI:GetRegisteredAddOns()) do
+    for addOnName, _ in pairs(KUIMoveAPI:GetRegisteredAddOns()) do
         listOfFrames[addOnName] = {
             name = addOnName,
             type = "group",
@@ -224,7 +224,7 @@ function Config:GetFramesTables()
                 [addOnName] = {
                     name = L["Movable frames for %s"]:format(addOnName),
                     type = "multiselect",
-                    values = function(info) return BlizzMoveAPI:GetRegisteredFrames(info[#info]); end,
+                    values = function(info) return KUIMoveAPI:GetRegisteredFrames(info[#info]); end,
                 },
             },
         };
@@ -235,8 +235,8 @@ function Config:GetFramesTables()
             values = function(info) return self:GetFilteredFrames(info[#info], self.search); end,
             hidden = function(info) return not next(info.option.values(info)); end,
         }
-        for frameName, _ in pairs(BlizzMoveAPI:GetRegisteredFrames(addOnName)) do
-            if(BlizzMoveAPI:IsFrameDefaultDisabled(addOnName, frameName)) then
+        for frameName, _ in pairs(KUIMoveAPI:GetRegisteredFrames(addOnName)) do
+            if(KUIMoveAPI:IsFrameDefaultDisabled(addOnName, frameName)) then
                 defaultDisabledFrames[addOnName] = {
                     name = addOnName,
                     type = "group",
@@ -259,11 +259,11 @@ end
 
 function Config:GetFilteredFrames(addOnName, filter)
     local frames = {};
-    for frameName, _ in pairs(BlizzMoveAPI:GetRegisteredFrames(addOnName)) do
+    for frameName, _ in pairs(KUIMoveAPI:GetRegisteredFrames(addOnName)) do
         if
             not filter or filter == ''
-            or (filter == '-' and BlizzMoveAPI:IsFrameDisabled(addOnName, frameName))
-            or (filter == '+' and not BlizzMoveAPI:IsFrameDisabled(addOnName, frameName))
+            or (filter == '-' and KUIMoveAPI:IsFrameDisabled(addOnName, frameName))
+            or (filter == '+' and not KUIMoveAPI:IsFrameDisabled(addOnName, frameName))
             or (string__match(string.lower(frameName), string.lower(filter)))
             or (string__match(string.lower(addOnName), string.lower(filter)))
         then
@@ -276,8 +276,8 @@ end
 function Config:GetDefaultDisabledFrames(addOnName)
     local returnTable = {};
 
-    for frameName, _ in pairs(BlizzMoveAPI:GetRegisteredFrames(addOnName)) do
-        if(BlizzMoveAPI:IsFrameDefaultDisabled(addOnName, frameName)) then
+    for frameName, _ in pairs(KUIMoveAPI:GetRegisteredFrames(addOnName)) do
+        if(KUIMoveAPI:IsFrameDefaultDisabled(addOnName, frameName)) then
             returnTable[frameName] = frameName;
         end
     end
@@ -355,14 +355,14 @@ function Config:RegisterOptions()
 end
 
 function Config:GetConfig(property)
-    return BlizzMove.DB[property];
+    return KUIMove.DB[property];
 end
 
 function Config:SetConfig(property, value)
-    local oldValue = BlizzMove.DB[property] or nil;
-    BlizzMove.DB[property] = value;
+    local oldValue = KUIMove.DB[property] or nil;
+    KUIMove.DB[property] = value;
     if property == "savePosStrategy" then
-        BlizzMove:SavePositionStrategyChanged(oldValue, value);
+        KUIMove:SavePositionStrategyChanged(oldValue, value);
     end
 end
 
