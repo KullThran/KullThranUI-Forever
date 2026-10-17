@@ -958,22 +958,10 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.7"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.6"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
-    ["0.1.7"] = {
-        version = "0.1.7",
-        published = "2026-10-17",
-        sourceLabel = "Forever Beta",
-        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
-        notes = {
-            "Unit Frames: new Portrait Auras tab. The most important aura of Player, Target, Focus, Pet, Target of Target and Focus Target shows on its portrait: crowd control, disarms, big and external defensives and important spells, one icon at a time by priority. It has a live preview and options for numbers, swipe direction and font size.",
-            "Portrait Auras: a visual CC Catalog lists over a thousand crowd control spells by type with icon, name and class, with search, and lets you switch each one off. Retail and Forever each list the spells their own game has, and you can add your own spell IDs.",
-            "Party Frames: raid and arena frames can show the same portrait auras, with their own switches.",
-            "Forever style: the resting glow around the portrait now follows the whole plate art, including the bronze corner.",
-        },
-    },
     ["0.1.6"] = {
         version = "0.1.6",
         published = "2026-10-17",
@@ -1302,7 +1290,7 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.1.7"
+        or "0.1.6"
     -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
@@ -2382,7 +2370,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.7")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.6")))
     end
     if menu._foreverLogo then
         local VT = KT.VisualThemes
@@ -4021,12 +4009,12 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.7") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.6") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.1.7"
+	f._versionValue = KT.VERSION or "0.1.6"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving
