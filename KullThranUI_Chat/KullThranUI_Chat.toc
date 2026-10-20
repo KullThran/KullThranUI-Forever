@@ -3,10 +3,11 @@
 ## Title: KullThranUI - Chat
 ## Notes: KullThranUI module: Chat
 ## Author: KullThran
-## Version: 0.1.4
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
 Init.lua
 Modules\Chat.lua
+Modules\Chat_Styles.lua
 Modules\Chat_Options.lua

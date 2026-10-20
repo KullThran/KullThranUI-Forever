@@ -3,12 +3,12 @@
 ## Title: KullThranUI
 ## Notes: UI Replacement Logic
 ## Author: KullThran
-## Version: 0.1.4
+## Version: 1.0.0
 ## X-Curse-Project-ID: 1700914
 ## X-Wago-ID: rNkyW8Ka
 ## SavedVariables: KullThranDB, KullThranUINameplatesDB_Forever, KUIAuraRemindersDB_Forever, KUISpellDurationDB_Forever
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
-## OptionalDeps: Blizzard_DamageMeter, Masque, Grid2, Grid2Options, UnhaltedUnitFrames, Chattynator
+## OptionalDeps: Blizzard_DamageMeter, TomTom
 
 # =============================================================================
 # 1. LIBRARIES (Foundation)
@@ -82,6 +82,9 @@ SearchInput.lua
 Options.lua
 Core.lua
 Modules\PortraitCamera.lua
+Modules\PortraitAuraCatalogData.lua
+Modules\PortraitAuraCatalog.lua
+Modules\PortraitAuraShared.lua
 Locales\Core.lua
 Locales\Languages\enUS.lua
 Locales\Languages\esES.lua
@@ -105,12 +108,17 @@ Locales\Modules\OptionsCoverage.lua
 Locales\Modules\FontsColors.lua
 Locales\Modules\OptionsGaps.lua
 Locales\Modules\MinimapIcons.lua
+Locales\Modules\PortraitAuras.lua
+Locales\Modules\PartyPortraitAuras.lua
+Locales\Modules\AFKScreen.lua
 Locales\Modules\VisualStyles.lua
 Locales\Modules\CooldownManager.lua
 Locales\Modules\AuraReminders.lua
 Locales\Modules\DungeonTimer.lua
 Locales\Modules\DebuffTracker.lua
 Locales\Generated.lua
+Locales\Modules\PerfMonitor.lua
+Locales\Modules\TeleportMenu.lua
 Locales\Modules\Completion.lua
 Modules\Defaults\Defaults.lua
 
@@ -155,6 +163,7 @@ Modules\Profilehandlers\Profilehandlers.lua
 Modules\Profilehandlers\Profiledata.lua
 Modules\Profiler.lua
 Modules\CombatCPUProfiler.lua
+Modules\PerfMonitor.lua
 
 # --- EXTERNAL INTEGRATION ---
 # Modules\Grid2Integration.lua

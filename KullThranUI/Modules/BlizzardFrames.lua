@@ -1090,11 +1090,13 @@ function Mod:RegisterFrames()
         local durabilityProxy = CreateUnlockProxy("KT_DurabilityUnlockProxy", "Equipment Durability", 60, 75)
         -- Forever reference layout: keep Equipment Durability in the lower-left area.
         -- These are the coordinates shown by Unlock Mode for the requested layout.
+        -- Anchored to the bottom centre (resolution independent) and above the
+        -- Experience Bar (default y 98 + 24 high) so neither overlaps the action bar.
         local durabilityDefault = {
-            point = "TOPLEFT",
-            relativePoint = "TOPLEFT",
-            x = 745,
-            y = -1138,
+            point = "BOTTOM",
+            relativePoint = "BOTTOM",
+            x = -175,
+            y = 130,
         }
         -- Do not capture Blizzard's transient native anchor as the default.
         local durabilitySaved = framesDB["durability_frame"]

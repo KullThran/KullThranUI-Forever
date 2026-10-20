@@ -1,15 +1,15 @@
 local KT = LibStub("AceAddon-3.0"):GetAddon("KullThranUI")
---- @type BlizzMoveAPI
-local BlizzMoveAPI = KT and KT.BlizzMoveAPI
-if not BlizzMoveAPI then return; end
+--- @type KUIMoveAPI
+local KUIMoveAPI = KT and KT.KUIMoveAPI
+if not KUIMoveAPI then return; end
 
 -- Forever has the mainline client shape, but it does not ship the Retail
 -- frame catalogue. Keep this list deliberately small and classic-first:
 -- registering Retail-only globals here makes the move options misleading and
 -- can make a frame appear to be movable when it is not present at all.
-local BlizzMove = KT:GetModule("BlizzMove", true)
-if BlizzMove and BlizzMove.isForever then
-    BlizzMoveAPI:RegisterFrames({
+local KUIMove = KT:GetModule("KUIMove", true)
+if KUIMove and KUIMove.isForever then
+    KUIMoveAPI:RegisterFrames({
         ["AddonList"] = {},
         ["BankFrame"] = {},
         ["BattlefieldFrame"] = {},
@@ -58,7 +58,7 @@ if BlizzMove and BlizzMove.isForever then
         ["WorldStateScoreFrame"] = {},
     })
 
-    BlizzMoveAPI:RegisterAddOnFrames({
+    KUIMoveAPI:RegisterAddOnFrames({
         ["Blizzard_AuctionUI"] = {
             ["AuctionFrame"] = {},
             ["AuctionFrameBrowse"] = {},
@@ -110,7 +110,7 @@ if BlizzMove and BlizzMove.isForever then
     return
 end
 
-BlizzMoveAPI:RegisterFrames({
+KUIMoveAPI:RegisterFrames({
     ["AddonList"] =
     {
         MinVersion = 0,
@@ -487,7 +487,7 @@ BlizzMoveAPI:RegisterFrames({
     ["PVEFrame"] =
     {
         MinVersion = 30403,
-        MaxVersion = 120001, -- Midnight retail: LFGList secure payloads taint when BlizzMove hooks PVEFrame
+        MaxVersion = 120001, -- Midnight retail: LFGList secure payloads taint when the window mover hooks PVEFrame
         SilenceCompatabilityWarnings = true, -- frame exists in classic, but is not functional
     },
     ["PVPBannerFrame"] =
@@ -655,7 +655,7 @@ BlizzMoveAPI:RegisterFrames({
     },
 });
 
-BlizzMoveAPI:RegisterAddOnFrames({
+KUIMoveAPI:RegisterAddOnFrames({
     ["Blizzard_AccountStore"] =
     {
         ["AccountStoreFrame"] =
