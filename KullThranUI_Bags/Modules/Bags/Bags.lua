@@ -60,9 +60,9 @@ local KT_BAGS_BACKGROUND_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\K
 local KT_BAGS_KUI_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\KUISettingsSurface.png"
 -- Grid panel background art, 5% above the old 0.42.
 local KT_BAGS_GRID_ART_ALPHA = 0.44
--- Dark wash over the KUI texture. 0.35 leaves the texture 5% more visible
--- than the old 0.38 wash (0.65 / 0.62).
-local KT_BAGS_TEXTURE_DARKENING = 0.35
+-- Dark wash over the KUI texture, matched to Retail (0.60, 5% lighter than
+-- Retail's old 0.62). Forever used to wash at only 0.38.
+local KT_BAGS_TEXTURE_DARKENING = 0.60
 
 local function KT_Bags_ApplyKuiSurface(frame)
     if not (frame and frame.CreateTexture) then
@@ -102,7 +102,7 @@ local function KT_Bags_ApplyKuiSurface(frame)
     artwork:SetAlpha(0.86)
     artwork:Show()
     
-    wash:SetColorTexture(0, 0, 0, KT_BAGS_TEXTURE_DARKENING)
+    wash:SetColorTexture(0.008, 0.010, 0.016, KT_BAGS_TEXTURE_DARKENING)
     wash:Show()
     
     if frame.KT_BagsKUIFit then frame.KT_BagsKUIFit() end
@@ -591,30 +591,30 @@ local KT_BAGS_CATEGORY_ICONS = {
     onebag = "Interface\\Icons\\INV_Misc_Bag_08",
     watched = { atlas = "friendslist-recentallies-Pin-yellow" },
     default_auto_recents = { atlas = "auctionhouse-icon-clock" },
-    -- Category art follows EllesmereUI's file IDs, which it also ships on
-    -- WoW Forever (Housing only exists on Retail).
+    -- Forever uses classic icon paths: Retail-only file IDs render as a
+    -- green square in this client.
     default_auto_equipment_sets = 4871338,
     default_hearthstone = 134414,
     default_keystone = 525134,
     default_potion = 134730,
     default_food = 133971,
-    default_consumable = 7548911,
+    default_consumable = "Interface\\Icons\\INV_Potion_32",
     default_questitem = { atlas = "Crosshair_Quest_64" },
-    default_weapon = 3751725,
-    default_armor = 4382688,
-    default_reagent = 3622222,
+    default_weapon = "Interface\\Icons\\INV_Sword_04",
+    default_armor = "Interface\\Icons\\INV_Chest_Chain_05",
+    default_reagent = "Interface\\Icons\\INV_Misc_Dust_02",
     default_tradegoods = 132996,
-    default_profession = 7548925,
+    default_profession = "Interface\\Icons\\Trade_Engineering",
     default_recipe = 134939,
-    default_housing = 7726459,
-    default_gem = 7549094,
-    default_itemenhancement = 7549094,
+    default_housing = 134453,
+    default_gem = "Interface\\Icons\\INV_Misc_Gem_01",
+    default_itemenhancement = "Interface\\Icons\\INV_Enchant_EssenceMagicLarge",
     default_container = "Interface\\Icons\\INV_Misc_Bag_10",
     default_key = 134237,
-    default_miscellaneous = 5524917,
+    default_miscellaneous = "Interface\\Icons\\INV_Misc_QuestionMark",
     default_battlepet = 656579,
     default_toy = 454046,
-    default_other = 5524917,
+    default_other = "Interface\\Icons\\INV_Misc_QuestionMark",
     -- The game's own junk marker is the gold coin it badges grey items with.
     default_junk = 133784,
     default_special_empty = "Interface\\PaperDoll\\UI-Backpack-EmptySlot",
