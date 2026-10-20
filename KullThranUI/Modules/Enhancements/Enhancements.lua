@@ -613,7 +613,7 @@ local DEFAULTS = {
         backgroundColor = { r = 0.012, g = 0.014, b = 0.02, a = 0.94 },
         font = "Interface\\AddOns\\KullThranUI\\Libraries\\font\\AAA_ITC_Avant_Garde.ttf",
         barTexture = "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\Melli.tga",
-        layoutVersion = 8,
+        layoutVersion = 9,
         position = { point = "RIGHT", relativePoint = "RIGHT", x = -80, y = -300 },
         windows = {},
     },

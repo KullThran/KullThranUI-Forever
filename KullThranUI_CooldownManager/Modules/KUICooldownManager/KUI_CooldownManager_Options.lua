@@ -2799,6 +2799,10 @@ local function BuildCustomTrackerTab(sc, W, startY, p)
         ); y = y + h
 
         if tk == "potion" then
+            -- Vanilla potions have no quality tiers: Forever only offers the
+            -- highest/most choices.
+            local qualityChoices = { "highest", "most", "1", "2", "3" }
+            if ns.KUI_IS_FOREVER then qualityChoices = { "highest", "most" } end
             _, h = W:Dropdown(sc, LText("Potion Quality"), -y,
                 {
                     highest = LText("Highest Available"),
@@ -2817,7 +2821,7 @@ local function BuildCustomTrackerTab(sc, W, startY, p)
                     end
                     Refresh()
                 end,
-                { "highest", "most", "1", "2", "3" }
+                qualityChoices
             ); y = y + h
 
             _, h = W:Toggle(sc, LText("Track Mana Potions"), -y,

@@ -958,10 +958,69 @@ local function ShowDiscordPopup()
     end
 end
 -- AUTO-CHANGELOG-LATEST:BEGIN
-local CHANGELOG_LATEST_ARCHIVED_VERSION = "0.1.4"
+local CHANGELOG_LATEST_ARCHIVED_VERSION = "1.0.0"
 -- AUTO-CHANGELOG-LATEST:END
 -- AUTO-CHANGELOG:BEGIN
 local CHANGELOG_ENTRIES = {
+    ["1.0.0"] = {
+        version = "1.0.0",
+        published = "2026-10-18",
+        sourceLabel = "Forever",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Forever leaves beta: this is the first stable release.",
+            "Chat: four chat styles (KUI Style, Forever, Retail and Classic), each with its own frame, tabs, buttons and input bar. Every Visual Style remembers its own choice and whispers keep their colours.",
+            "Chat: the Combat tab shows only the combat log (no pet, loot or system messages) and its My actions / What happened to me? buttons follow the chat style.",
+            "Raid Check (Enhancements): after a ready check it lists who is missing food, flask, augment rune or pre-pot and lets you report it to the group. Open it with /ktraidcheck.",
+            "Bulk Buy (Enhancements): Shift-click a stackable vendor item to buy a whole quantity in one go.",
+            "Nameplates: optional distance over enemy nameplates, shown as range brackets, with format, colour and scope options.",
+            "Unit Frames: new Portrait Auras tab. The most important aura of Player, Target, Focus, Pet, Target of Target and Focus Target shows on its portrait (crowd control, disarms, defensives, important spells), with a live preview. A CC Catalog lists the crowd control spells of your game with search and a switch per spell, and raid and arena frames can show the same auras.",
+            "Unit Frames: Druid alternate mana bar under the Player frame while in cat, bear or moonkin form (off by default on the Retail client). The cast bar sits below it and no longer overlaps the power bar.",
+            "Unit Frames: Forever Portrait Frame option (bronze ornament or plain ring), Forever combo points, and the style cards can be folded away.",
+            "Cast Bar: Retail and Forever use Blizzard-style art with the spell name on a plate, identical on both clients.",
+            "Portraits: Druid forms are framed correctly (cat, bear, moonkin, travel and flight).",
+            "Damage Meter: native styles keep their panel and header, and the meter drops below the maximized world map.",
+            "Unlock Mode: the right-click menu has a Scale slider for each element.",
+            "Skins: the Auction House marks the selected category again.",
+            "Minimap: the zone name shows even when it loads late.",
+        },
+    },
+    ["0.1.6"] = {
+        version = "0.1.6",
+        published = "2026-10-17",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Forever style reworked for the new Forever art: Player, Target, Focus, Target of Target, Pet, Focus Target and Party Frames fit the new three-band plate (bars, names, icons and portraits) and keep the round portrait ring. It looks the same on the Retail and Forever clients.",
+            "Retail and Forever styles use Blizzard's own bar fill on Unit Frames, Raid Frames and Resource Bars, without the baked edge or the diagonal end that left gaps.",
+            "Resource Bars: smoother fill and no stale value after a change of resource or talents.",
+            "Portraits face the right way in every Druid form and for class icons.",
+            "Damage Meter: the Classic style uses the real Recount bar texture in the live preview, the options and the installer, and Retail and Forever use Blizzard-style bars.",
+            "Action Bars: end caps span the whole bar group up to the bags, with a new End Cap Width option (Bar Group or Bar 1). Action buttons and Cooldown Manager icons glow following their shape instead of a plain swipe.",
+            "Cooldown Manager: the KUI Tracker shows again in the outdoor world.",
+            "Chat: print and debug output shows in the chat frame again, not only in the copy window.",
+            "Unit Frames: in KUI Style the target buffs clear the health bar and the combo points circle the portrait. Aura timers use the KUI global font and sit on the icon, stack counts are smaller and buff rows keep their distance.",
+            "Combo points under the Player frame use Forever's bronze rings in the Forever style, on any client.",
+        },
+    },
+    ["0.1.5"] = {
+        version = "0.1.5",
+        published = "2026-10-14",
+        sourceLabel = "Forever Beta",
+        sourceUrl = "https://github.com/KullThran/KullThranUI-Forever/releases",
+        notes = {
+            "Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; unusable ones are dimmed.",
+            "Flight Master: clicking a flight point in the guide puts a TomTom arrow on it. Without TomTom it uses the map waypoint.",
+            "AFK Screen: new page in Enhancements. When you go AFK the interface hides, the camera turns slowly and a bottom bar shows your character, guild, time away and your model, with whispers and guild chat. Any key, combat, or a group finder or battleground invite closes it.",
+            "Performance: Party Frames do less work in raids (health, power and shield updates are separate, power events only while a power bar is shown), Nameplates stop re-laying out friendly plates every tick, and the Cooldown Manager skips icons without visibility rules.",
+            "New /kperf window with CPU and memory per module, with snapshots to compare before and after a change.",
+            "Unlock Mode: Focus and Focus Target no longer drift away from their mover while the unit is hidden, and Reset Position works after a drag.",
+            "Unit Frames: Text Size now scales the text of the Blizzard-style looks. In Classic the name window takes the class color when health is not class colored, and the raid marker sits on top of the portrait in the Blizzard-style looks.",
+            "Skins: popups use the Settings artwork, breath and fatigue bars get striped bars in Blizzard's colors, and the Professions rank bar no longer shows a floating flare over an empty bar.",
+            "Cooldown Manager: a potion quality saved from a Retail profile no longer hides every potion; Forever only offers Highest and Most.",
+            "Cooldown Manager: buff icons appear as soon as you gain the buff (they could wait until combat), and no longer stay hidden for seconds when combat starts.",
+        },
+    },
     ["0.1.4"] = {
         version = "0.1.4",
         published = "2026-10-12",
@@ -1007,7 +1066,7 @@ local CHANGELOG_ENTRIES = {
             "Unit Frames: AFK, Dead, Ghost and Offline badges update correctly when you switch target or focus.",
             "Unit Frames: names written in Korean, Chinese or Japanese characters display correctly instead of empty boxes.",
             "Target auras refresh reliably after target changes.",
-            "Bags: using an item from the bags in combat no longer triggers a blocked-action warning. The bag updates as soon as combat ends.",
+            "Bags: using an item from the bags in combat no longer triggers a blocked-action warning. The bag updates as soon as combat ends.",
             "Bags: item categories (Equipment, Consumables, Reagents, Junk and the rest) are now built into KullThranUI and work on their own.",
             "Nameplates: KUI style bars no longer keep the fill texture left by a previously applied style, and group threat colors stay readable.",
             "Teleport Menu shows destination names in your client's language.",
@@ -1254,12 +1313,12 @@ local CHANGELOG_ENTRIES = {
 local function GetCurrentKUIVersion()
     local ver = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
         or KT.VERSION
-        or "0.1.4"
+        or "0.1.6"
     -- When loaded from the source tree without the release packager the TOC
     -- still contains the literal "@project-version@" token.  Fall back to the
     -- hardcoded release version so the changelog and options never display it.
     if ver and ver:find("@", 1, true) then
-        ver = "0.1.4"
+        ver = "0.1.5"
     end
     return ver
 end
@@ -2334,7 +2393,7 @@ local function UpdateMenuThemeVisuals(menu)
         local vr = math.floor((accent.r or 1) * 255 + 0.5)
         local vg = math.floor((accent.g or 0) * 255 + 0.5)
         local vb = math.floor((accent.b or 0.333) * 255 + 0.5)
-	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.4")))
+	menu._versionText:SetText(string.format("|cff%02x%02x%02xv%s|r", vr, vg, vb, menu._versionValue or (KT.VERSION or "0.1.6")))
     end
     if menu._foreverLogo then
         local VT = KT.VisualThemes
@@ -3973,18 +4032,18 @@ local function CreateMenuFrame()
     local titleTex = f:CreateFontString(nil, "OVERLAY")
     titleTex:SetFont(KT.FONT_PATH, 13, "OUTLINE")
     local verColor = string.format("%02x%02x%02x", accentR*255, accentG*255, accentB*255)
-	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.4") .. "|r")
+	titleTex:SetText("|cff" .. verColor .. "v" .. (KT.VERSION or "0.1.6") .. "|r")
     titleTex:SetPoint("TOPLEFT", f, "TOPLEFT", 94, -68)
     titleTex:SetWidth(190)
     titleTex:SetJustifyH("LEFT")
     f._versionText = titleTex
-	f._versionValue = KT.VERSION or "0.1.4"
+	f._versionValue = KT.VERSION or "0.1.6"
 
     local foreverLogo = f:CreateTexture(nil, "OVERLAY")
     -- Match the visible height of the 13px version label while preserving
     -- Forever.png's wide wordmark proportions.
-    foreverLogo:SetSize(58, 14)
-    foreverLogo:SetPoint("TOPLEFT", f, "TOPLEFT", 134, -65)
+    foreverLogo:SetSize(48, 12)
+    foreverLogo:SetPoint("TOPLEFT", f, "TOPLEFT", 28, -79)
     foreverLogo:SetTexture("Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\Forever.png")
     foreverLogo:SetTexCoord(0, 1, 0, 1)
     if KT.VisualThemes and KT.VisualThemes.GetRenderedTheme and KT.VisualThemes:GetRenderedTheme() == "forever" then
@@ -5148,7 +5207,7 @@ local PROFILE_MODULE_ICON_MAP = {
     objectivetracker = "Tracker",
     nameplates = "Nameplates",
     aurareminders = "AuraReminders",
-    blizzmove = "UnlockMode",
+    kuimove = "UnlockMode",
     cursor = "Cursor",
     teleportmenu = "TeleportMenu",
     flightmaster = "FlightMaster",

@@ -52,9 +52,12 @@ local DAMAGE_METER_FONT_PATHS = {
 local function DAMAGE_METER_RESOLVED_FONT()
     return (KT and KT.ResolveStoredFontPath and KT:ResolveStoredFontPath(DAMAGE_METER_FONT)) or DAMAGE_METER_FONT
 end
+-- The Classic style's bar texture (BantoBar), its real look.
+local RECOUNT_BAR_TEXTURE = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\damagemeter\\BantoBar.tga"
 local DAMAGE_METER_TEXTURE_PATHS = {
     [BAR_TEXTURE] = true,
     ["Interface\\TargetingFrame\\UI-StatusBar"] = true,
+    [RECOUNT_BAR_TEXTURE] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\texture\\MelliDark.tga"] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Clean.blp"] = true,
     ["Interface\\AddOns\\KullThranUI\\Libraries\\WeakAuras_SharedMedia\\Textures\\Statusbar_Stripes_Thin.blp"] = true,
@@ -232,11 +235,11 @@ end
 -- Each Visual Style re-skins the meter's chrome (panel, header, rows, icon
 -- frames) to match a reference look; the data, layout metrics and class
 -- colors are untouched. kui has no entry and keeps its own flat look.
---   classic: Recount-style red title bar on a dark brown panel.
+--   classic: red title bar on a dark brown panel.
 --   retail:  Blizzard's own Damage Meter: rounded dark panel, gold title,
 --            black-outlined bars and gold-framed class icons.
---   forever: retail's structure recolored to bronze, with a bronze inner
---            frame around the rows.
+--   forever: retail's structure and native bar art recolored to bronze,
+--            with a bronze border around the whole frame.
 -- ============================================================================
 local METER_SKINS = {
     classic = {
@@ -417,6 +420,33 @@ local function GetConfig()
         end
         db.damageMeter.layoutVersion = 8
     end
+    if layoutVersion < 9 then
+        -- v9 (the position repair above already used 8 on this client): a native style
+        -- (Forever / Retail / Classic) IS its panel and header: repair the hidden
+        -- background that older versions left behind (separate profile per client).
+        local vt = KT.VisualThemes
+        local style = rawget(db.damageMeter, "visualStyle") or (vt and vt.GetRenderedTheme and vt:GetRenderedTheme())
+        if style and style ~= "kui" then
+            db.damageMeter.showBackground = true
+            for _, windowConfig in ipairs(db.damageMeter.windows or {}) do
+                if type(windowConfig) == "table" then windowConfig.showBackground = true end
+            end
+        end
+        db.damageMeter.layoutVersion = 9
+    end
+    -- Classic used to seed Blizzard's UI-StatusBar; its real look is the
+    -- BantoBar texture. Move only the old seeded value, never a texture the user picked.
+    if not rawget(db.damageMeter, "_ktRecountTextureV1") then
+        db.damageMeter._ktRecountTextureV1 = true
+        local old = "Interface\\TargetingFrame\\UI-StatusBar"
+        local slots = rawget(db.damageMeter, "_ktDamageMeterStyleSlots")
+        if type(slots) == "table" and type(slots.classic) == "table" and slots.classic.barTexture == old then
+            slots.classic.barTexture = RECOUNT_BAR_TEXTURE
+        end
+        if rawget(db.damageMeter, "visualStyle") == "classic" and db.damageMeter.barTexture == old then
+            db.damageMeter.barTexture = RECOUNT_BAR_TEXTURE
+        end
+    end
     db.damageMeter.position = db.damageMeter.position
         or { point = "RIGHT", relativePoint = "RIGHT", x = -80, y = -300 }
     return db.damageMeter
@@ -440,6 +470,7 @@ function Mod:SetDamageMeterStyle(key)
     local appearance = cfg._ktDamageMeterStyleSlots[key]
     cfg.barTexture = appearance and appearance.barTexture or (key == "kui"
         and "Interface\\AddOns\\KullThranUI\\Libraries\\texture\\Melli.tga"
+        or (key == "classic" and RECOUNT_BAR_TEXTURE)
         or "Interface\\TargetingFrame\\UI-StatusBar")
     if appearance then cfg.showBackground = appearance.showBackground else cfg.showBackground = true end
     cfg.visualStyle = key
@@ -2931,8 +2962,13 @@ function Mod.ApplyDamageMeterAtlasArt(frame, cfg, themeKey, iconGap)
         edge:ClearAllPoints()
         edge:SetPoint("TOPLEFT", row.background, "TOPLEFT", -2,2)
         edge:SetPoint("BOTTOMRIGHT", row.background, "BOTTOMRIGHT", 2,-2)
-        atlas(edge, retail and "ui-damagemeters-bar-shadowedge")
-        if retail then
+        -- Forever bars share Retail's native bar art; the bronze chrome stays
+        -- on the panel. Classic takes the swing-timer ornament instead.
+        local nativeBars = retail or forever
+        if atlas(edge, nativeBars and "ui-damagemeters-bar-shadowedge") and forever then
+            for _, texture in ipairs(row._skinBarEdges or {}) do texture:Hide() end
+        end
+        if nativeBars then
             -- Preview bars are textures; live bars are StatusBars. Setting the
             -- atlas on the fill preserves the value and the live class tint.
             local fill = row.bar.GetStatusBarTexture and row.bar:GetStatusBarTexture() or row.bar
@@ -2941,7 +2977,11 @@ function Mod.ApplyDamageMeterAtlasArt(frame, cfg, themeKey, iconGap)
                 atlas(fill, "UI-HUD-CoolDownManager-Bar")
                 fill:SetVertexColor(r,g,b,a)
             end
-            atlas(row.background, "ui-damagemeters-bar-shadowbg")
+            if retail or (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ui-damagemeters-bar-shadowbg")) then
+                atlas(row.background, "ui-damagemeters-bar-shadowbg")
+            end
+        end
+        if retail then
             if NumberFontNormal then
                 for _, key in ipairs({"rank","name","rate","amount","value"}) do
                     if row[key] then row[key]:SetFontObject(NumberFontNormal) end
@@ -2952,10 +2992,9 @@ function Mod.ApplyDamageMeterAtlasArt(frame, cfg, themeKey, iconGap)
         ornament:ClearAllPoints()
         ornament:SetPoint("TOPLEFT", row.background, "TOPLEFT", -4,1)
         ornament:SetPoint("BOTTOMRIGHT", row.background, "BOTTOMRIGHT", 4,-1)
-        atlas(ornament, forever and "ui-swingtimerbar-frame")
-        if forever and ornament:IsShown() then
-            for _, texture in ipairs(row._skinBarEdges or {}) do texture:Hide() end
-        end
+        -- No style draws the swing-timer ornament any more: it is Forever's
+        -- bronze art and made Classic's bars read as Forever.
+        atlas(ornament, nil)
     end
     local handle = frame.resizeHandle
     if handle then
@@ -4035,13 +4074,54 @@ function Mod:RegisterDamageMeterDirectDrag(frame)
     frame.damageMeterDirectDragRegistered = true
 end
 
+-- Meters sit above the world map in DIALOG strata, which hid the maximized map
+-- behind them. While the map is open and maximized they drop below it.
+function Mod:GetMeterStrata()
+    local map = _G.WorldMapFrame
+    if map and map:IsShown() and (not map.IsMaximized or map:IsMaximized()) then
+        return "MEDIUM"
+    end
+    return "DIALOG"
+end
+
+function Mod:RefreshMeterStrata()
+    local strata = self:GetMeterStrata()
+    for frame in pairs(self._meterFrames or {}) do
+        if frame:GetFrameStrata() ~= strata then frame:SetFrameStrata(strata) end
+    end
+end
+
+function Mod:HookWorldMapStrata()
+    local map = _G.WorldMapFrame
+    if not map or self._worldMapStrataHooked then return end
+    self._worldMapStrataHooked = true
+    local function refresh() Mod:RefreshMeterStrata() end
+    map:HookScript("OnShow", refresh)
+    map:HookScript("OnHide", refresh)
+    for _, method in ipairs({ "Maximize", "Minimize", "SynchronizeDisplayState" }) do
+        if type(map[method]) == "function" then hooksecurefunc(map, method, refresh) end
+    end
+end
+
 local function CreateDamageMeterFrame(self, frameName, damageMeterConfig)
     local frame = CreateFrame("Frame", frameName, UIParent, "BackdropTemplate")
+    self._meterFrames = self._meterFrames or setmetatable({}, { __mode = "k" })
+    self._meterFrames[frame] = true
+    self:HookWorldMapStrata()
+    if not self._worldMapStrataWatcher then
+        -- WorldMapFrame is load-on-demand on some clients: hook it when it appears.
+        local watcher = CreateFrame("Frame")
+        watcher:RegisterEvent("ADDON_LOADED")
+        watcher:SetScript("OnEvent", function(_, _, name)
+            if name == "Blizzard_WorldMap" then Mod:HookWorldMapStrata(); Mod:RefreshMeterStrata() end
+        end)
+        self._worldMapStrataWatcher = watcher
+    end
     frame.damageMeterConfig = damageMeterConfig
     frame.selectedSessionID = damageMeterConfig.selectedSessionID
     frame.selectedSessionLabel = damageMeterConfig.selectedSessionLabel
     frame.selectedHistoryKey = damageMeterConfig.selectedHistoryKey
-    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameStrata(self:GetMeterStrata())
     frame:SetFrameLevel(100)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
@@ -4051,7 +4131,7 @@ local function CreateDamageMeterFrame(self, frameName, damageMeterConfig)
         HideDropdown(activeDropdown)
     end)
     frame:HookScript("OnShow", function(self)
-        self:SetFrameStrata("DIALOG")
+        self:SetFrameStrata(Mod:GetMeterStrata())
         self:SetFrameLevel(100)
         if self.Raise then self:Raise() end
     end)

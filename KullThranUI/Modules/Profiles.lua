@@ -54,7 +54,7 @@ local MODULE_DEFS = {
     },
     { id = "debufftracker", label = "Debuff Tracker", keys = {}, nested = { enhancements = { "debuffTracker" } }, foreverOnly = true },
     { id = "objectivetracker", label = "Objective Tracker", keys = { "objectiveTracker" } },
-    { id = "blizzmove", label = "BlizzMove", keys = { "blizzMove" }, importKeys = { "BlizzMove" } },
+    { id = "kuimove", label = "KUIMove", keys = { "kuiMove" }, importKeys = { "kuiMove", "blizzMove", "BlizzMove", "KUIMove" } },
     { id = "cursor", label = "Cursor", keys = { "cursor" } },
     { id = "teleportmenu", label = "Teleport Menu", keys = { "teleportMenu" } },
     { id = "armory", label = "Armory", keys = { "armory" }, importKeys = { "inspectArmory" } },
@@ -1486,12 +1486,12 @@ local function BuildTransferProfile(profileData)
     for key, value in pairs(profileData or {}) do
         if key == "interruptsGlow" then
             snapshot[key] = SanitizeInterruptGlowProfile(value)
-        elseif key ~= "progressBars" and key ~= "BlizzMove" and key ~= "dandersIntegration" and key ~= "_flavorMeta" then
+        elseif key ~= "progressBars" and key ~= "kuiMove" and key ~= "blizzMove" and key ~= "BlizzMove" and key ~= "KUIMove" and key ~= "dandersIntegration" and key ~= "_flavorMeta" then
             snapshot[key] = DeepCopy(value)
         end
     end
-    if snapshot.blizzMove == nil and type(profileData) == "table" and profileData.BlizzMove ~= nil then
-        snapshot.blizzMove = DeepCopy(profileData.BlizzMove)
+    if snapshot.kuiMove == nil and type(profileData) == "table" and (profileData.kuiMove or profileData.blizzMove or profileData.BlizzMove or profileData.KUIMove) ~= nil then
+        snapshot.kuiMove = DeepCopy(profileData.kuiMove or profileData.blizzMove or profileData.BlizzMove or profileData.KUIMove)
     end
     return snapshot
 end
@@ -1629,7 +1629,7 @@ function Mod:ApplyModules(moduleData)
             end
             for _, key in ipairs(definition.importKeys or {}) do
                 if snapshot[key] ~= nil then
-                    local targetKey = key == "BlizzMove" and "blizzMove" or key
+                    local targetKey = (key == "blizzMove" or key == "BlizzMove" or key == "KUIMove") and "kuiMove" or key
                     root[targetKey] = DeepCopy(snapshot[key])
                 end
             end

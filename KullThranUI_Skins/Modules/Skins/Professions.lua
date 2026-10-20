@@ -907,31 +907,19 @@ local function SkinProfessions()
         if CraftingPage.ViewGuildCraftersButton then S:HandleButton(CraftingPage.ViewGuildCraftersButton) end
         if CraftingPage.LinkButton then S:HandleButton(CraftingPage.LinkButton) end
         
-        if CraftingPage.RankBar then
-            S:StripTextures(CraftingPage.RankBar)
-            S:HandleStatusBar(CraftingPage.RankBar)
-            CraftingPage.RankBar:SetHeight(14)
-            if CraftingPage.RankBar.Border then CraftingPage.RankBar.Border:Hide() end
-            if CraftingPage.RankBar.Background then CraftingPage.RankBar.Background:Hide() end
-
-            -- RankBar is not a StatusBar: Blizzard draws progress with the Fill texture
-            -- clipped by Mask (it animates Mask's width), so both must stay visible after
-            -- StripTextures and fit inside the 14px skinned bar.
-            local rankBar = CraftingPage.RankBar
-            if rankBar.Fill then
-                local fillWidth = (rankBar:GetWidth() or 453) - 2
-                rankBar.Fill:SetAlpha(1)
-                rankBar.Fill:ClearAllPoints()
-                rankBar.Fill:SetPoint("TOPLEFT", rankBar, "TOPLEFT", 1, -1)
-                rankBar.Fill:SetSize(fillWidth, 12)
-                if rankBar.Mask then
-                    rankBar.Mask:SetAlpha(1)
-                    rankBar.Mask:ClearAllPoints()
-                    rankBar.Mask:SetPoint("LEFT", rankBar.Fill, "LEFT", 0, 0)
-                    rankBar.Mask:SetHeight(12)
-                    if rankBar.ratio then rankBar.Mask:SetWidth(fillWidth * rankBar.ratio) end
-                end
+        local rankBar = CraftingPage.RankBar
+        if rankBar and not rankBar._ktRankBarSkinned then
+            -- RankBar is a plain Frame, not a StatusBar: its progress is the
+            -- Fill texture clipped by Mask, with Flare riding the edge. Keep
+            -- those native layers and only replace the frame art; stripping
+            -- them left the Flare floating over an empty bar.
+            if rankBar.Border then rankBar.Border:Hide() end
+            if rankBar.Background then rankBar.Background:Hide() end
+            S:CreateBackdrop(rankBar)
+            if rankBar.backdrop and rankBar.Fill then
+                S:SetOutside(rankBar.backdrop, rankBar.Fill, 0)
             end
+            rankBar._ktRankBarSkinned = true
         end
     end
 
