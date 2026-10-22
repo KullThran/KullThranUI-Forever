@@ -29,9 +29,8 @@ for _,forever in ipairs({false,true}) do
  KT.IS_FOREVER=forever
  for _,style in ipairs({"kui","classic","forever","retail"}) do
   theme=style;queried=0;frame:UpdateLevel()
-  if not forever and style=="kui" then
-   assert(not level.shown and level.text=="" and queried==0)
-  else assert(level.shown and level.text=="90") end
+  -- Forever workspace: the level shows in every style, KUI included.
+  assert(level.shown and level.text=="90")
  end
 end
-print("PASS: Retail KUI nameplate level hidden; other themes and Forever retained")
+print("PASS: Forever nameplate level shown in every style, KUI included")

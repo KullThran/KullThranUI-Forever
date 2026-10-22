@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Enhancements
 ## Notes: KullThranUI module: Enhancements
 ## Author: KullThran
-## Version: 1.0.0
+## Version: 1.0.1
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 
@@ -25,6 +25,7 @@ Init.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_LootDebug.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_DamageMeter.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_DamageMeterControls.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_QOL.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_BulkBuy.lua
 ..\KullThranUI\Modules\Enhancements\Enhancements_RaidCheck.lua

@@ -3,7 +3,7 @@
 ## Title: KullThranUI - Inspect Armory
 ## Notes: KullThranUI module: Inspect Armory
 ## Author: KullThran
-## Version: 1.0.0
+## Version: 1.0.1
 ## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
 ## Dependencies: KullThranUI
 

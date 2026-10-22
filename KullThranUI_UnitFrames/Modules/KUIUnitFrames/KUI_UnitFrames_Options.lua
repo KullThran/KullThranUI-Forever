@@ -1133,7 +1133,7 @@ local function BuildTabBar(sc, yOff)
     container:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -20, yOff)
     container:Show()
 
-    -- Shared uiverse-style nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
+    -- Shared nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
     local usedH = KT.NavTabs.Populate(container, tabs, {
         selectedId = ufActiveTab,
         width = math.max(1, GetSCSafeWidth(sc) - 30),
@@ -1615,6 +1615,33 @@ local function ApplyPreviewUnitBase(frame, unitKey, settings, globalDB, nameText
     end
 
     ns.ApplyPreview3D(frame, unitKey, settings, isCircular, portraitWidth, showPortrait, false)
+    -- KUI Style shows the level only on the portrait, centred on its bottom
+    -- edge (same as the live frames); without a portrait it shows none.
+    if frame.levelText and ActiveVisualTheme() == "kui" and showPortrait
+        and globalDB.showCharacterLevel ~= false then
+        -- Host above the portrait (and its 3D model) so the number draws over it.
+        local host = frame._kuiPreviewLevelHost
+        if not host then
+            host = CreateFrame("Frame", nil, frame.portraitFrame)
+            host:SetAllPoints(frame.portraitFrame)
+            frame._kuiPreviewLevelHost = host
+        end
+        host:SetFrameLevel(frame.portraitFrame:GetFrameLevel() + 20)
+        frame.levelText:SetParent(host)
+        frame.levelText:SetDrawLayer("OVERLAY", 7)
+        local levelOutline = globalDB.levelFontOutline
+        if levelOutline == "NONE" then levelOutline = "" end
+        frame.levelText:SetFont(PREVIEW_FONT, tonumber(globalDB.levelFontSize) or 11, levelOutline or "OUTLINE")
+        local levelKey, levelDefault = ns.LevelColorKey()
+        local levelColor = globalDB[levelKey] or levelDefault
+        frame.levelText:SetTextColor(levelColor.r or 1, levelColor.g or 1, levelColor.b or 1, levelColor.a or 1)
+        frame.levelText:SetSize(38, 14)
+        frame.levelText:SetJustifyH("CENTER")
+        frame.levelText:ClearAllPoints()
+        frame.levelText:SetPoint("CENTER", frame.portraitFrame, "BOTTOM", 0, 4)
+        frame.levelText:SetText(PreviewMaxLevel())
+        frame.levelText:Show()
+    end
     frame.health.bg:SetTexture(PREVIEW_BG)
     frame.health.bg:SetVertexColor(bgR, bgG, bgB, 1)
     frame.power:SetStatusBarTexture(ResolvePreviewBarTexture(settings.powerBarTexture or settings.healthBarTexture, PREVIEW_FILL))
@@ -2359,6 +2386,10 @@ local function AddCommonUnitControls(sc, unitKey, label, y, opts)
 end
 
 local function CreateOptionBlock(parent, title, x, y, width)
+    -- The core block (skinned card) when the core is loaded; this copy is the fallback.
+    if KT.Options and KT.Options.CreateOptionBlock then
+        return KT.Options.CreateOptionBlock(parent, title, x, y, width)
+    end
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetSize(width, 40)
     frame:SetPoint("TOPLEFT", x, y)
@@ -2716,12 +2747,12 @@ KT:RegisterPage("unitframes", "Unit Frames", 11, function(sc, W)
                 LEVEL_OUTLINE_ORDER); by = by + h
             _, h = W:ColorSwatch(container, 'Level Text Color', -by,
                 function()
-                    local c = db.levelColor or { r = 1, g = 0.82, b = 0.20, a = 1 }
+                    local key, default = ns.LevelColorKey(); local c = db[key] or default
                     return c.r, c.g, c.b, c.a
                 end,
                 function(r, g, b, a)
                     SetAndRefresh(function()
-                        db.levelColor = { r = r, g = g, b = b, a = a or 1 }
+                        db[ns.LevelColorKey()] = { r = r, g = g, b = b, a = a or 1 }
                     end)
                 end, false); by = by + h
             _, h = W:Slider(container, 'Level X Offset', -by,

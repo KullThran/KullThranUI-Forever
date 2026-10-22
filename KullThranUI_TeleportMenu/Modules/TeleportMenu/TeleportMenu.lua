@@ -1384,6 +1384,10 @@ function Mod:ApplyTeleportMinimapButtonStyle()
             region:SetAlpha(0)
         end
     end
+    local themedMinimap = KT:GetModule('Minimap', true)
+    if themedMinimap and themedMinimap.ApplyThemedSideIcons and themedMinimap.db then
+        themedMinimap:ApplyThemedSideIcons()
+    end
 end
 
 function Mod:SetupMinimapButton()

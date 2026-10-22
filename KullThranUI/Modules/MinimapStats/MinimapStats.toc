@@ -1,7 +1,7 @@
 ## Title: |cFF8080FFMinimap|rStats
 ## Interface: 16001
 ## AllowLoadGameType: camelot
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: MinimapStatsDB
 ## IconTexture: Interface\AddOns\MinimapStats\Media\MinimapStats.png
 ## X-Curse-Project-ID: 695388

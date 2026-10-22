@@ -53,3 +53,4 @@ ignore:
   - "*.out"
   - "*.ps1"
   - "*.py"
+  - "KullThranUI/Libraries/KUITextures/MenuSkins/_src"

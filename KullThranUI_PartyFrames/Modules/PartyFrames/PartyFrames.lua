@@ -3366,6 +3366,7 @@ ns.PF_Portrait.SetMask = function(button, style)
     if useMask then
         local maskName = style == "circular" and "circle_mask.tga" or "portrait_mask.tga"
         local maskPath = ns.PF_Portrait.media .. maskName
+        button._portraitMaskPath = maskPath
 
         -- Unit Frames inset the masks by one pixel so portrait art cannot leak
         -- through the transparent edge of the border.
@@ -3389,6 +3390,7 @@ ns.PF_Portrait.SetMask = function(button, style)
             button._portraitClassMaskAdded = true
         end
     else
+        button._portraitMaskPath = nil
         if button._portraitMaskAdded and button.portrait.RemoveMaskTexture then
             button.portrait:RemoveMaskTexture(button.portraitMask)
             if button.portraitBG and button.portraitBG.RemoveMaskTexture then
@@ -7539,7 +7541,20 @@ function Mod:OnAddonLoaded(_, addonName)
     end
 end
 
-function Mod:OnSpecChanged()
+-- PLAYER_SPECIALIZATION_CHANGED also fires for group members, and the player's
+-- own spec change arrives with ACTIVE_TALENT_GROUP_CHANGED and a burst of
+-- PLAYER_TALENT_UPDATE: one coalesced reset covers the whole burst.
+function Mod:OnSpecChanged(event, unit)
+    if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+    if self._ktSpecChangePending then return end
+    self._ktSpecChangePending = true
+    C_Timer.After(0.1, function()
+        self._ktSpecChangePending = nil
+        self:ApplySpecChange()
+    end)
+end
+
+function Mod:ApplySpecChange()
     self.auraCache = {}
     for _, mode in ipairs(MODE_ORDER) do
         for _, frame in ipairs(self.frames[mode] or {}) do

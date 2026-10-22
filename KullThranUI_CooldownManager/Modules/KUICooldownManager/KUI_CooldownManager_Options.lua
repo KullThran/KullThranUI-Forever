@@ -4154,7 +4154,7 @@ local function BuildCDMSubTabBar(sc, yOff)
     container:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -4, yOff)
     container:Show()
 
-    -- Shared uiverse-style nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
+    -- Shared nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
     local scW = sc:GetWidth() > 0 and sc:GetWidth() or 500
     local usedH = KT.NavTabs.Populate(container, subTabs, {
         localize = LText,
@@ -5016,26 +5016,7 @@ local BG_MODE_ORDER        = { "ACTIVE", "MISSING" }
 
 -- Build glow style dropdown values from ns.GLOW_STYLES
 local function GetGlowStyleValues()
-    local labels, order = {}, {}
-    labels.blizzard = LText("Proc Glow (WoW)")
-    order[#order + 1] = "blizzard"
-
-    labels.autocast = LText("AutoCast Shine")
-    order[#order + 1] = "autocast"
-
-    if not ns.CDMHasNamedGlowSupport or ns.CDMHasNamedGlowSupport("pixel") then
-        labels.pixel = LText("Pixel Border")
-        order[#order + 1] = "pixel"
-    end
-
-    labels.none = LText("None")
-    order[#order + 1] = "none"
-
-    if #order == 0 then
-        labels.blizzard = LText("Proc Glow (WoW)")
-        order[1] = "blizzard"
-    end
-    return labels, order
+    return ns.CDMGlowStyleDropdown(LText)
 end
 
 -- Get the icon texture from a real Blizzard action button
@@ -5063,7 +5044,7 @@ local function NormalizeGlowStyleOption(styleValue, fallbackStyleId)
     if resolved == 0 then
         return "none"
     end
-    if resolved == "autocast" or resolved == "pixel" or resolved == "button" or resolved == "blizzard" then
+    if type(resolved) == "string" then
         return resolved
     end
     return "blizzard"
@@ -5655,8 +5636,8 @@ local function BuildBarGlowsAdvancedTab(sc, W, startY, p)
         {
             type = "dropdown",
             text = LText("Global Glow Style"),
-            values = { blizzard = LText("Proc Glow (WoW)"), autocast = LText("AutoCast Shine"), pixel = LText("Pixel Border"), none = LText("None") },
-            order = { "blizzard", "autocast", "pixel", "none" },
+            values = (GetGlowStyleValues()),
+            order = select(2, GetGlowStyleValues()),
             getValue = function() return tostring(bg.glowStyle or "blizzard") end,
             setValue = function(v)
                 bg.glowStyle = v
@@ -5679,8 +5660,8 @@ local function BuildBarGlowsAdvancedTab(sc, W, startY, p)
         {
             type = "dropdown",
             text = LText("Cooldown Proc Glow"),
-            values = { blizzard = LText("Proc Glow (WoW)"), autocast = LText("AutoCast Shine"), pixel = LText("Pixel Border"), none = LText("None") },
-            order = { "blizzard", "autocast", "pixel", "none" },
+            values = (GetGlowStyleValues()),
+            order = select(2, GetGlowStyleValues()),
             getValue = function() return tostring(bg.procGlowStyle or "blizzard") end,
             setValue = function(v)
                 bg.procGlowStyle = v
@@ -6965,7 +6946,7 @@ local function BuildTabBar(sc, yOff)
     container:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -4, yOff)
     container:Show()
 
-    -- Shared uiverse-style nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
+    -- Shared nav tabs (KullThranUI/NavTabs.lua), pixel-snapped.
     local usedH = KT.NavTabs.Populate(container, tabs, {
         localize = LText,
         selectedId = cdmActiveTab,
@@ -7017,8 +6998,8 @@ local function BuildBarGlowsLegacyTab(sc, W, startY, p)
         {
             type = "dropdown",
             text = LText("Global Glow Style"),
-            values = { blizzard = LText("Proc Glow (WoW)"), autocast = LText("AutoCast Shine"), pixel = LText("Pixel Border"), none = LText("None") },
-            order = { "blizzard", "autocast", "pixel", "none" },
+            values = (GetGlowStyleValues()),
+            order = select(2, GetGlowStyleValues()),
             getValue = function() return tostring(bg.glowStyle or "blizzard") end,
             setValue = function(v)
                 bg.glowStyle = v; if KT.RefreshPage then KT:RefreshPage(true) end
@@ -7039,8 +7020,8 @@ local function BuildBarGlowsLegacyTab(sc, W, startY, p)
         {
             type = "dropdown",
             text = LText("Cooldown Proc Glow"),
-            values = { blizzard = LText("Proc Glow (WoW)"), autocast = LText("AutoCast Shine"), pixel = LText("Pixel Border"), none = LText("None") },
-            order = { "blizzard", "autocast", "pixel", "none" },
+            values = (GetGlowStyleValues()),
+            order = select(2, GetGlowStyleValues()),
             getValue = function() return tostring(bg.procGlowStyle or "blizzard") end,
             setValue = function(v)
                 bg.procGlowStyle = v; if KT.RefreshPage then KT:RefreshPage(true) end
@@ -7092,8 +7073,9 @@ KT:RegisterPage("cooldownmanager", LText("Cooldown Manager"), 14, function(sc, W
             end,
         }
     ); y = y + h
-
-
+    -- The header card's frame reaches a little below its last row: keep the
+    -- tab bar clear of it.
+    y = y + 10
 
     local tabFrame, tabH = BuildTabBar(sc, -y); y = y + tabH
     local sep, sepH = MakeSeparator(sc, -y); y = y + sepH + 6
