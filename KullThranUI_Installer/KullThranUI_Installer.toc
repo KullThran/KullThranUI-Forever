@@ -1,0 +1,13 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Installer
+## Notes: KullThranUI module: Installer
+## Author: KullThran
+## Version: 1.0.3
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\Installers\Installers.lua
+Modules\Installers\Installer_Options.lua
+Modules\Installers\DandersFramesProfile.lua

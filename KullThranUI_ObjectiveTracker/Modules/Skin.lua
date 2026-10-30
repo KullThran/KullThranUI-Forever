@@ -1,0 +1,1135 @@
+local _, ns = ...
+local KT = ns.KT
+local Mod = ns.Mod
+
+local Skin = Mod:NewModule("Skin", "AceEvent-3.0", "AceHook-3.0")
+
+local _skinned = setmetatable({}, { __mode = "k" })
+local _hookedTrackers = setmetatable({}, { __mode = "k" })
+local _hookedTrackerCount = 0
+local _headerColorHooks = setmetatable({}, { __mode = "k" })
+local _titleTextHooks = setmetatable({}, { __mode = "k" })
+local _titleTextGuards = setmetatable({}, { __mode = "k" })
+
+local function GetFont()
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    local font = db and db.font
+    if KT and KT.ResolveFontForLocale then
+        return KT:ResolveFontForLocale(font, KT.FONT_PATH or "Fonts\\FRIZQT__.TTF")
+    end
+    if font then
+        local LSM = LibStub("LibSharedMedia-3.0", true)
+        if LSM then
+            local path = LSM:Fetch("font", font)
+            if path then return path end
+        end
+    end
+    return KT.FONT_PATH or "Fonts\\FRIZQT__.TTF"
+end
+
+local function GetAccent()
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    -- Forever style: fixed #DC8560 border/accent (wins over a stored custom color).
+    local VT = KT.VisualThemes
+    if VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+        return 0.862745, 0.521569, 0.376471
+    end
+    if db and db.colorMode == "custom" and db.customColor then
+        return db.customColor.r, db.customColor.g, db.customColor.b
+    end
+
+    -- Use the same resolved palette as the rest of KUI. This includes the
+    -- current style preset and class-color mode, which the old local fallback
+    -- could miss on Forever.
+    if KT and type(KT.GetStyleAccentRGB) == "function" then
+        return KT:GetStyleAccentRGB()
+    end
+
+    local skin = KT.db and KT.db.profile and KT.db.profile.skin
+    local color = (skin and skin.accentColor) or KT.BRAND_COLOR or { r = 0, g = 0.6, b = 1 }
+    return color.r, color.g, color.b
+end
+
+local function GetQuestTitleColor()
+    -- Forever quest titles may contain Blizzard difficulty color escape codes.
+    -- Titles are always owned by KUI and use the active accent.
+    return GetAccent()
+end
+
+local function ApplyShadow(fs)
+    if not fs then return end
+    fs:SetShadowColor(0, 0, 0, 1)
+    fs:SetShadowOffset(1, -1)
+end
+
+local function StyleFontString(fs, size)
+    if not fs or not fs.GetFont then return end
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    if not size then
+        if db and db.fontSize then
+            size = db.fontSize
+        else
+            local _, cur = fs:GetFont()
+            size = cur or 12
+        end
+    else
+        -- If size was explicitly provided (e.g. for sub-elements), scale it relative to the base font size if db is available
+        if db and db.fontSize then
+            local diff = size - 12 -- 12 is the base default in the old code
+            size = db.fontSize + diff
+        end
+    end
+    local outline = (db and db.fontOutline) or "OUTLINE"
+    if outline == "NONE" then outline = "" end
+    fs:SetFont(GetFont(), size, outline)
+    ApplyShadow(fs)
+end
+
+local function ApplyTitleAccent(fs)
+    if not fs or not fs.SetTextColor then
+        return
+    end
+
+    if _titleTextGuards[fs] then
+        return
+    end
+
+    _titleTextGuards[fs] = true
+    local text = fs.GetText and fs:GetText()
+    if type(text) == "string" and fs.SetText then
+        -- Blizzard embeds quest difficulty colors directly in the title text.
+        -- Strip only color wrappers; keep the actual title and other markup.
+        local cleanText = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        if cleanText ~= text then
+            fs:SetText(cleanText)
+        end
+    end
+
+    -- Quest/mission titles use the player's class
+    -- color instead of the addon's own generic accent color.
+    local r, g, b
+    local _, classToken = UnitClass("player")
+    local classColor = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+    local VT = KT.VisualThemes
+    if VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "forever" then
+        -- Forever style: titles use the fixed #DC8560 instead of the class color.
+        r, g, b = 0.862745, 0.521569, 0.376471
+    elseif VT and VT.GetRenderedTheme and VT:GetRenderedTheme() == "classic" then
+        -- Classic style: titles use Blizzard's classic yellow.
+        r, g, b = 1, 0.82, 0
+    elseif classColor then
+        r, g, b = classColor.r, classColor.g, classColor.b
+    else
+        r, g, b = GetAccent()
+    end
+    fs:SetTextColor(r, g, b)
+    _titleTextGuards[fs] = nil
+end
+
+local function SetTitleAccent(fs)
+    if not fs then
+        return
+    end
+
+    if not _titleTextHooks[fs] and fs.SetText then
+        _titleTextHooks[fs] = true
+        hooksecurefunc(fs, "SetText", function(fontString)
+            ApplyTitleAccent(fontString)
+        end)
+    end
+
+    ApplyTitleAccent(fs)
+end
+
+local function SkinHeader(header)
+    if not header then return end
+
+    -- Hide decorative textures
+    for _, k in ipairs({
+        "Background", "Line", "LineSheen", "LineGlow", "Divider",
+        "Sheen", "Glow", "Stripe",
+    }) do
+        local r = header[k]
+        if r and r.SetTexture then r:SetTexture("") end
+    end
+
+    local text = header.Text or header.HeaderText or header.headerText or header.Title or header.title
+    if text and not text.SetTextColor and text.Text then
+        text = text.Text
+    end
+    local r, g, b = GetAccent()
+    if text then
+        SetTitleAccent(text)
+        StyleFontString(text, 14)
+    end
+
+    -- Accent bar under the header: accent colour fading out to the right.
+    if header.CreateTexture then
+        local bar = header._ktAccentBar
+        if not bar then
+            bar = header:CreateTexture(nil, "ARTWORK", nil, 2)
+            bar:SetTexture("Interface\\Buttons\\WHITE8x8")
+            bar:SetHeight(2)
+            bar:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+            bar:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
+            header._ktAccentBar = bar
+        end
+        if bar.SetGradient and CreateColor then
+            bar:SetVertexColor(1, 1, 1, 1)
+            bar:SetGradient("HORIZONTAL", CreateColor(r, g, b, 1), CreateColor(r, g, b, 0))
+        else
+            bar:SetVertexColor(r, g, b, 0.8)
+        end
+        bar:Show()
+    end
+
+    -- Skin +/- collapse buttons
+    local function SkinButton(btn)
+        if not btn then return end
+        if btn.GetNormalTexture and btn:GetNormalTexture() then btn:GetNormalTexture():SetVertexColor(r, g, b) end
+        if btn.GetPushedTexture and btn:GetPushedTexture() then btn:GetPushedTexture():SetVertexColor(r, g, b) end
+        if btn.GetHighlightTexture and btn:GetHighlightTexture() then btn:GetHighlightTexture():SetVertexColor(r, g, b) end
+    end
+
+    if header.CollapseButton then SkinButton(header.CollapseButton) end
+    if header.MinimizeButton then SkinButton(header.MinimizeButton) end
+
+    for _, child in ipairs({header:GetChildren()}) do
+        local otype = child.GetObjectType and child:GetObjectType()
+        if otype == "Button" and child ~= header.CollapseButton and child ~= header.MinimizeButton then
+            local nt = child.GetNormalTexture and child:GetNormalTexture()
+            if nt then
+                SkinButton(child)
+            end
+        end
+    end
+end
+
+local function ProcessBlockChildren(frame, depth)
+    if not frame or depth > 3 or not frame.GetChildren then return end
+    for _, child in ipairs({ frame:GetChildren() }) do
+        local ok, otype = pcall(child.GetObjectType, child)
+        if ok and (otype == "Frame" or otype == "Button") and not child.Tooltip and child ~= frame.poiButton then
+            if child.GetRegions then
+                for _, rg in ipairs({ child:GetRegions() }) do
+                    local ot = rg.GetObjectType and rg:GetObjectType()
+                    if ot == "FontString" then
+                        StyleFontString(rg, 12)
+                    end
+                end
+            end
+            ProcessBlockChildren(child, depth + 1)
+        end
+    end
+end
+
+local function StyleObjectiveLine(line)
+    if not line or not line.Text then return end
+    StyleFontString(line.Text, 12)
+    line.Text:SetTextColor(0.8, 0.8, 0.8) -- Gris claro
+    if line.Dash then
+        StyleFontString(line.Dash, 12)
+        line.Dash:SetTextColor(0.8, 0.8, 0.8)
+    end
+end
+
+local function AsObjectiveFontString(value)
+    if not value then return nil end
+    if value.SetTextColor then return value end
+    if value.Text and value.Text.SetTextColor then return value.Text end
+    return nil
+end
+
+local function FindFirstBlockFontString(frame, depth)
+    depth = depth or 0
+    if not frame or depth > 3 then return nil end
+    if frame.GetRegions then
+        for _, region in ipairs({ frame:GetRegions() }) do
+            local objectType = region.GetObjectType and region:GetObjectType()
+            if objectType == "FontString" then return region end
+        end
+    end
+    if frame.GetChildren then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            local found = FindFirstBlockFontString(child, depth + 1)
+            if found then return found end
+        end
+    end
+    return nil
+end
+
+local function SetBlockTitleAccent(block)
+    local title
+    for _, key in ipairs({ "HeaderText", "headerText", "Title", "title", "QuestTitle", "questTitle" }) do
+        title = AsObjectiveFontString(block and block[key])
+        if title then break end
+    end
+    if not title then title = FindFirstBlockFontString(block, 0) end
+    if not title then return end
+    SetTitleAccent(title)
+end
+
+local function EnsureBlockHoverColor(block)
+    local button = block and block.HeaderButton
+    if not button or _headerColorHooks[button] then return end
+    _headerColorHooks[button] = true
+
+    -- Preserve the KUI title color while retaining Blizzard's native button and click behavior.
+    button:HookScript("OnEnter", function()
+        local r, g, b = GetQuestTitleColor()
+        if r then SetBlockTitleAccent(block) end
+    end)
+    button:HookScript("OnLeave", function()
+        local r, g, b = GetQuestTitleColor()
+        if r then SetBlockTitleAccent(block) end
+    end)
+end
+local function StyleBlockText(block)
+    if not block then return end
+    EnsureBlockHoverColor(block)
+
+    -- Forever can expose the title under a different field until the block
+    -- has been initialized. Prefer the known fields without assuming Retail
+    -- only uses HeaderText.
+    local headerText = block.HeaderText or block.headerText or block.Title or block.title
+    if headerText and not headerText.SetTextColor and headerText.Text then
+        headerText = headerText.Text
+    end
+    local firstFontString
+
+    -- On Forever the title may be a direct child field rather than a region
+    -- returned by GetRegions().
+    if headerText then
+        StyleFontString(headerText, 13)
+        SetTitleAccent(headerText)
+    end
+
+    if block.GetRegions then
+        for _, region in ipairs({ block:GetRegions() }) do
+            local objectType = region.GetObjectType and region:GetObjectType()
+            if objectType == "FontString" then
+                firstFontString = firstFontString or region
+                StyleFontString(region, 13)
+                if region == headerText or (not headerText and region == firstFontString) then
+                    SetTitleAccent(region)
+                end
+            end
+        end
+    end
+
+    ProcessBlockChildren(block, 0)
+
+    local lines = block.usedLines or block.lines
+    if type(lines) == "table" then
+        for _, line in pairs(lines) do
+            StyleObjectiveLine(line)
+        end
+    end
+    SetBlockTitleAccent(block)
+end
+
+local function SkinBlock(block)
+    if not block then return end
+    -- Blizzard owns the quest POI button, its atlas, state, highlight and click behavior.
+    -- KUI only skins the surrounding text and block chrome.
+    if _skinned[block] then
+        -- Pooled Forever blocks may be styled before their lines/title exist.
+        -- Re-run the text pass on every update instead of returning early.
+        StyleBlockText(block)
+        return
+    end
+
+    for _, k in ipairs({
+        "Background", "HeaderBackground", "Stripe", "Sheen", "Glow",
+        "Highlight", "ShineTop", "ShineBottom",
+    }) do
+        local region = block[k]
+        if region and region.SetTexture then region:SetTexture("") end
+    end
+
+    StyleBlockText(block)
+    _skinned[block] = true
+end
+
+local function SkinUsedBlocks(value, depth)
+    depth = depth or 0
+    if depth > 4 or type(value) ~= "table" then return end
+
+    -- usedBlocks differs between client branches: it can be
+    -- [template][block] or contain blocks directly.
+    if value.HeaderText or value.headerText or value.usedLines or value.lines then
+        SkinBlock(value)
+        return
+    end
+
+    for _, child in pairs(value) do
+        if type(child) == "table" then
+            SkinUsedBlocks(child, depth + 1)
+        end
+    end
+end
+
+local function HookTracker(tracker)
+    if not tracker or _hookedTrackers[tracker] then return end
+    _hookedTrackers[tracker] = true
+    _hookedTrackerCount = _hookedTrackerCount + 1
+    Mod._ktHookedTrackerCount = _hookedTrackerCount
+
+    -- Avoid block taint for scenario and widget trackers (widget pool)
+    if tracker == _G.ScenarioObjectiveTracker or tracker == _G.UIWidgetObjectiveTracker then
+        if tracker.Header then SkinHeader(tracker.Header) end
+        return
+    end
+
+    if tracker.Header then
+        SkinHeader(tracker.Header)
+        if tracker.Header.SetCollapsed then
+            hooksecurefunc(tracker.Header, "SetCollapsed", function(self)
+                SkinHeader(self)
+            end)
+        end
+    end
+
+    if tracker.AddBlock then
+        hooksecurefunc(tracker, "AddBlock", function(_, block)
+            SkinBlock(block)
+        end)
+    end
+
+    if tracker.Update then
+        hooksecurefunc(tracker, "Update", function()
+            SkinUsedBlocks(tracker.usedBlocks)
+        end)
+    end
+
+    -- Skin existing blocks. Forever may expose modules by name rather than
+    -- as an ipairs array, and usedBlocks may be nested differently.
+    SkinUsedBlocks(tracker.usedBlocks)
+end
+
+local SUB_TRACKERS = {
+    "ScenarioObjectiveTracker",
+    "DungeonObjectiveTracker",
+    "ChallengeModeObjectiveTracker",
+    "QuestSessionObjectiveTracker",
+    "UIWidgetObjectiveTracker",
+    "CampaignQuestObjectiveTracker",
+    "QuestObjectiveTracker",
+    "AdventureObjectiveTracker",
+    "AchievementObjectiveTracker",
+    "MonthlyActivitiesObjectiveTracker",
+    "ProfessionsRecipeTracker",
+    "BonusObjectiveTracker",
+    "WorldQuestObjectiveTracker",
+    "InitiativeTasksObjectiveTracker",
+}
+
+-- A bare chevron just above the tracker's top edge that hides or shows the
+-- whole tracker, background included. It sits in the same column as the
+-- section headers' own collapse buttons, on whole physical pixels. It lives on
+-- UIParent so it stays visible while the tracker is hidden; hiding goes
+-- through the same alpha path as the hide rules.
+-- 16x8 pixel-art chevron (pointing up), drawn 1:1 on physical pixels.
+local TOGGLE_ARROW = "Interface\\AddOns\\KullThranUI\\Libraries\\KUITextures\\Shared\\Chevron.tga"
+local TOGGLE_W, TOGGLE_H = 16, 10      -- click area
+local ARROW_PX_W, ARROW_PX_H = 16, 8   -- chevron texture, in physical pixels
+
+local function GetTrackerDB()
+    return KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+end
+
+local function Snap(region, value)
+    if PixelUtil and PixelUtil.GetNearestPixelSize and region.GetEffectiveScale then
+        return PixelUtil.GetNearestPixelSize(value, region:GetEffectiveScale())
+    end
+    return math.floor(value + 0.5)
+end
+
+local function UpdateToggleButton(button)
+    if not button then return end
+    local db = GetTrackerDB()
+    local r, g, b = GetAccent()
+    button.arrow:SetVertexColor(r, g, b, button:IsMouseOver() and 1 or 0.7)
+    -- Up while shown (fold away), flipped down while hidden (bring back).
+    if db and db.manualHidden == true then
+        button.arrow:SetTexCoord(0, 1, 1, 0)
+    else
+        button.arrow:SetTexCoord(0, 1, 0, 1)
+    end
+end
+
+-- The highest visible section header of the tracker, if any.
+local function TopHeader(otf)
+    local best, bestTop
+    local function consider(tracker)
+        local header = type(tracker) == "table" and tracker.Header
+        if header and header.IsVisible and header:IsVisible() then
+            local top = header:GetTop()
+            if top and (not bestTop or top > bestTop) then best, bestTop = header, top end
+        end
+    end
+    for _, tracker in pairs((otf and (otf.modules or otf.MODULES)) or {}) do consider(tracker) end
+    for _, name in ipairs(SUB_TRACKERS) do consider(_G[name]) end
+    return best
+end
+
+-- Horizontal offset that centres the chevron on the header's own collapse
+-- button, in the chevron's units; nil when there is none to line up with.
+local function ColumnOffset(button, anchor, header)
+    local minimize = header and (header.MinimizeButton or header.CollapseButton)
+    local mx = minimize and minimize:IsVisible() and minimize:GetCenter()
+    local right = anchor and anchor:GetRight()
+    if not (mx and right) then return nil end
+    local scale = button:GetEffectiveScale()
+    return (mx * minimize:GetEffectiveScale() - right * anchor:GetEffectiveScale()) / scale + TOGGLE_W / 2
+end
+
+local function PlaceToggleButton()
+    local button = _G.KT_ObjectiveTrackerToggle
+    local otf = _G.ObjectiveTrackerFrame
+    if not (button and otf) then return end
+    local header = TopHeader(otf)
+    local background = _G.KT_TrackerBackground
+    local anchor = (background and background:IsShown()) and background or header or otf
+    local x = Snap(button, ColumnOffset(button, anchor, header) or -2)
+    local y = Snap(button, 1)
+    if button._ktAnchor == anchor and button._ktX == x then return end
+    button._ktAnchor, button._ktX = anchor, x
+    button:ClearAllPoints()
+    button:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", x, y)
+end
+KT.ObjectiveTrackerSkin_PlaceToggle = PlaceToggleButton
+
+local function EnsureToggleButton(otf)
+    if not otf then return end
+    local button = _G.KT_ObjectiveTrackerToggle
+    if not button then
+        button = CreateFrame("Button", "KT_ObjectiveTrackerToggle", UIParent)
+        button:SetFrameStrata("MEDIUM")
+        button.arrow = button:CreateTexture(nil, "OVERLAY")
+        button.arrow:SetTexture(TOGGLE_ARROW)
+        button.arrow:SetPoint("CENTER", 0, 0)
+        if button.arrow.SetSnapToPixelGrid then
+            button.arrow:SetSnapToPixelGrid(true)
+            button.arrow:SetTexelSnappingBias(0)
+        end
+        button:SetScript("OnClick", function(self)
+            local db = GetTrackerDB()
+            if not db then return end
+            db.manualHidden = db.manualHidden ~= true
+            if KT.ObjectiveTrackerSkin_UpdateVisibility then
+                KT.ObjectiveTrackerSkin_UpdateVisibility()
+            end
+            UpdateToggleButton(self)
+        end)
+        button:SetScript("OnEnter", UpdateToggleButton)
+        button:SetScript("OnLeave", UpdateToggleButton)
+    end
+    button:SetSize(Snap(button, TOGGLE_W), Snap(button, TOGGLE_H))
+    local toUI = PixelUtil and PixelUtil.ConvertPixelsToUIForRegion
+    if toUI then
+        button.arrow:SetSize(toUI(ARROW_PX_W, button), toUI(ARROW_PX_H, button))
+    else
+        button.arrow:SetSize(ARROW_PX_W, ARROW_PX_H)
+    end
+    button._ktAnchor = nil
+    PlaceToggleButton()
+    button:Show()
+    UpdateToggleButton(button)
+end
+
+function Skin:GetDungeonBossCriteria()
+    local inParty = false
+    if _G.IsInInstance then
+        local instanceOK, inInstance, instanceType = pcall(_G.IsInInstance)
+        inParty = instanceOK and inInstance and instanceType == "party"
+    end
+    if not inParty and _G.GetInstanceInfo then
+        local infoOK, _, instanceType = pcall(_G.GetInstanceInfo)
+        inParty = infoOK and instanceType == "party"
+    end
+    if not inParty then return nil end
+
+    local scenario = _G.C_Scenario
+    local scenarioInfo = _G.C_ScenarioInfo
+    if not scenario and not scenarioInfo then return nil end
+
+    local numCriteria
+    if scenario.GetStepInfo then
+        local stepOK, _, _, count = pcall(scenario.GetStepInfo)
+        if stepOK then
+            numCriteria = tonumber(count)
+        end
+    end
+    if not numCriteria and scenarioInfo.GetScenarioStepInfo then
+        local stepOK, step = pcall(scenarioInfo.GetScenarioStepInfo)
+        if stepOK and type(step) == "table" then
+            numCriteria = tonumber(step.numCriteria)
+        end
+    end
+    if not numCriteria or numCriteria <= 0 then return nil end
+
+    local bosses = {}
+    for index = 1, math.min(numCriteria, 20) do
+        local info
+        if scenarioInfo and scenarioInfo.GetCriteriaInfo then
+            local criteriaOK, criteria = pcall(scenarioInfo.GetCriteriaInfo, index)
+            if criteriaOK and type(criteria) == "table" then
+                info = criteria
+            end
+        end
+
+        if not info and scenario and scenario.GetCriteriaInfo then
+            local criteriaOK, description, criteriaType, completed, quantity, totalQuantity,
+                flags, assetID, quantityString, criteriaID, duration, elapsed,
+                criteriaFailed, isWeightedProgress = pcall(scenario.GetCriteriaInfo, index)
+            if criteriaOK and type(description) == "string" then
+                info = {
+                    description = description,
+                    criteriaType = criteriaType,
+                    completed = completed,
+                    quantity = quantity,
+                    totalQuantity = totalQuantity,
+                    flags = flags,
+                    assetID = assetID,
+                    quantityString = quantityString,
+                    criteriaID = criteriaID,
+                    duration = duration,
+                    elapsed = elapsed,
+                    failed = criteriaFailed,
+                    isWeightedProgress = isWeightedProgress,
+                }
+            end
+        end
+
+        if info and info.isWeightedProgress ~= true then
+            local name = info.description or info.criteriaString
+            if type(name) == "string" and name ~= "" then
+                bosses[#bosses + 1] = {
+                    name = name,
+                    completed = info.completed == true,
+                }
+            end
+        end
+    end
+
+    return #bosses > 0 and bosses or nil
+end
+
+function Skin:RefreshDungeonBossFallback()
+    local tracker = _G.ObjectiveTrackerFrame
+    if not tracker then return end
+
+    local bosses = self:GetDungeonBossCriteria()
+    local frame = self._ktDungeonBossFallback
+    if not bosses then
+        if frame then frame:Hide() end
+        return
+    end
+
+    local nativeScenario = _G.ScenarioObjectiveTracker
+    local nativeHasContent = false
+    if nativeScenario and nativeScenario.IsShown and nativeScenario:IsShown() then
+        local objectives = nativeScenario.ObjectivesBlock or nativeScenario.Objectives
+        local objectiveHeight = objectives and tonumber(objectives.height)
+        if objectiveHeight and objectiveHeight > 1 then
+            nativeHasContent = true
+        end
+    end
+    if nativeHasContent then
+        if frame then frame:Hide() end
+        return
+    end
+
+    if not frame then
+        frame = _G.KT_DungeonBossesFallback
+        if not frame then
+            frame = CreateFrame("Frame", "KT_DungeonBossesFallback", tracker)
+        else
+            frame:SetParent(tracker)
+        end
+        frame.header = frame:CreateFontString(nil, "OVERLAY")
+        frame.header:SetJustifyH("LEFT")
+        frame.header:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        frame.rows = {}
+        self._ktDungeonBossFallback = frame
+    end
+
+    local width = tracker.GetWidth and tracker:GetWidth() or 0
+    frame:SetWidth(math.max(180, width or 0))
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", tracker, "TOPLEFT", 0, 3)
+    frame:SetFrameLevel((tracker.GetFrameLevel and tracker:GetFrameLevel() or 0) + 5)
+    frame.header:SetText(LText("Dungeon Bosses"))
+    StyleFontString(frame.header, 13)
+    local ar, ag, ab = GetAccent()
+    local VTc = KT.VisualThemes
+    if VTc and VTc.GetRenderedTheme and VTc:GetRenderedTheme() == "classic" then
+        ar, ag, ab = 1, 0.82, 0
+    end
+    frame.header:SetTextColor(ar, ag, ab, 1)
+    frame.header:Show()
+
+    local rowHeight = 17
+    for index, boss in ipairs(bosses) do
+        local row = frame.rows[index]
+        if not row then
+            row = frame:CreateFontString(nil, "OVERLAY")
+            row:SetJustifyH("LEFT")
+            frame.rows[index] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -18 - ((index - 1) * rowHeight))
+        row:SetWidth(math.max(160, (frame:GetWidth() or 180) - 4))
+        row:SetHeight(rowHeight)
+        StyleFontString(row, 12)
+        row:SetText((boss.completed and "[X] " or "[ ] ") .. boss.name)
+        if boss.completed then
+            row:SetTextColor(0.25, 1, 0.35, 1)
+        else
+            row:SetTextColor(0.90, 0.90, 0.90, 1)
+        end
+        row:Show()
+    end
+    for index = #bosses + 1, #frame.rows do
+        frame.rows[index]:Hide()
+    end
+    frame:SetHeight(18 + (#bosses * rowHeight))
+    frame:Show()
+end
+
+    function KT.ObjectiveTrackerSkin_UpdateColors()
+        for tracker in pairs(_hookedTrackers) do
+            if tracker.Header then
+                SkinHeader(tracker.Header)
+            end
+        end
+        for block in pairs(_skinned) do
+            StyleBlockText(block)
+        end
+
+        UpdateToggleButton(_G.KT_ObjectiveTrackerToggle)
+
+        local background = _G.KT_TrackerBackground
+        if background and background.topBorder then
+            local r, g, b = GetAccent()
+            background.topBorder:SetColorTexture(r, g, b, 1)
+        end
+        if KT.ObjectiveTrackerSkin_UpdateBgAlpha then
+            KT.ObjectiveTrackerSkin_UpdateBgAlpha()
+        end
+    end
+
+    KT.ObjectiveTrackerSkin_Refresh = KT.ObjectiveTrackerSkin_UpdateColors
+
+local function Skin11_0_Tracker()
+    local otf = _G.ObjectiveTrackerFrame
+    if not otf or not otf.ScrollBox then return end
+
+    local sb = otf.ScrollBox
+    local function SkinScrollFrame(frame)
+        if not frame then return end
+        if frame.Text and frame.SetCollapsed then
+            SkinHeader(frame)
+        else
+            SkinBlock(frame)
+        end
+    end
+
+    -- ScrollBox is virtualized on current clients. ForEachFrame catches the
+    -- visible pooled blocks; GetScrollTarget remains the Forever fallback.
+    if sb.ForEachFrame then
+        pcall(sb.ForEachFrame, sb, SkinScrollFrame)
+    elseif sb.EnumerateFrames then
+        for frame in sb:EnumerateFrames() do
+            SkinScrollFrame(frame)
+        end
+    end
+
+    if sb.GetScrollTarget then
+        local target = sb:GetScrollTarget()
+        if target and target.GetChildren then
+            for _, child in ipairs({target:GetChildren()}) do
+                SkinScrollFrame(child)
+            end
+        end
+    end
+end
+local function InitTracker()
+    local otf = _G.ObjectiveTrackerFrame
+    EnsureToggleButton(otf)
+    if otf then
+        if otf.Update and not otf._ktObjectiveTrackerUpdateHook then
+            otf._ktObjectiveTrackerUpdateHook = true
+            hooksecurefunc(otf, "Update", function()
+                Skin11_0_Tracker()
+            end)
+        end
+
+        -- "All Objectives" header (HeaderMenu / Header) is intentionally left
+        -- visible: it is Blizzard's collapse bar for the whole tracker.
+        if otf.NineSlice then otf.NineSlice:Hide() end
+    end
+    
+    local modules = otf and (otf.modules or otf.MODULES)
+
+    if modules then
+        for _, t in pairs(modules) do
+            if type(t) == "table" then
+                HookTracker(t)
+            end
+        end
+    end
+    
+    for _, name in ipairs(SUB_TRACKERS) do
+        if _G[name] then
+            HookTracker(_G[name])
+        end
+    end
+
+    -- Forever can omit both Retail module tables and the standard global names.
+    -- Inspect direct children as a final legacy compatibility path.
+    if otf and otf.GetChildren then
+        for _, child in ipairs({ otf:GetChildren() }) do
+            if (type(child) == "table" or type(child) == "userdata") and (child.usedBlocks or type(child.Update) == "function" or child.Header) then
+                HookTracker(child)
+            end
+        end
+    end
+
+    -- The tracker hooks above skin newly-added blocks as they are created.
+    -- Keep one fallback pass for the modern ScrollBox contents, but do not
+    -- rescan the complete child tree continuously from OnUpdate.
+    Skin11_0_Tracker()
+    Skin:RefreshDungeonBossFallback()
+
+    if not Skin._ktDungeonBossEvents then
+        local eventFrame = CreateFrame("Frame")
+        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        eventFrame:RegisterEvent("SCENARIO_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_CRITERIA_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_CRITERIA_SHOW_STATE_UPDATE")
+        eventFrame:RegisterEvent("SCENARIO_COMPLETED")
+        eventFrame:RegisterEvent("UPDATE_INSTANCE_INFO")
+        eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        eventFrame:SetScript("OnEvent", function()
+            Skin:RefreshDungeonBossFallback()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.15, function() Skin:RefreshDungeonBossFallback() end)
+                C_Timer.After(0.75, function() Skin:RefreshDungeonBossFallback() end)
+            end
+        end)
+        Skin._ktDungeonBossEvents = eventFrame
+    end
+end
+
+local function SetupBackgroundAndFading()
+    if _G.KT_TrackerBackground then
+        if KT.ObjectiveTrackerSkin_UpdateBgAlpha then KT.ObjectiveTrackerSkin_UpdateBgAlpha() end
+        return
+    end
+    local TrackerState = CreateFrame("Frame")
+    local bgFrame = CreateFrame("Frame", "KT_TrackerBackground", UIParent)
+    bgFrame:SetFrameStrata("BACKGROUND")
+    bgFrame:Hide()
+
+    local function GetDB()
+        return KT.db and KT.db.profile and KT.db.profile.objectiveTracker or {}
+    end
+
+    local function GetBackgroundOpacity(db)
+        if db and db.solidBackground == true then
+            return 1
+        end
+        return tonumber(db and db.bgAlpha) or 0
+    end
+
+    local function EnsureBackgroundVisuals()
+        if not bgFrame.tex then
+            bgFrame.tex = bgFrame:CreateTexture(nil, "BACKGROUND", nil, -8)
+            bgFrame.tex:SetAllPoints()
+        end
+        if not bgFrame.solidTex then
+            bgFrame.solidTex, bgFrame.solidWash = KT:ApplyTexturedSurface(bgFrame, nil, 0.38)
+            bgFrame.solidTex:Hide()
+            bgFrame.solidWash:Hide()
+        end
+        if not bgFrame.topBorder then
+            bgFrame.topBorder = bgFrame:CreateTexture(nil, "OVERLAY")
+            bgFrame.topBorder:SetPoint("TOPLEFT", bgFrame, "TOPLEFT", 0, 0)
+            bgFrame.topBorder:SetPoint("TOPRIGHT", bgFrame, "TOPRIGHT", 0, 0)
+            bgFrame.topBorder:SetHeight(2)
+        end
+    end
+
+    local function ApplyBackgroundAppearance(db, fadeAlpha)
+        local opacity = GetBackgroundOpacity(db)
+        if opacity <= 0 or not _G.ObjectiveTrackerFrame then
+            if bgFrame.topBorder then bgFrame.topBorder:Hide() end
+            bgFrame:Hide()
+            return
+        end
+
+        bgFrame:SetParent(_G.ObjectiveTrackerFrame)
+        bgFrame:ClearAllPoints()
+        bgFrame:SetPoint("TOPLEFT", _G.ObjectiveTrackerFrame, "TOPLEFT", -20, -20)
+        bgFrame:SetPoint("BOTTOMRIGHT", _G.ObjectiveTrackerFrame, "BOTTOMRIGHT", 5, 0)
+        EnsureBackgroundVisuals()
+        bgFrame.solidMode = db.solidBackground == true
+        bgFrame:SetIgnoreParentAlpha(bgFrame.solidMode)
+
+        if db.solidBackground == true then
+            -- Opaque KUI artwork: no gradient or world scene leaks through.
+            bgFrame.tex:SetColorTexture(0.05, 0.05, 0.05, 0.98)
+            bgFrame.tex:Show()
+            KT:ApplyTexturedSurface(bgFrame, nil, 0.38)
+
+            local r, g, b = GetAccent()
+            bgFrame.topBorder:SetColorTexture(r, g, b, 1)
+            bgFrame.topBorder:SetAlpha(1)
+            bgFrame.topBorder:Show()
+        else
+            bgFrame.solidTex:Hide()
+            bgFrame.solidWash:Hide()
+            bgFrame.tex:SetColorTexture(0, 0, 0, 1)
+            bgFrame.tex:SetGradient("HORIZONTAL", CreateColor(0, 0, 0, 1), CreateColor(0, 0, 0, 0))
+            bgFrame.tex:SetAlpha(1)
+            bgFrame.tex:Show()
+            bgFrame.topBorder:Hide()
+        end
+
+        -- Solid means fully opaque; only the legacy gradient follows the fade alpha.
+        bgFrame:SetAlpha(db.solidBackground == true and 1 or (opacity * (fadeAlpha or 1)))
+        bgFrame:Show()
+    end
+
+    function KT.ObjectiveTrackerSkin_UpdateBgAlpha()
+        ApplyBackgroundAppearance(GetDB(), 1)
+    end
+
+    local lastMouseState = false
+    local idleTime = 0
+    local isHiddenByRules = false
+    local currentFadeAlpha = 1
+
+    local function SafeBoolean(value, fallback)
+        if _G.issecretvalue and _G.issecretvalue(value) then return fallback end
+        if _G.canaccessvalue and not _G.canaccessvalue(value) then return fallback end
+        return value == true
+    end
+
+    local function UpdateVisibilityRules()
+        local db = GetDB()
+        local lockdown = SafeBoolean(InCombatLockdown(), false)
+        local unitCombat = SafeBoolean(UnitAffectingCombat("player"), lockdown)
+        local inCombat = lockdown or unitCombat
+        local _, instanceType = IsInInstance()
+        
+        isHiddenByRules = false
+        if db.hideInCombat and inCombat then
+            isHiddenByRules = true
+        end
+        if db.hideInArena and instanceType == "arena" then
+            isHiddenByRules = true
+        end
+        if db.hideInDungeon and instanceType == "party" then
+            isHiddenByRules = true
+        end
+        if db.hideInRaid and instanceType == "raid" then
+            isHiddenByRules = true
+        end
+        if db.manualHidden == true then
+            isHiddenByRules = true
+        end
+        
+        local ownedByMythicPlus = KT._mplusTrackerOwnsObjectiveTracker == true
+        if _G.KT_ObjectiveTrackerToggle then
+            _G.KT_ObjectiveTrackerToggle:SetShown(not ownedByMythicPlus)
+        end
+        if isHiddenByRules or ownedByMythicPlus then
+            if _G.ObjectiveTrackerFrame then _G.ObjectiveTrackerFrame:SetAlpha(0) end
+            if bgFrame then bgFrame:SetAlpha(0) end
+        else
+            if _G.ObjectiveTrackerFrame then _G.ObjectiveTrackerFrame:SetAlpha(currentFadeAlpha) end
+            if bgFrame then
+                local maxAlpha = GetBackgroundOpacity(db)
+                bgFrame:SetAlpha(db.solidBackground == true and 1 or (maxAlpha * currentFadeAlpha))
+            end
+        end
+    end
+
+    TrackerState:RegisterEvent("PLAYER_REGEN_DISABLED")
+    TrackerState:RegisterEvent("PLAYER_REGEN_ENABLED")
+    TrackerState:RegisterEvent("PLAYER_ENTERING_WORLD")
+    TrackerState:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    TrackerState:SetScript("OnEvent", UpdateVisibilityRules)
+
+    KT.ObjectiveTrackerSkin_UpdateVisibility = UpdateVisibilityRules
+
+    local fadeTimer = 0
+    TrackerState:SetScript("OnUpdate", function(self, elapsed)
+        if not _G.ObjectiveTrackerFrame then return end
+        
+        fadeTimer = fadeTimer + elapsed
+        if fadeTimer < 0.1 then return end
+        fadeTimer = 0
+        PlaceToggleButton()
+        
+        if GetBackgroundOpacity(GetDB()) > 0 and
+            (bgFrame:GetParent() ~= _G.ObjectiveTrackerFrame or not bgFrame.tex
+                or bgFrame.solidMode ~= (GetDB().solidBackground == true)) then
+            KT.ObjectiveTrackerSkin_UpdateBgAlpha()
+        end
+        
+        local db = GetDB()
+        local mouseOver = SafeBoolean(_G.ObjectiveTrackerFrame:IsMouseOver(), false)
+        
+        if isHiddenByRules or KT._mplusTrackerOwnsObjectiveTracker == true then
+            _G.ObjectiveTrackerFrame:SetAlpha(0)
+            if bgFrame then bgFrame:SetAlpha(0) end
+            return
+        end
+        
+        if mouseOver then
+            idleTime = 0
+            currentFadeAlpha = 1
+        else
+            idleTime = idleTime + 0.1
+            if db.fadeDelay and db.fadeDelay > 0 and idleTime >= db.fadeDelay then
+                currentFadeAlpha = 0.1
+            else
+                currentFadeAlpha = 1
+            end
+        end
+        
+        _G.ObjectiveTrackerFrame:SetAlpha(currentFadeAlpha)
+        
+        if GetBackgroundOpacity(db) > 0 then
+            local minBottom = _G.ObjectiveTrackerFrame:GetTop() or 99999
+            local maxTop = _G.ObjectiveTrackerFrame:GetBottom() or 0
+            
+            for _, child in ipairs({_G.ObjectiveTrackerFrame:GetChildren()}) do
+                if child ~= bgFrame and child:IsShown() and child:GetAlpha() > 0 then
+                    -- In 11.0, ignore the massive ScrollBox since its ScrollTarget is what matters
+                    if child ~= _G.ObjectiveTrackerFrame.HeaderMenu and child ~= _G.ObjectiveTrackerFrame.ScrollBox then
+                        local b = child:GetBottom()
+                        local t = child:GetTop()
+                        if b and b < minBottom then minBottom = b end
+                        if t and t > maxTop then maxTop = t end
+                    end
+                end
+            end
+            
+            if _G.ObjectiveTrackerFrame.ScrollBox and _G.ObjectiveTrackerFrame.ScrollBox.GetScrollTarget then
+                local st = _G.ObjectiveTrackerFrame.ScrollBox:GetScrollTarget()
+                if st and st:IsShown() then
+                    local b = st:GetBottom()
+                    local t = st:GetTop()
+                    if b and b < minBottom then minBottom = b end
+                    if t and t > maxTop then maxTop = t end
+                end
+            end
+            
+            if minBottom > 0 and minBottom < (_G.ObjectiveTrackerFrame:GetTop() or 9999) then
+                local offsetBottom = minBottom - _G.ObjectiveTrackerFrame:GetBottom()
+                local offsetTop = maxTop - (_G.ObjectiveTrackerFrame:GetTop() or 0)
+                
+                -- Add a slight 2px padding to top and bottom to wrap tightly
+                bgFrame:SetPoint("TOPLEFT", _G.ObjectiveTrackerFrame, "TOPLEFT", -20, offsetTop + 2)
+                bgFrame:SetPoint("BOTTOMRIGHT", _G.ObjectiveTrackerFrame, "BOTTOMRIGHT", 5, offsetBottom - 2)
+            else
+                bgFrame:SetPoint("TOPLEFT", _G.ObjectiveTrackerFrame, "TOPLEFT", -20, -20)
+                bgFrame:SetPoint("BOTTOMRIGHT", _G.ObjectiveTrackerFrame, "BOTTOMRIGHT", 5, 0)
+            end
+            
+            bgFrame:SetAlpha(db.solidBackground == true and 1 or (GetBackgroundOpacity(db) * currentFadeAlpha))
+        end
+    end)
+    
+    -- Ensure it initializes immediately so alpha is respected on load
+    KT.ObjectiveTrackerSkin_UpdateBgAlpha()
+end
+
+local function CheckAndInit()
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker or {}
+    if db.enable == false then return true end
+    if not _G.ObjectiveTrackerFrame then return false end
+    local ok, err = pcall(function()
+        InitTracker()
+        SetupBackgroundAndFading()
+    end)
+    if not ok then
+        KT._objectiveTrackerInitError = tostring(err)
+        return false
+    end
+    KT._objectiveTrackerInitError = nil
+    return true
+end
+
+function Mod:KUIDebugCheck()
+    local db = KT.db and KT.db.profile and KT.db.profile.objectiveTracker
+    local otf = _G.ObjectiveTrackerFrame
+    local legacyModules = otf and (otf.modules or otf.MODULES)
+    local legacyModuleCount = 0
+    if type(legacyModules) == "table" then for _ in pairs(legacyModules) do legacyModuleCount = legacyModuleCount + 1 end end
+    local namedLegacyTrackers = 0
+    for i = 1, #SUB_TRACKERS do if _G[SUB_TRACKERS[i]] then namedLegacyTrackers = namedLegacyTrackers + 1 end end
+    return {
+        dbEnable = db and db.enable,
+        addonLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_ObjectiveTracker")) or (IsAddOnLoaded and IsAddOnLoaded("Blizzard_ObjectiveTracker")),
+        frame = otf ~= nil,
+        scrollBox = otf and otf.ScrollBox ~= nil,
+        legacyModules = legacyModules ~= nil,
+        legacyModuleCount = legacyModuleCount,
+        namedLegacyTrackers = namedLegacyTrackers,
+        hookedTrackers = _hookedTrackerCount,
+        childCount = (otf and otf.GetChildren and select("#", otf:GetChildren())) or 0,
+        skinModule = self.GetModule and self:GetModule("Skin", true) ~= nil,
+        initError = KT._objectiveTrackerInitError,
+    }
+end
+local _sawOT, _loggedIn = false, false
+local _retryElapsed, _retryCount = 0, 0
+local f = CreateFrame("Frame")
+f:RegisterEvent("ADDON_LOADED")
+f:RegisterEvent("PLAYER_LOGIN")
+f:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" and (arg1 == "Blizzard_ObjectiveTracker" or _G.ObjectiveTrackerFrame) then
+        _sawOT = true
+    elseif event == "PLAYER_LOGIN" then
+        _loggedIn = true
+    end
+    if _sawOT and _loggedIn and CheckAndInit() then
+        f:UnregisterAllEvents()
+        f:SetScript("OnUpdate", nil)
+    end
+end)
+
+
+f:SetScript("OnUpdate", function(_, elapsed)
+    if not _loggedIn then return end
+    _retryElapsed = _retryElapsed + (elapsed or 0)
+    if _retryElapsed < 1 then return end
+    _retryElapsed = 0
+    if not _sawOT and _G.ObjectiveTrackerFrame then _sawOT = true end
+    if _sawOT then
+        _retryCount = _retryCount + 1
+        if CheckAndInit() or _retryCount >= 30 then
+            f:SetScript("OnUpdate", nil)
+            f:UnregisterAllEvents()
+        end
+    end
+end)
+
+local _isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+if (_isLoaded and _isLoaded("Blizzard_ObjectiveTracker")) or _G.ObjectiveTrackerFrame then
+    _sawOT = true
+end
+if IsLoggedIn() then
+    _loggedIn = true
+end
+if _sawOT and _loggedIn and CheckAndInit() then
+    f:UnregisterAllEvents()
+    f:SetScript("OnUpdate", nil)
+end

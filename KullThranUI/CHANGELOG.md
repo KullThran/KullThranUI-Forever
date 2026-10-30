@@ -1,0 +1,506 @@
+# KullThranUI Changelog
+
+Current addon version: **@project-version@**
+
+Primary source: https://addons.wago.io/addons/kullthranui-forever/versions
+Secondary source: https://www.curseforge.com/wow/addons/kullthranui-forever/files/all?page=1&pageSize=20&showAlphaFiles=show
+
+## 1.0.3 (2026-10-28)
+- Action Bars: new Glows tab. Pick the style, colour and opacity of proc glows, of spells that glow while usable (such as Execute or Overpower) and of spells coming off cooldown, and give any spell its own look.
+- Teleport Menu: new Atlas look, a map table in your accent colour with every teleport as a waypoint.
+- Objective Tracker: a small arrow above the tracker hides or shows it entirely, background included.
+- Profiles: right-click a profile card for a menu (load, assign to spec, change icon, export, save as, delete), and the new profile card creates a clean profile with the KUI defaults.
+- Installer: the Unit Frames, Party Frames and Damage Meter previews show the Visual Style you pick and always fit their box. Party Frames gets the same style row as Unit Frames.
+- Test buttons: new animated look in your accent colour, the same in every language.
+- Options: section cards no longer touch or overlap, and the pinned live preview no longer shows the options scrolling behind it.
+- Cooldown Manager: the KUI Tracker docks to the player frame as it is drawn, keeping room for the cast bar, the druid mana bar and combo points. Bars docked together keep their anchor when dragged in Unlock Mode.
+- Translations: installer texts reviewed in every language, more option labels translated, and line breaks show correctly.
+
+## 1.0.2 (2026-10-25)
+- Installer: redesigned in the KUI look, with a painted window, an animated progress bar, cut-corner buttons and holographic language switches with country flags. Its colours follow your KUI accent, also when you change it while it is open.
+- Installer: the Enhanced Friend List, Bags and Damage Meter previews show the real windows, the Cooldown Manager preview stacks your bars as they sit on screen, and the welcome page shows your character with an accent glow.
+- Installer: new "Opening KullThranUI" step that explains how to open the KUI options, KUI Unlock Mode and the installer, and a "How do I move frames?" guide on the scale step.
+- Unlock Mode: redesigned side panel with its own art, Grid, Snap, Dark and Coords tiles, a filter for the element list, an icon for every element and a Guide that explains each control.
+- Armory: its own look for each Visual Style (slot borders, stats panel, item level and PvP badge, tabs and header) with new icons, and a redesigned Progress page with your rating, dungeon tiles, the Great Vault and your raids.
+- Style pickers: Armory, Bags, Chat and Party Frames share new style cards, and the Nameplates style cards show a live plate of each style.
+- Enhancements: new Kick Tracker (your group's interrupts on the enemy nameplates, with cooldown bars, in Mythic, Mythic+ and arenas) and Spell History (the spells you cast as a row of icons).
+- Enhanced Friend List: shows the exact WoW game each friend is playing.
+- Cooldown Manager: KUI Tracker icons can be clicked to cast or use them.
+- Minimap: style cards per Visual Style, a more faithful live preview, and KUI module options in the minimap button drawer.
+- Bags: the options page shows a live preview of the window with your own items.
+- Skins: gradient window borders and a cleaner group finder popup.
+- Chat: messages stay left-aligned with the per-script font.
+- Translations completed for every language, Bulk Buy included.
+- System Tuning: new Ground Effects options to set the ground clutter density, fade distance and draw distance.
+
+## 1.0.1 (2026-10-22)
+- Options window: redesigned, with its own look for each Visual Style (KUI, Forever, Retail, Classic). The Window Scale percentage can be typed in, and scrollbars have a soft glow.
+- Profiles: new page with animated profile cards in your accent colour. Pick any game icon for each profile, and choose modules and Cooldown Manager specs from clear grids to export or import.
+- Cooldown Manager: five new glow styles (Pixel Glow, Action Button Glow, GCD, Classic WoW Glow and Blackout). On icons with a custom shape, the glows follow the shape's outline.
+- Cooldown Manager: glows on action buttons now sit exactly on the spell icon, and active cooldowns that buff you glow even without a target or when a talent replaces the spell.
+- Nameplates: pending DoT damage marker on enemy plates, with an optional kill icon when your DoTs are enough to finish the target, and class icons over friendly players.
+- Damage Meter: new toolbar on every window (new window, reset, data type, segment and options). The mode menu and the breakdown window use the KUI surface texture.
+- Bags: a frame for each Visual Style, with a style picker on the Bags page that applies at once.
+- Chat: messages fade one by one after a while, as in the default chat, while the window frame fades when idle. Private chat buttons follow the chat style, and Chinese, Korean and Cyrillic names keep the chat text size.
+- Minimap: the Calendar, Mail and Tracking buttons follow the Visual Style, the zone name sits on its plate on the round minimap too, and the zone no longer shows twice.
+- Visual Styles: the level on the style cards is shown in full again.
+- Fixed a Lua error when switching the Cooldown Manager glow to Pixel Border or Shape Glow.
+- Fixed the Cooldown Manager buff bar overlapping the Forever and Retail cast bars, and the Cooldown Manager tabs overlapping their header.
+
+## 1.0.0 (2026-10-18)
+
+- Forever leaves beta: this is the first stable release.
+- Chat: four chat styles (KUI Style, Forever, Retail and Classic), each with its own frame, tabs, buttons and input bar. Every Visual Style remembers its own choice and whispers keep their colours.
+- Chat: the Combat tab shows only the combat log (no pet, loot or system messages) and its My actions / What happened to me? buttons follow the chat style.
+- Raid Check (Enhancements): after a ready check it lists who is missing food, flask, augment rune or pre-pot and lets you report it to the group. Open it with /ktraidcheck.
+- Bulk Buy (Enhancements): Shift-click a stackable vendor item to buy a whole quantity in one go.
+- Nameplates: optional distance over enemy nameplates, shown as range brackets, with format, colour and scope options.
+- Unit Frames: new Portrait Auras tab. The most important aura of Player, Target, Focus, Pet, Target of Target and Focus Target shows on its portrait (crowd control, disarms, defensives, important spells), with a live preview. A CC Catalog lists the crowd control spells of your game with search and a switch per spell, and raid and arena frames can show the same auras.
+- Unit Frames: Druid alternate mana bar under the Player frame while in cat, bear or moonkin form (off by default on the Retail client). The cast bar sits below it and no longer overlaps the power bar.
+- Unit Frames: Forever Portrait Frame option (bronze ornament or plain ring), Forever combo points, and the style cards can be folded away.
+- Cast Bar: Retail and Forever use Blizzard-style art with the spell name on a plate, identical on both clients.
+- Portraits: Druid forms are framed correctly (cat, bear, moonkin, travel and flight).
+- Damage Meter: native styles keep their panel and header, and the meter drops below the maximized world map.
+- Unlock Mode: the right-click menu has a Scale slider for each element.
+- Skins: the Auction House marks the selected category again.
+- Minimap: the zone name shows even when it loads late.
+
+## 0.1.6 (2026-10-17) - Beta
+
+- Forever style reworked for the new Forever art: Player, Target, Focus, Target of Target, Pet, Focus Target and Party Frames fit the new three-band plate (bars, names, icons and portraits) and keep the round portrait ring. It looks the same on the Retail and Forever clients.
+- Retail and Forever styles use Blizzard's own bar fill on Unit Frames, Raid Frames and Resource Bars, without the baked edge or the diagonal end that left gaps.
+- Resource Bars: smoother fill and no stale value after a change of resource or talents.
+- Portraits face the right way in every Druid form and for class icons.
+- Damage Meter: the Classic style uses the real Recount bar texture in the live preview, the options and the installer, and Retail and Forever use Blizzard-style bars.
+- Action Bars: end caps span the whole bar group up to the bags, with a new End Cap Width option (Bar Group or Bar 1). Action buttons and Cooldown Manager icons glow following their shape instead of a plain swipe.
+- Cooldown Manager: the KUI Tracker shows again in the outdoor world.
+- Chat: print and debug output shows in the chat frame again, not only in the copy window.
+- Unit Frames: in KUI Style the target buffs clear the health bar and the combo points circle the portrait. Aura timers use the KUI global font and sit on the icon, stack counts are smaller and buff rows keep their distance.
+- Combo points under the Player frame use Forever's bronze rings in the Forever style, on any client.
+
+## 0.1.5 (2026-10-14) - Beta
+
+- Teleport Menu rebuilt for Forever: a working catalog of the teleports that exist here (Hearthstone, mage teleports and portals with rune count, Moonglade, Astral Recall, Everlook and Gadgetzan items). Click to cast or use; unusable ones are dimmed.
+- Flight Master: clicking a flight point in the guide puts a TomTom arrow on it. Without TomTom it uses the map waypoint.
+- AFK Screen: new page in Enhancements. When you go AFK the interface hides, the camera turns slowly and a bottom bar shows your character, guild, time away and your model, with whispers and guild chat. Any key, combat, or a group finder or battleground invite closes it.
+- Performance: Party Frames do less work in raids (health, power and shield updates are separate, power events only while a power bar is shown), Nameplates stop re-laying out friendly plates every tick, and the Cooldown Manager skips icons without visibility rules.
+- New /kperf window with CPU and memory per module, with snapshots to compare before and after a change.
+- Unlock Mode: Focus and Focus Target no longer drift away from their mover while the unit is hidden, and Reset Position works after a drag.
+- Unit Frames: Text Size now scales the text of the Blizzard-style looks. In Classic the name window takes the class color when health is not class colored, and the raid marker sits on top of the portrait in the Blizzard-style looks.
+- Skins: popups use the Settings artwork, breath and fatigue bars get striped bars in Blizzard's colors, and the Professions rank bar no longer shows a floating flare over an empty bar.
+- Cooldown Manager: a potion quality saved from a Retail profile no longer hides every potion; Forever only offers Highest and Most.
+- Cooldown Manager: buff icons appear as soon as you gain the buff (they could wait until combat), and no longer stay hidden for seconds when combat starts.
+
+## 0.1.4 (2026-10-12) - Beta
+
+- New Debuff Tracker tab in Enhancements: shows which important raid debuffs your target is missing (Sunder Armor, Expose Armor, Faerie Fire, the Curses of Recklessness and of the Elements, Hunter's Mark, the Judgements, Fire Vulnerability, demoralizing effects and rogue poisons), whoever applies them. Missing ones are dimmed and glow, active ones show their timer and stacks, and you can add your own. In combat, where the client hides enemy auras, debuffs seen before the pull keep updating and the rest show a question mark.
+- Minimap: choose the side (left, right, top or bottom) for the Teleport Menu, Guild, Friends and KUI options icons and show or hide each one. The live preview now draws the real map of your zone inside the chosen shape, with the icons in place, and the shape picker no longer errors with the Retail ring.
+- Party Frames: in the Classic, Retail and Forever styles the portrait fills its ring, the Dead, Offline and AFK icon sits on the portrait, debuffs get their own strip below the frame instead of covering the next one, and the live preview and Party Test show portraits again. These styles keep the portrait on, as their art needs it.
+- Unlock Mode: dragging the X or Y slider no longer sends the element away or makes it flicker, and editing X no longer makes Y sink.
+- Nameplates: a friendly player who challenges you to a duel no longer shows two plates at once.
+- Chat: Battle.net toasts (friend online, invites) are visible again.
+- Profiles: the Debuff Tracker and the Dungeon Timer export, import and reset as their own module profiles, and the General profile carries the window move settings.
+
+## 0.1.3 (2026-10-11) - Beta
+
+- New Flight Master module, replacing Dragon Riding. A flight bar shows origin and destination, remaining time or arrival time, and whether the duration is measured or estimated. Routes with stops get a button to land at the next stop, and an optional sound plays on landing.
+- Flight Master guide: every flight point with its distance from you, flight master portrait, flight time and known or undiscovered state, with search, filters and pages, sorted by distance by default. It appears in the options page, next to the flight map when you talk to a flight master, and with /kfm.
+- Flight times are measured on every flight, shared by all your characters and, optionally, with guild and group members using KullThranUI.
+- New Dungeon Tracker in Enhancements: elapsed time, bosses defeated, party deaths and dungeon history, with live preview and appearance options.
+- Friends list enhancements work with the new Social window of the Forever client.
+- Chat: each whisper window shows only its own conversation.
+- Character names with surnames show correctly on nameplates and Unit Frames.
+- Unlock Mode: right-clicking an element opens a complete Element Options menu. Width, height, X and Y have sliders and number boxes, and you can anchor the element to another one with its own offsets and extra width, pick the screen point positions are measured from, fade it on mouseover, center it, or reset its position and size.
+- Unlock Mode: Unit Frames, Cast Bar and Party Frames resize with the same width and height settings used on their option pages.
+- Unlock Mode: the unsaved changes dialog is back, with Exit Without Saving and Save & Exit. Esc or clicking outside returns you to editing.
+- Unlock Mode: movers are more opaque, the element list uses flat rows, and hovering a row highlights its element on screen while clicking it makes it flash. Elements also have new hover, click and selection animations.
+- Leaving Unlock Mode without saving no longer changes Unit Frame scale. The Player frame is restored once to 132% in the Classic, Forever and Retail styles.
+- Resource Bars: new Autoattack Bars that replace Blizzard's autoattack bars while enabled, with fill or empty direction, color, a test button and artwork that follows the selected visual style.
+- Damage Meter: new Visual Style selector (KUI, Retail, Forever, Classic). Only the look changes; every window keeps its own mode, session, size and position.
+- Classic style: Holy Power, Soul Shards, Runes, Essence, Chi and Arcane Charges use a classic gem tray under the Player frame, aligned like the combo points.
+- Retail and Forever styles keep Blizzard's own class resource art and animations under the Player frame.
+- Target of Target and Focus Target use the small Blizzard frame with power bar and portrait in the Classic, Forever and Retail styles, and their previews match.
+- Druid combo points are only shown in Cat Form, in every combo style.
+- Party Frames: in the Classic, Retail and Forever styles, debuffs sit centered below the frame instead of over the health bar when the debuff anchor is Center.
+- Cooldown Manager: the KUI Tracker no longer shows another class's interrupt or defensive (for example Kick on a Warlock) when characters share a profile.
+- Cooldown Manager: bars keep their exact position after being dragged in Unlock Mode and when arena layouts reset.
+- Unit Frames: AFK, Dead, Ghost and Offline badges update correctly when you switch target or focus.
+- Unit Frames: names written in Korean, Chinese or Japanese characters display correctly instead of empty boxes.
+- Target auras refresh reliably after target changes.
+- Bags: using an item from the bags in combat no longer triggers a blocked-action warning. The bag updates as soon as combat ends.
+- Bags: item categories (Equipment, Consumables, Reagents, Junk and the rest) are now built into KullThranUI and work on their own.
+- Nameplates: KUI style bars no longer keep the fill texture left by a previously applied style, and group threat colors stay readable.
+- Teleport Menu shows destination names in your client's language.
+- Minimap layout refreshes with your current settings after combat.
+- Tooltip, Installer previews, Inspect, Minimap and Aura Reminders texts are now translated in every supported language.
+- Unit Frames: the PvP icon of the previous target no longer stays on the frame when you switch targets in combat.
+- Cast Bar: chaining fast casts no longer hides the first cast halfway through.
+
+## 0.1.2 (2026-10-06) - Beta
+
+- Party Frames now offer KUI, Forever, Retail and Classic style cards with independent class-color or health-color selections.
+- Reworked Party Test and live previews to match the selected style, with randomized classes appropriate to the client.
+- Fixed KUI party portrait layering and aura placement; sample dispel overlays are limited to one frame.
+- Forever, Retail and Classic party frames are 25% larger by default. KUI frame sizing remains unchanged.
+- Debuff overlays default to disabled for Forever, Retail and Classic party styles.
+- Raid group movers are available in Unlock Mode outside an active raid.
+- Elite and Rare nameplate indicators fit the upper-right corner without reducing their size and support manual X/Y offsets.
+- Focus, Target of Target and Focus Target frames and previews use matching frame artwork for the selected style.
+- Cast Bar style controls have clearer icons and an Apply Style button matching the options interface.
+- Refined the Profiles page layout and module export/import controls, with accent-colored borders and clearer text.
+- Visual Style cards use rounded surfaces and a subtle hover effect, with no card tooltips.
+- Refined the options search bar to fit the header; performance readings are now in Enhancements > System Tuning.
+- Test buttons use transparent backgrounds, clean white text and outlined borders. Options text follows the global font.
+- Restored the KUI Move configuration for Forever and improved movable-window registration.
+
+## 0.1.1 (2026-10-05)
+
+- Cast Bar now offers KUI, Classic, Forever and Retail preview tabs with Apply controls; native styles use Blizzard casting art and colors. Classic has no icon, outlined text and a properly layered frame.
+
+**New**
+- Nameplates mark enemies you still need for a quest with a yellow "!" in every style.
+- Party Frames: Portrait Mode (2D, 3D or Class Theme) with 3D Portrait Zoom, Rotation and X/Y Offset sliders.
+- Chat: new "Click Channel to Chat" option; left-click a channel tag to start typing in that channel.
+- General: new "KUI controls the UI scale" option.
+- Unit Frames: Blizzard-style name and level text, combat and resting icons, and a combo point ring on the Target frame.
+
+**Improved**
+- Forever nameplates redesigned: taller bars with the Retail texture, the name above the bar, a bronze border with softly rounded corners, and the level in a yellow box beside the bar.
+- Classic nameplates show the level as a gold number on a gold pill at the end of the bar and are larger by default.
+- The nameplate live preview shows the selected visual style.
+- Better 3D party portraits, and 3D portraits in circular Unit Frame portraits.
+- The Classic style shows the original Blizzard text on health and power bars, and its Rare/Elite ring hugs the portrait.
+- Combo points use a look that matches each visual style by default.
+- Redesigned Mail skin.
+- The Installer returns to the Visual Style page after a style change reloads the interface, and no longer reopens by itself if you closed it.
+
+**Fixed**
+- KUI no longer changes your UI scale or moves Edit Mode frames unless you choose to, and module on/off toggles apply correctly.
+- Fixed KUI Tracker icons briefly showing a green swipe.
+- Profile import notices, nameplate style prompts and visual style messages are now available in every supported language.
+- KUI Style target combo points now form a separate row above the portrait.
+- Classic Rare/Elite overlays fit KUI circular portraits without the stock level socket.
+- Classic player health and power percentages appear inside their bars.
+- Blue quest-objective nameplates use a darker shade in Classic.
+- Aggro glow illuminates the complete Classic Rare/Elite decoration.
+- Target arrows respect the frame and level badges in every nameplate style.
+- Unit Frames live previews show the complete Rare/Elite artwork beneath the level.
+- Cast Bar styles use Avant Garde text, with style icons in the tabs and preview.
+- Fixed Hide Alerts suppressing loot-roll windows; pending rolls remain visible and selectable.
+- Unit Frame combo displays can be toggled independently and combined; Target defaults to the portrait ring, with correctly aligned optional rows.
+- Retail-style nameplates keep stable atlas geometry as camera scale changes.
+- Fixed Nameplate Tip of the Spear and Whirlwind tracking on player lifecycle and spellcast events.
+- Applying KUI Style on Retail keeps Unit Frame portraits disabled, including previously saved style settings.
+
+## 0.1.0 (2026-10-03)
+
+Beta focused on making every visual style consistent across Unit Frames, Nameplates, Minimap and Skins.
+
+**New**
+- Nameplate style presets (KUI, Classic, Retail, Forever) in Nameplates > General, with a compact preview of each; choosing one resets sizes and offers a reload.
+- Minimap frame rings per style (Forever, Retail, Classic) with a visual selector and Live Preview; choosing a visual style applies its ring and removes the decorative gold circle.
+- Combat text on the portrait (Dodge, Miss, damage) in every style, with an off toggle and a white-numbers option.
+- Incoming heal prediction bar on all unit frames and styles.
+- Aggro glow on/off toggle; it now also lights the Target frame portrait overlays when you hold aggro on the target.
+- Modern PvP icon is the default in Retail and Forever; the PvP circle turns dark grey with the Rare border.
+
+**Improved**
+- Classic nameplates now match the original: bronze rounded border, gold-ringed oval level plate with the difficulty-colored number, the original matte bar texture and saturated red/green fills.
+- Retail and Forever nameplates now use Blizzard's own nameplate atlases (bar fill, rounded border, cast bar), with red enemies, the level inside the bar in white, and an extra bronze ring in Forever. Existing blue or orange enemy colors are migrated automatically.
+- Retail and Forever nameplates are taller; enemy target and focus frames use class or reaction colors instead of the theme green.
+- Rare/Elite portraits keep the atlas frame around the health and power bars.
+- Combo points placed above the frame adapt to the Classic tray (mirrored) and to the loose pips, also in the Live Preview.
+- Resource bars show their resource/power text by default in every theme.
+- Selecting a theme now also resets the nameplate style and sizes.
+- Party frames no longer draw above other windows.
+- Action bars: cooldown swipes now fill the whole icon on KUI and Simplicity buttons and follow the button shape (circle and others) on Blizzard bars.
+- Objective Tracker: the "All Objectives" header is shown again and every module header gets an accent-colored gradient bar.
+- Cooldown Manager: shaped icons no longer show the square background behind them.
+
+**Fixed**
+- Forever clients were detected as Retail, mislabeling profiles; existing misnamed profiles are renamed.
+- The target class portrait kept the previous class after changing target, and flipped did not apply.
+- Chat: clicking a player name opens a whisper again and /played shows its result.
+- Skins: guild invite emblem, Auction House and popup money fields, and the Send Mail layout with attachment feedback.
+
+## 0.0.9 (2026-10-02)
+
+Beta centered on a full visual-style refresh: Forever, Classic and Retail now look like their originals while staying customizable.
+
+**New**
+- Forever, Classic and Retail styles with authentic player, target and pet frame art, plus matching action bars, cast bars, resource bars, nameplates, minimap, damage meter and objective tracker.
+- Pet frame follows the selected style and appears in the Unit Frames live preview.
+- Combo points under the Player and Target frames, chosen separately: Off, Modern or Classic (Target also has a portrait Ring), placed below or above the frame with X/Y offsets and a live preview. Classic is on by default in the Classic style.
+- PvP icon styles for Player and Target: Modern or Classic banner, Classic by default in the Classic style.
+- Action Bar Art selector with live previews.
+- Circles and Pips options for combo points.
+- Per-ability cooldown display rules: always visible, only while usable, hidden while ready or on cooldown, reduced opacity, and charge controls.
+- The new race's racial is detected by default in the KUI Tracker.
+
+**Improved**
+- Redesigned player, target and pet frames: portraits, level and rare/elite indicators, names, buffs and a new frame-size option.
+- KUI Tracker adapts to every style, with buffs placed correctly and an accurate live preview.
+- KUI Tracker catalogs are exclusive to Forever, and each item appears only in its proper tracker.
+- Party portraits on by default; dispel overlay changes apply instantly, even in combat.
+- Profile imports warn when a profile comes from a different game version.
+- Chat uses Avant Garde as its fixed font.
+
+**Fixed**
+- KUI Tracker elements move and keep their position in Unlock Mode.
+- Rare/Elite portrait borders and loot-roll alerts display correctly.
+
+## 0.0.8 (2026-09-27)
+
+Forever beta maintenance release carrying the latest tested addon state and refreshed package metadata.
+
+- Updated all Forever addon TOCs to version 0.0.8.
+- Prepared the release workflow and package for explicit GitHub, CurseForge, and Wago beta publication.
+
+- Restored Blizzard's special-NPC state so friendly quest givers retain their native overhead question-mark indicator.
+- Prevented friendly nameplate FontStrings from calling `SetText()` before a font is initialized during level updates and frame recycling.
+- Split Friendly Name Only into independent Player and NPC controls and moved them higher in the Friendly display page.
+
+## 0.0.7 (2026-09-26)
+
+Forever beta release focused on the latest Nameplates, Unit Frames, and Bags visual and compatibility improvements.
+
+- Added protected-value-safe dynamic Nameplate level placement that keeps the level beside the rendered name and repositions classification and aura icons consistently.
+- Added configurable Dynamic Level Layout support and refreshed Nameplate classification artwork and anchoring for enemy, NPC, and friendly plates.
+- Added custom Rare and Elite classification icons to Unit Frames, including portrait-ring rendering, no-portrait placement, side-aware mirroring, and delayed metadata refreshes.
+- Added a beige highlight frame for newly collected items in Bags, synchronized with Blizzard new-item state and cleared when the item is viewed.
+
+## 0.0.6 (2026-09-26)
+
+Forever maintenance release focused on Bags, Nameplates, dungeon tracking, protected-value safety, and party frames.
+
+- Added a visible gold highlight border to quest-item icons in Bags, including recycled slots and Forever item-classification fallbacks.
+- Fixed a Nameplates protected-value error by removing comparisons against secret text geometry while anchoring level text.
+- Added a dungeon Objective Tracker fallback that lists every detected boss and marks defeated bosses with [X], including delayed refreshes while entering or updating an instance.
+- Fixed the dungeon tracker fallback detection for Forever by supporting both IsInInstance() and GetInstanceInfo() and avoiding false suppression by an empty native scenario block.
+- Fixed an oUF portrait taint error caused by comparing secret GUID strings; unit identity now uses UnitIsUnit() and protected GUID changes are ignored safely.
+- Fixed distorted dead/offline icons in Party Frames after AFK status geometry changed the shared icon dimensions.
+
+## 0.0.5 (2026-09-25)
+
+Forever maintenance release focused on Nameplates, Aura Reminders, texture opacity, and chat sync.
+
+- Reverted a scaling regression that caused Enemy Nameplates to stay excessively large at long distances instead of scaling normally.
+- Decreased the default size of Enemy Nameplate debuffs and upper/lower aura slots by 25%.
+- Implemented fully dynamic positioning for Nameplate level text; the level indicator now perfectly hugs the left edge of the unit's name, preventing overlap regardless of name length.
+- Refactored Aura Reminders: Removed group-wide logic (such as checking if party members are missing a buff). The module now operates on a strict personal basis, solely reminding you if your own character is missing the buff.
+- Fixed an issue in Chat where clicking a channel or whisper link in the chat frame would immediately revert to the default channel instead of keeping the manually selected one.
+- Finetuned the darkening opacity (wash alpha) of the KUI background textures on the Bags, World Map, and Objective Tracker interfaces. The opacity has been set to 0.38, matching the Armory module for better visual consistency.
+- Audited all module toggle options (Enable Module). Fixed an issue where toggling the Enhancements and Cursor modules would not prompt for a UI reload, ensuring complete and clean activation/deactivation across all modules.
+## 0.0.4 BETA (2026-09-24)
+
+Forever beta maintenance release focused on chat, minimap, Armory, Collections, Appearances, and Bags.
+
+- Restored chat sender names, class colors and clickable player links with Blizzard right-click interaction; preserved message text, item links and whisper history through reloads.
+- Fixed chat payload handling so empty or protected messages cannot be replaced with the sender name.
+- Applied the Retail minimap positioning and launcher restoration fixes to the Forever layout.
+- Improved Armory surfaces, stats/progress panels, and texture treatment so character and inspection views remain readable.
+- Reworked Collections and Appearances skinning with safe Forever OnClick hooks, restored native slot and right-hand icons, and balanced textured surfaces.
+- Set Bags texture darkening to 62% across the window panels.
+- Removed the syntax-broken popup recovery fragment; the active popup skin remains in Popups.lua.
+- Hardened Aura Reminders, Unit Frames, Party Frames, Nameplates, Cooldown Manager, and Objective Tracker paths for Forever API and protected-value differences.
+- Published explicitly as BETA with matching release notes on GitHub, CurseForge and Wago.
+
+## 0.0.3 (2026-09-20)
+
+Forever beta follow-up focused on the Forever-native layout, options, installer, and release flow.
+
+- Reworked KUI Move as KUI Move Forever with a curated Forever frame catalogue, Forever-specific naming, aliases, frame toggles, position and scale controls, and safe Settings fallback handling.
+- Fixed the General > KUI Move page so it exposes real configuration controls instead of only a dead external button.
+- Corrected Forever default layout handling for Unlock Mode elements, including Equipment Durability, Focus, Focus Target, Pet, and Target of Target while accommodating Forever SavedVariables limitations.
+- Improved KUI Tracker and Aura handling so Forever icons and positions are rebuilt reliably after Unlock Mode edits instead of retaining Retail-only or stale copies.
+- Adjusted Armory layout and stat presentation to keep the character, equipment slots, original Blizzard stats, and KUI stats visible without panel overlap.
+- Made Cast Bar and Resource Bars use the intended Forever defaults, including fixed width behavior, matching resource-bar dimensions, and mana on the pet bar.
+- Removed or filtered Retail-only Enhancements, Damage Meter class data, profile choices, and Skins paths that do not apply to Forever.
+- Limited External Addons quick access to addons installed and enabled in the current Forever client, showing their available configuration commands and resolving registered command aliases.
+- Updated the Forever installer branding with the blue square KUI logo, the Forever logo, a blue Feral Shape, and an explicit Retail-to-Forever adaptation description.
+- Validated the beta package against Interface 16001 and refreshed the GitHub, CurseForge, Wago, and Discord release workflow for Forever beta publication.
+
+## 0.0.2 (2026-09-19)
+
+Cumulative WoW Forever beta release notes from the 0.0.1 baseline. This branch is versioned independently from Retail 5.0.7.
+
+- Updated the package, core addon, module TOCs, release tooling, and in-game version sources to 0.0.2.
+- Added Forever/Camelot detection and compatibility guards for the reduced API surface, specialization data, item information, range checks, protected values, and secret values.
+- Hardened startup, AceDB/profile ownership, saved-variable migration, Installer state, changelog suppression, language selection, reload continuation, and Unlock Mode persistence.
+- Fixed the Installer Don't show again state so it remains selected after reload and no longer reopens on every login; preserved the changelog suppression migration from 5.0.7.
+- Connected Experience Bar to the current Unlock Mode registry, restored its visibility, position saving, and a safe default above the Blizzard action bars while Forever saved variables are incomplete.
+- Removed Dragon Riding from the Forever-facing module flow and removed Mythic+ Timer from the Forever TOC, Installer, previews, and startup; retained Mythic+ History as normal Dungeon History.
+- Disabled Combat Timer by default and migrated old profiles without overwriting an explicit later user choice.
+- Added Forever-safe Aura Reminders filtering for available auras, weapon enchants, instance reminders, and Party Frame missing-buff reminders.
+- Added Unit Frame and Party Frame level and PvP indicators, configurable typography and offsets, Elite/Rare classification indicators, circular portrait defaults, portrait borders, and correct overlay strata.
+- Added visible Unit Frames and Party Frames toggles and live-preview rendering for level and PvP indicators; Target PvP now sits outside the right side of a right-hand portrait.
+- Moved Target portrait to the right by default and made Target level, PvP, and classification indicators follow the actual portrait anchor whenever the portrait is moved.
+- Corrected Unit Frames and Party Frames module enable toggles and made dispel overlay toggles apply immediately to every relevant aura/border path.
+- Added configurable friendly-player levels to Nameplates and retained shared font, size, outline, shadow, color, X, and Y controls.
+- Restyled Objective Tracker quest titles with the accent color across Forever legacy tracker blocks and added safer tracker discovery without assuming Retail ScrollBox APIs.
+- Restored Armory visibility and Forever-compatible stats handling without feeding missing Retail stat strings into Blizzard tooltip formatters.
+- Hardened KUI Move for Forever build/version semantics, accepted existing Forever frames marked with obsolete Retail ranges, and suppressed expected missing-frame noise.
+- Fixed Skins option builders and other Forever frame/API differences that caused nil callback failures.
+- Protected TeleportMenu cooldown comparisons, Action Bar and TextStatusBar paths, and other tainted/secret-number operations from Lua arithmetic and comparisons.
+- Patched Rogue/Feral Combo Points in Resource Bars, Unit Frames custom Class Power, oUF ClassPower, and the oUF cpoints tag; Feral-only Druid mapping avoids applying Combo Points to other Druid specs.
+- Fixed Aura Reminders and Party Frame APIs for Forever-only spell/item availability and removed Retail-only assumptions from reminder catalogs.
+- Improved Chat whisper history so all outgoing whispers display, including Forever events with lineID 0, while keeping protected native chat handling safe.
+- Moved the default Damage Meter position down and left, improved its protected-value handling, and kept custom user positions intact.
+- Kept diagnostics available through /ktdebug and /ktpersistdebug, with persistence logging disabled by default after the migration was verified.
+- Validated changed Lua files with Lua 5.1 syntax checks and validated repository whitespace with git diff --check.
+
+## 5.0.7 (2026-09-18)
+- Added WoW Forever and WoW Forever Beta detection to Enhanced Friend List, including the dedicated WoW Forever artwork and distinct tooltip labels.
+- Hardened Enhanced Friend List native tab handoff and embedded Raid navigation while preserving Blizzard's protected click path.
+- Fixed Raid Warning taint caused by secret or unit-derived values by using a safe static warning message and protected-value checks.
+- Improved Chat handling for protected and secret message data, including safer whisper capture and native channel integration.
+- Refined Minimap utility-button collection and restoration so addon launchers are handled without disturbing Blizzard's map, waypoint, POI, or scanner controls.
+- Reduced Cooldown Manager background work with coalesced event-driven refreshes and safer handling of protected cooldown values.
+- Improved Mythic+ History damage matching and ranking fallbacks, added font fallback support, and added an option for LFG class-colour bars.
+- Hardened Aura Reminders, Nameplates text rendering, and Modern KUI skins for current protected UI and Blizzard frame changes.
+
+## 5.0.6 (2026-09-13)
+- New Feature: Mythic+ History. A detailed Mythic+ history has been added to the Enhancements module, allowing you to track completed keys and view a keystone summary breakdown, including a damage meter to see who did the most DPS during the run. NOTE: The Mythic+ History will only display all party members after activating the submodule, as KullThranUI needs to start saving the runs internally from that point forward.
+- Localization updates: Translations have been applied across all KullThranUI modules. Localization and compatibility have been expanded to cover 97% of the addon and its features. Added country flags to easily     distinguish languages. Fixed translation errors across several Widget elements and the Enhancements submodule.
+- Skins module update: New visual style applied. Improved the visibility and overall readability of the reskinned default Blizzard frames.
+- Added a scrollbar to the Widget system. It will now appear automatically in all modules that have enough options to require scrolling.
+- Added a Minimap button to open KUI options directly.
+- Fixed an issue in the Objective Tracker where the 'Scenario' header would display even when not inside an instance.
+- Fixed KUI Tracker behavior in the CooldownManager. Potion and Warlock Healthstone cooldowns will now properly reset after a raid boss wipe/reset (when the appropriate conditions are met).
+- KullThranUI is now officially available on GitHub! Future updates for CurseForge and Wago will be deployed from there, and Pull Requests will soon be enabled so the community can help improve translations.
+- Added a configurable Combat Timer to Enhancements, with an idle display, a short final-duration hold, styling controls, Unlock Mode support, and a frame width that follows the rendered timer text.
+- Promoted Melli Reforged to the default status-bar texture across KUI, including a one-time Resource Bars migration from Melli and synchronized texture selection for health, primary, and secondary resources.
+- Added per-module profile import and export controls to options pages and corrected profile ownership for Action Bars, Bags, Progress Bars, External Addons, Enhancements, and other scoped settings.
+- Expanded Nameplates target highlighting with multiple indicator styles, reversible direction, indicator shadow glow, configurable indicator and target-glow colors, scaling, previews, and preset support.
+- Refined the Nameplates Display live preview with compact one-row font, outline, and bar-texture selectors, and fixed health-bar clicks so they open the corresponding size settings.
+- Improved SharedMedia selectors throughout KUI with complete registered font and texture lists, inline previews, dependable scrolling, and support for media added by other addons.
+- Reworked the Cooldown Manager potion tracker with stable combat, health, healthstone, and optional mana slots, selectable potion quality, corrected Midnight item ranks, and combat-safe layout updates.
+- Restored Action Bars hotkeys, overlay glows, mouseover behavior, bindings refreshes, and visual enhancements on protected buttons while isolating unsafe cooldown hooks for Midnight APIs.
+- Updated Aura Reminders for Midnight Season 2 with locale-independent instance IDs, spell icons, scrollable talent selectors, and compatibility with older name-based reminders.
+- Improved Party Frames with selectable SharedMedia health and absorb textures, matching live previews, and missing-buff reminders that ignore non-player companions and scenario NPCs.
+- Extended Unit Frames with Melli Reforged defaults, full SharedMedia font and status-bar support per unit, live media previews, and a corrected Default Texture control.
+- Reworked Character and Armory navigation with accent-aware Stats, Titles, Equipment, and Progress tabs, more reliable pane visibility, and a compact configuration button beside the close control.
+- Hardened Enhanced Friend List raid navigation by passing protected roster clicks through Blizzard's native control and correctly restoring or suppressing the native frame artwork.
+- Fixed the dedicated Group chat tab so it receives the complete native group-message set while respecting secure and combat-locked chat restrictions.
+- Refined the minimap button drawer so it captures only genuine addon launchers, leaves Expansion Summary, waypoints, POIs, and scanner pins untouched, and restores original button sizes.
+- Expanded the Tooltip live preview with real player identity, guild, specialization, faction, item level, Mythic+ or PvP score, raid progress, and class-colored health styling.
+- Added a configurable Great Vault skin, refined World Map breadcrumbs and search styling, fixed Ready Check decision labels, and removed the duplicate protected Game Menu skin path.
+- Hardened the Escape Menu against FrameMeasurement taint by removing unsafe enumeration of foreign overlay frames anchored to protected nameplates.
+- Fixed Ready Check layouts for both incoming and self-initiated checks, removing leftover Blizzard artwork and the empty panel behind consumable trackers.
+- Eliminated periodic Cooldown Manager combat freezes by coalescing tracker refreshes and avoiding repeated inventory, tooltip, and item-spell scans.
+- Reduced Nameplates interrupt-tracker overhead by replacing global cooldown-event rebuilds with lightweight local ticker updates.
+- Expanded /ktfreeze diagnostics with event/addon attribution and Lua allocation/GC tracking without intrusive global CPU polling.
+- Reworked Enhancements with a Mythic+ timer that owns its tracker presentation, key details, forces progress, deaths, boss objectives, chest thresholds, and completion state.
+- Expanded Mythic+ timer configuration with independent fonts, textures, sizes, widths, heights, colours, glow controls, chest-one, chest-two, chest-three, and forces-bar typography, plus a remaining-time-only display with localized forces text.
+- Made SharedMedia font and texture selectors complete and usable throughout Enhancements, including installed fonts and textures, inline preview rendering in dropdowns, left-aligned option labels, and corrected selector placement.
+- Reworked Damage Meter configuration and preview with realistic player/spec data, working dynamic Blizzard window discovery, font and texture controls, centered bar layout, selectable spec/class/hidden player icons, rounded icon support, and corrected bar spacing.
+- Added automatic LFG role-check controls under Automation & Social, including selectable Tank, Healer, and Damage roles and automatic confirmation when queueing alone or with a group.
+- Refined Enhancements navigation with module-specific artwork, accent-coloured icons, the red sword Damage Meter icon, Blizzard chat artwork for Automation & Social, and clearer Interface & Comfort and System Tuning references.
+- Hardened LFG and popup skins for current Retail UI changes, including accent-only queue-ready borders, working close buttons, black uncovered popup surfaces, preserved dungeon artwork, and safer handling of native NineSlice and border textures.
+- Fixed the KUI Unlock Mode navigation state so closing and reopening the main options window cannot leave Unlock Mode visually selected as the active page.
+- Completed the Enhancements localization pass across the supported locales for the new timer, Damage Meter, LFG automation, typography, texture, forces, preview, and navigation strings.
+- Restored reliable per-conversation whisper capture on secure-chat builds by mirroring Blizzard-rendered whisper lines into KUI history, including Battle.net conversations, without bypassing the selected whisper thread.
+- Hardened Chat integration for protected message and channel data by avoiding unsafe native filter and channel-list mutations, preventing taint attribution and protected-table failures during PvP and other restricted chat dispatches.
+- Reworked first-time setup for new characters with a dedicated starting-profile choice, allowing existing saved profiles to be selected or KUI defaults to be used without forcing every character onto the KullThranUI profile.
+- Improved Installer and profile startup handling with stable per-character tracking, safer specialization-profile transitions, correct layout imports into the active profile, and more reliable continuation through conflict detection and setup.
+- Expanded the Fonts & Colors page with live font previews, a separate Launcher and Options font, individual typography controls for major HUD, social, character, and inspection areas, and additional color controls for interface surfaces, action bars, progress displays, Chat, Armory, and Inspect.
+- Reworked global font inheritance so modules that still follow the global font update together while explicitly customized areas preserve their own selection, with combat-safe deferred refreshes across the supported interface.
+- Refined the main configuration window with an accent-colored KUI logo, a new resize grip, a slimmer navigation scrollbar, immediate minimap social-icon recoloring, and a scalable nine-slice background that preserves its proportions at preset and custom window sizes.
+- Redesigned KUI Unlock Mode with a wider and cleaner sidebar, clearer active-element feedback, improved mover menus, direct access to profile importing, an animated opening logo, and an automatically retracting sidebar that remains available from the edge of the screen.
+- Improved the in-game changelog window so its complete ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œDonÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢t show againÃƒÂ¢Ã¢â€šÂ¬Ã‚Â row is clickable, the current patch suppression state is restored correctly, and enabling or disabling the option is saved immediately.
+- Hardened Chat against protected edit-box state changes during combat, preventing unsafe whisper, Battle.net, and chat-type mutations while retaining the normal input flow outside combat.
+- Reduced Cooldown Manager background work by replacing continuous glow polling with coalesced event-driven updates, refreshing only affected bars when possible, and avoiding redundant transition passes once BlizzardÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢s Cooldown Viewer pools have stabilized.
+- Improved Cooldown Manager trackers by hiding unavailable potion items, keeping owned potion ranks synchronized, stabilizing player and target frame anchoring around narrow CDM layouts, and making arena, battleground, specialization, and world-transition recovery more selective.
+- Reworked centered horizontal Party and Arena layouts so the player remains in the intended middle position as the group fills, with a corrected bottom-center default position for horizontal Party Frames.
+- Improved Party Frames range, phase, roster, aura, and encounter handling with more reliable out-of-range recovery, independent dispel indicators, properly layered AuraKit dispel effects, boss-frame activation during encounters, and fewer unnecessary full roster rebuilds while zoning.
+- Refined Modern KUI group-interface skins with complete accent borders for selected LFG entries, clearer role-selection feedback, and a rebuilt Ready Check presentation with restored portraits, dedicated Ready and Not Ready buttons, consistent surfaces, and accent-aware artwork.
+- Restored reliable first-run Installer startup for new users and brought back the visible "Don't show again" control, with synchronized login settings so the prompt can be disabled or re-enabled cleanly.
+- Hardened Chat against protected and secret PvP payloads, preventing duplicated battleground system messages while preserving Blizzard's native message handling.
+- Restored access to Blizzard's Group Management controls, including raid and world-marker tools, when KullThranUI Party Frames are active.
+- Improved Party Frames during PvP and arena transitions with safer protected-unit handling and more reliable roster, role, raid-target, and aura refreshes.
+- Fixed KullThranUI Bags tainting Blizzard's protected container click path, restoring item use, equipping, dragging, and background drops without UseContainerItem() forbidden-action errors.
+- Redesigned the main KullThranUI configuration window around expandable module categories, with dedicated 60x40 category artwork, compact module shortcuts, persistent multi-category expansion, and reliable toggling from both the category row and its arrow.
+- Added category overview pages that present every available module as a large shortcut card with its icon and a concise description, while keeping the most recently selected category open in the right-hand panel.
+- Corrected category selection and navigation feedback so only the active category remains highlighted, module counts appear only on category overview pages, and expanded categories can coexist without changing the active page.
+- Refined the global options presentation with a slightly brighter panel background, consistent category-arrow artwork based on the KUI minimap button, and cleaner icon, spacing, and selected-state behavior throughout the sidebar.
+- Reworked private whisper persistence so opened character and Battle.net conversations can survive a UI reload, including conversations opened before any message is exchanged, while closed conversations remain dismissed and session state is cleared on disconnect.
+- Hardened Chat against protected and secret strings when capturing whisper targets or copying chat history, and prevented closed temporary Blizzard whisper windows from reopening automatically.
+- Corrected Action Bar cooldown presentation so active cooldowns use a properly darkened swipe over every supported button shape instead of retaining the normal colored background.
+- Rebuilt Damage Meter player pinning around a pinned final row: the player remains visible without corrupting the real ranking order, scrolling can inspect the complete list, and combat-start refreshes no longer push the meter to an unrelated position.
+- Improved Damage Meter combat-session handling, saved history, protected-value support, and live refresh scheduling to avoid redundant delayed updates during continuous combat events.
+- Added a genuinely opaque Objective Tracker background mode with a solid black surface, an accent-colored top border, and an accurate live preview that cannot inherit the legacy gradient or fade.
+- Expanded Armory PvP item-level support with a working live-preview indicator and independent controls for visibility, label, decimals, font, size, outline, color, and horizontal or vertical positioning.
+- Repositioned Installer Party Frame test controls into a compact left-aligned group so Party, Raid, and Raid 40 tests no longer overlap or distort the live preview.
+- Significantly reduced Party Frames update cost through unit-scoped event registration, coalesced aura refreshes, bounded absorb queues, cached aura state, and a centralized duration driver that runs only while required.
+- Improved Nameplates runtime efficiency with reusable frame pooling and cached threat, quest-target, and contextual state, reducing repeated allocation and expensive unit scans during combat.
+- Optimized Resource Bars to reuse resolved layout and marker data and to update ranges, values, and text only when their relevant unit state changes.
+- Extended protected and secret-value safeguards across Party Frames, Resource Bars, Nameplates, Chat, Damage Meter, and other high-frequency combat paths for improved Midnight API compatibility.
+- Added and reviewed localization for the new 5.0.0 category pages, Objective Tracker background controls, Armory PvP item-level settings, and related interface text across every supported language.
+- Improved package hygiene by removing unused development artifacts, reference trees, duplicate media, temporary scripts, and unreferenced external resources, and added a KullThranUI license that explicitly preserves third-party ownership and licensing terms.
+- Reworked the Installer flow so first-time setup opens reliably for every character, reload-required changes return to the exact previous step, and the Installer can be opened directly with `/installer` or `/ins`.
+- Expanded the Installer with a dedicated Resource Bars step, clearer module enable and disable behavior, localized reload prompts, improved pressed-state feedback, and the correct KullThranUI background across every page.
+- Redesigned Installer previews for Action Bars, Buffs & Debuffs, Party Frames, Resource Bars, Nameplates, and Armory so configuration choices use realistic layouts, class abilities, aura examples, and their actual icon shapes.
+- Restored shape support across Action Bars, Buffs & Debuffs, and Cooldown Manager, including masked cooldown swipes, hotkeys rendered above masks, shape-aware selection feedback, and removal of square shadows from non-default shapes.
+- Improved cooldown handling for protected and secret values, preventing repeated ActionButton and SetCooldown errors without relying on continuous texture updates.
+- Reworked dispel and status overlays in Party Frames and Unit Frames for Magic, Poison, Curse, Disease, and Bleed effects, with the intended diffused presentation across party, raid, arena, and supported dungeon follower frames.
+- Fixed friendly units retaining hostile colors after a duel and corrected additional reaction, target, and state refresh edge cases in Unit Frames and Party Frames.
+- Improved Nameplates options with correctly initialized default slider values and search-style highlights restricted to the relevant configuration gears instead of covering complete option rows.
+- Corrected Armory live previews so empty equipment slots remain empty, displayed stats match the real panel, and movement speed is calculated from the appropriate game values.
+- Expanded and refined Modern KUI skins for Trade, Ready Check, Arena Shuffle, group invitations, role popups, PvP inspection, consumable frames, and other Blizzard dialogs.
+- Fixed missing role icons in group invitation and acceptance popups, accent colors not applying to Ready Check consumables, and popup errors caused by invalid texture layers or unsafe hooks.
+- Improved Enhanced Friend List invite-button styling so the original artwork follows the active accent instead of being replaced or remaining white.
+- Reorganized minimap utility buttons outside the map with dedicated Calendar, Tracking, Mail, Friends, Guild, and Teleport Menu controls, consistent Modern KUI backgrounds, accent-aware social icons, and pixel-perfect edge anchoring.
+- Separated Teleport Menu from the KullThranUI minimap-button collector, added a dedicated custom portal button and corrected label, and replaced the menu settings icon with the standard KUI gear artwork.
+- Reworked Buffs & Debuffs with fully custom AuraKit containers managed through KUI Unlock Mode, preserving existing user positions during migration and applying consistent minimap-relative defaults and spacing.
+- Restored the original Masque Simplicity appearance for auras, fixed weapon-enchant text initialization, improved the live preview layout, and made short durations clearly distinguishable from application counts.
+- Optimized Buffs & Debuffs aura processing and improved icon reliability under the protected and secret aura restrictions used during combat.
+- Reworked Cooldown Manager update scheduling to eliminate redundant full refreshes caused by cooldown and aura event storms, substantially reducing combat CPU usage.
+- Fixed inconsistent CDM proc glows, missing or incorrectly spaced buff-bar icons, protected icon visibility errors, and tracking failures after the first use of an ability or item.
+- Restored KUI Tracker defensive, racial, potion, and trinket tracking in raids and Mythic+, corrected potion rank and quantity selection, improved cooldown text visibility, and added reliable feedback for passive trinket procs.
+- Added a Modern KUI skin for Blizzard's native Cooldown Manager and a direct button in KUI CDM options to open it, with combat-safe loading and proper support for its frame-based side tabs.
+- Fixed a severe Bags performance issue caused by cooldown events. Bag item cooldowns now update incrementally, including Hearthstones, while item-level text is restricted to actual equipment.
+- Added the `/ktcombat` combat profiler with per-addon CPU deltas, event counters, spike tracking, and detailed CDM phase and bar diagnostics.
+- Optimized Party Frames aura and event processing in both idle and combat, restored dispel-type textures, and corrected AFK and Raid Assistant icons across group, raid, and Raid 40 layouts.
+- Improved protected-frame handling across Unit Frames, Nameplates, Party Frames, and Cooldown Manager to prevent taint errors and forbidden frame-strata or visibility operations.
+- Fixed the Damage Meter scrolling to random ranking sections and ensured that a manually selected top position remains stable while combat data updates.
+- Corrected Armory movement-speed calculations and rebuilt stat-label sizing to prevent overlap without unnecessarily truncating Intellect, Stamina, Critical Strike, Mastery, and other labels.
+- Fixed misplaced private whisper windows and prevented hidden Friends controls from intercepting right-clicks while the Social window is closed.
+- Repaired Enhanced Friend List layout and interaction regressions, removed the Lua local-variable limit warning and nil-function error, and restored reliable opening, refreshing, and button behavior.
+- Fixed missing role artwork in group invitations, the dark lower section of self-initiated Ready Checks, and Release Spirit availability during raid and Mythic boss encounters where releasing is not allowed.
+- Fixed Aura Reminders continuing to request food after the player had already eaten from a feast.
+- Improved Guild, LFG, popup, and Objective Tracker skin behavior and corrected several profile and localization edge cases.
+
+## 5.0.5 (2026-09-05)
+- Added a configurable Combat Timer to Enhancements, with an idle display, a short final-duration hold, styling controls, Unlock Mode support, and a frame width that follows the rendered timer text.
+- Promoted Melli Reforged to the default status-bar texture across KUI, including a one-time Resource Bars migration from Melli and synchronized texture selection for health, primary, and secondary resources.
+- Added per-module profile import and export controls to options pages and corrected profile ownership for Action Bars, Bags, Progress Bars, External Addons, Enhancements, and other scoped settings.
+- Expanded Nameplates target highlighting with multiple indicator styles, reversible direction, indicator shadow glow, configurable indicator and target-glow colors, scaling, previews, and preset support.
+- Refined the Nameplates Display live preview with compact one-row font, outline, and bar-texture selectors, and fixed health-bar clicks so they open the corresponding size settings.
+- Improved SharedMedia selectors throughout KUI with complete registered font and texture lists, inline previews, dependable scrolling, and support for media added by other addons.
+- Reworked the Cooldown Manager potion tracker with stable combat, health, healthstone, and optional mana slots, selectable potion quality, corrected Midnight item ranks, and combat-safe layout updates.
+- Restored Action Bars hotkeys, overlay glows, mouseover behavior, bindings refreshes, and visual enhancements on protected buttons while isolating unsafe cooldown hooks for Midnight APIs.
+- Updated Aura Reminders for Midnight Season 2 with locale-independent instance IDs, spell icons, scrollable talent selectors, and compatibility with older name-based reminders.
+- Improved Party Frames with selectable SharedMedia health and absorb textures, matching live previews, and missing-buff reminders that ignore non-player companions and scenario NPCs.
+- Extended Unit Frames with Melli Reforged defaults, full SharedMedia font and status-bar support per unit, live media previews, and a corrected Default Texture control.
+- Reworked Character and Armory navigation with accent-aware Stats, Titles, Equipment, and Progress tabs, more reliable pane visibility, and a compact configuration button beside the close control.
+- Hardened Enhanced Friend List raid navigation by passing protected roster clicks through Blizzard's native control and correctly restoring or suppressing the native frame artwork.
+- Fixed the dedicated Group chat tab so it receives the complete native group-message set while respecting secure and combat-locked chat restrictions.
+- Refined the minimap button drawer so it captures only genuine addon launchers, leaves Expansion Summary, waypoints, POIs, and scanner pins untouched, and restores original button sizes.
+- Expanded the Tooltip live preview with real player identity, guild, specialization, faction, item level, Mythic+ or PvP score, raid progress, and class-colored health styling.
+- Added a configurable Great Vault skin, refined World Map breadcrumbs and search styling, fixed Ready Check decision labels, and removed the duplicate protected Game Menu skin path.
+- Hardened the Escape Menu against FrameMeasurement taint by removing unsafe enumeration of foreign overlay frames anchored to protected nameplates.
+
+## 5.0.4 (2026-09-01)
+- Fixed Ready Check layouts for both incoming and self-initiated checks, removing leftover Blizzard artwork and the empty panel behind consumable trackers.
+- Eliminated periodic Cooldown Manager combat freezes by coalescing tracker refreshes and avoiding repeated inventory, tooltip, and item-spell scans.
+- Reduced Nameplates interrupt-tracker overhead by replacing global cooldown-event rebuilds with lightweight local ticker updates.
+- Expanded /ktfreeze diagnostics with event/addon attribution and Lua allocation/GC tracking without intrusive global CPU polling.
+- Reworked Enhancements with a Mythic+ timer that owns its tracker presentation, key details, forces progress, deaths, boss objectives, chest thresholds, and completion state.
+- Expanded Mythic+ timer configuration with independent fonts, textures, sizes, widths, heights, colours, glow controls, chest-one, chest-two, chest-three, and forces-bar typography, plus a remaining-time-only display with localized forces text.
+- Made SharedMedia font and texture selectors complete and usable throughout Enhancements, including installed fonts and textures, inline preview rendering in dropdowns, left-aligned option labels, and corrected selector placement.
+- Reworked Damage Meter configuration and preview with realistic player/spec data, working dynamic Blizzard window discovery, font and texture controls, centered bar layout, selectable spec/class/hidden player icons, rounded icon support, and corrected bar spacing.
+- Added automatic LFG role-check controls under Automation & Social, including selectable Tank, Healer, and Damage roles and automatic confirmation when queueing alone or with a group.
+- Refined Enhancements navigation with module-specific artwork, accent-coloured icons, the red sword Damage Meter icon, Blizzard chat artwork for Automation & Social, and clearer Interface & Comfort and System Tuning references.
+- Hardened LFG and popup skins for current Retail UI changes, including accent-only queue-ready borders, working close buttons, black uncovered popup surfaces, preserved dungeon artwork, and safer handling of native NineSlice and border textures.
+- Fixed the KUI Unlock Mode navigation state so closing and reopening the main options window cannot leave Unlock Mode visually selected as the active page.
+- Completed the Enhancements localization pass across the supported locales for the new timer, Damage Meter, LFG automation, typography, texture, forces, preview, and navigation strings.

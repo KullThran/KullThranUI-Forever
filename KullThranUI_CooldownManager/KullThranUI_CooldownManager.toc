@@ -1,0 +1,18 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Cooldown Manager
+## Notes: KullThranUI module: Cooldown Manager
+## Author: KullThran
+## Version: 1.0.3
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\KUICooldownManager\KUICooldownManager.lua
+Modules\KUICooldownManager\KUICdmGlowStyles.lua
+Modules\KUICooldownManager\KUICdmHooks.lua
+Modules\KUICooldownManager\KUICooldownManager_Keybinds.lua
+Modules\KUICooldownManager\KUICdmBuffBars.lua
+Modules\KUICooldownManager\KUICdmBarGlows.lua
+Modules\KUICooldownManager\KUICdmUsableVisibility.lua
+Modules\KUICooldownManager\KUI_CooldownManager_Options.lua

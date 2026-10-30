@@ -1,0 +1,12 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Cursor
+## Notes: KullThranUI module: Cursor
+## Author: KullThran
+## Version: 1.0.3
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\Cursor\Cursor.lua
+Modules\Cursor\Cursor_Options.lua

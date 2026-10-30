@@ -1,0 +1,46 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Enhancements
+## Notes: KullThranUI module: Enhancements
+## Author: KullThran
+## Version: 1.0.3
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+
+# Runtime ownership lives in this addon. The source remains centralized in the
+# core folder so releases cannot ship two divergent copies.
+..\KullThranUI\Modules\KUIMove\KUIMove.lua
+..\KullThranUI\Modules\KUIMove\KUIMoveAPI.lua
+..\KullThranUI\Modules\KUIMove\KUIMoveConfig.lua
+..\KullThranUI\Modules\KUIMove\Frames.lua
+..\KullThranUI\Modules\BlizzardFrames.lua
+..\KullThranUI\Modules\DurabilityMovable.lua
+..\KullThranUI\Modules\EscapeMenu.lua
+..\KullThranUI\Modules\StackCountFix.lua
+..\KullThranUI\Modules\Interrupts\Interrupts.lua
+..\KullThranUI\Modules\Interrupts\InterruptsGlow.lua
+
+..\KullThranUI\Modules\Enhancements\Enhancements.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_LootDebug.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_DamageMeter.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_DamageMeterControls.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_QOL.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_BulkBuy.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_RaidCheck.lua
+..\KullThranUI\Modules\Enhancements\EnhancedFriendList.lua
+..\KullThranUI\Modules\Enhancements\EnhancedFriendList_SocialUI.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_MythicPlusHistory.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_MythicPlusHistoryUI.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_ArenaHistory.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_ArenaHistoryUI.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_CombatTimer.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_AFK.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_ForeverDungeonTracker.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_DebuffTracker.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_KickTracker.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_KickTrackerUI.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_SpellHistory.lua
+..\KullThranUI\Modules\Enhancements\Enhancements_Options.lua
+

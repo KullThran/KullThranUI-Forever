@@ -1,0 +1,19 @@
+.worktrees/
+
+# Notas internas de migracion (no publicar)
+BITACORA_MIGRACION_FOREVER.md
+ESTUDIO_MIGRACION_FOREVER.md
+ESTUDIO_SELECTOR_ESTILOS_INSTALLER_RETAIL.md
+nameplates_diff.txt
+
+# Copias locales y artefactos de release (no publicar)
+_backup_*/
+*.bak
+*.bak-*
+scratch/
+zz_*
+
+# Local development files
+/.vscode/
+/docs/
+/tests/

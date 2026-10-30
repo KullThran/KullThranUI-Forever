@@ -1,0 +1,117 @@
+name: Publicar KullThranUI Forever y Notificar
+
+on:
+  workflow_dispatch:
+    inputs:
+      notify_discord:
+        description: 'Send the release announcement to Discord (@everyone)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require an explicit beta tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta)?$ ]]; then
+            echo "Forever releases require a vX.Y.Z or vX.Y.Z-beta tag." >&2
+            exit 1
+          fi
+
+      - name: Extraer la última versión del CHANGELOG
+        shell: bash
+        run: |
+          changelog_file="KullThranUI/CHANGELOG.md"
+          changelog_tmp="$RUNNER_TEMP/kullthranui-latest-changelog.md"
+          target_version="${GITHUB_REF_NAME#v}"
+          target_version="${target_version%-beta}"
+          awk -v target_version="$target_version" '
+            $0 ~ "^## " target_version "([[:space:]]|$)" {
+              found=1
+              print
+              next
+            }
+            found && /^## [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ { exit }
+            found && /^- (KullThranUI Changelog|Current addon version|Primary source|Secondary source)/ { next }
+            found && /^- [0-9]+\.[0-9]+\.[0-9]+ \([0-9]+-[0-9]+-[0-9]+\)/ { next }
+            found { print }
+          ' "$changelog_file" > "$changelog_tmp"
+
+          if [[ ! -s "$changelog_tmp" ]]; then
+            echo "No se encontró una sección de versión en $changelog_file." >&2
+            exit 1
+          fi
+
+          cp "$changelog_tmp" RELEASE_NOTES.md
+
+          # Discord allows 2000 characters per message.  Truncate if needed.
+          max_chars=1900
+          content=$(cat "$changelog_tmp")
+          if [[ ${#content} -gt $max_chars ]]; then
+            content="${content:0:$max_chars}"
+            content="${content%$'\n'*}"
+            content="$content
+            …(truncated)"
+          fi
+
+          delimiter="CHANGELOG_$(uuidgen)"
+          {
+            echo "CHANGELOG<<$delimiter"
+            echo "$content"
+            echo "$delimiter"
+          } >> "$GITHUB_ENV"
+
+      - name: Obtener versión sin la v del tag
+        id: version
+        shell: bash
+        run: |
+          KUI_VERSION="${GITHUB_REF_NAME#v}"
+          KUI_VERSION="${KUI_VERSION%-beta}"
+          echo "KUI_VERSION=${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_NAME" == *-beta ]]; then
+            echo "PACKAGE_NAME=KullThranUI_Forever_beta_${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "PACKAGE_TITLE=KullThranUI Forever BETA ${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "PACKAGE_NAME=KullThranUI_Forever_${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "PACKAGE_TITLE=KullThranUI Forever ${KUI_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validar credenciales de publicación
+        shell: bash
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          test -n "$CF_API_KEY"
+          test -n "$WAGO_API_TOKEN"
+      - name: Empaquetar y publicar KullThranUI Forever en Curse y Wago
+        uses: BigWigsMods/packager@v2
+        with:
+          args: '-n "${{ steps.version.outputs.PACKAGE_NAME }}:${{ steps.version.outputs.PACKAGE_TITLE }}"'
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notificar a Discord
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.notify_discord) || github.event_name == 'push' }}
+        uses: Ilshidur/action-discord@master
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        with:
+          args: |
+            @everyone
+            ${{ env.CHANGELOG }}

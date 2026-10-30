@@ -1,0 +1,12 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Buffs & Debuffs
+## Notes: KullThranUI module: Buffs & Debuffs
+## Author: KullThran
+## Version: 1.0.3
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\BuffsAndDebuffs\BuffsAndDebuffs.lua
+Modules\BuffsAndDebuffs\BuffsAndDebuffs_Options.lua
