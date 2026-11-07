@@ -1,0 +1,22 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Aura Reminders
+## Notes: KullThranUI module: Aura Reminders
+## Author: KullThran
+## Version: 1.0.8
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Items.lua
+Modules\KUIAuraReminders\KUIAuraReminders_AuraRead.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Beacons.lua
+Modules\KUIAuraReminders\KUIAuraReminders.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Widgets.lua
+Modules\KUIAuraReminders\KUIAuraReminders_OptionsPreview.lua
+Modules\KUIAuraReminders\KUIAuraReminders_PageReminders.lua
+Modules\KUIAuraReminders\KUIAuraReminders_PageTalents.lua
+Modules\KUIAuraReminders\KUIAuraReminders_PageCustom.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Cards.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Options.lua
+Modules\KUIAuraReminders\KUIAuraReminders_Custom.lua
