@@ -1,0 +1,15 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - Tooltip
+## Notes: KullThranUI module: Tooltip
+## Author: KullThran
+## Version: 1.2.4
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\Tooltip\TooltipInfo.lua
+Modules\Tooltip\Tooltip.lua
+Modules\Tooltip\TooltipCard.lua
+Modules\Tooltip\TooltipPreview.lua
+Modules\Tooltip\Tooltip_Options.lua

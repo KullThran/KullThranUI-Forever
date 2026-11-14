@@ -1,0 +1,14 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: KullThranUI - External Addons
+## Notes: KullThranUI module: External Addons
+## Author: KullThran
+## Version: 1.2.4
+## IconTexture: Interface\AddOns\KullThranUI\Libraries\KUITextures\KUILogoCuadrado.PNG
+## Dependencies: KullThranUI
+
+Init.lua
+Modules\ExternalInterface.lua
+Modules\UUFIntegration.lua
+Modules\BugSackCombatClose.lua
+Modules\ExternalAddons_Options.lua
